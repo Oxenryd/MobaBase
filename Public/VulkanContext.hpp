@@ -22,6 +22,7 @@
 #define Vk_FAILED(ec) ((ec) != VK_SUCCESS)
 #define Vk_CHECK(ecVar, expr) (ecVar) = (expr); if (Vk_FAILED(ecVar)) return (ecVar);
 
+
 class VulkanContext
 {
 private:
@@ -189,7 +190,7 @@ public:
 		return VK_SUCCESS;
 	}
 
-	inline VkResult createSwapchain(WindowSurface* wndSurface) {
+	inline VkResult createSwapchain(WindowSurface* wndSurface, const VkPresentModeKHR mode) {
 		VkResult vkResult;
 
 		LOGLINE(LogType::Info, "VULKAN: Creating Swapchain... ");
@@ -228,7 +229,7 @@ public:
 		swapchainCreateInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
 		swapchainCreateInfo.preTransform = surfaceCaps.currentTransform;
 		swapchainCreateInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-		swapchainCreateInfo.presentMode = VK_PRESENT_MODE_FIFO_KHR; // VSync
+		swapchainCreateInfo.presentMode = mode;
 		swapchainCreateInfo.clipped = VK_TRUE;
 
 		Vk_CHECK(vkResult, vkCreateSwapchainKHR(m_vkDevice, &swapchainCreateInfo, nullptr, &m_swapchain));
@@ -261,6 +262,11 @@ public:
 
 		LOG(LogType::Success, "Done.");
 		return VK_SUCCESS;
+	}
+
+	inline void cleanUp() {
+		vkDestroyDevice(m_vkDevice, nullptr);
+		vkDestroyInstance(m_vkInstance, nullptr);
 	}
 };
 

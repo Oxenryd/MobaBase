@@ -41,8 +41,15 @@ add_executable (MobaBase
 	"Public/Log.hpp"
 	"Public/Delegate.hpp"
 	"Public/VulkanContext.hpp"
+	"Public/Bits.hpp"
+	"Public/TimerSystem.h"
+	"Public/Timer.h"
+	"Public/Arena.hpp"
+	"Public/FSM.hpp"
 
 	"Private/Engine.cpp"
+	"Private/Timer.cpp"
+	"Private/TimerSystem.cpp"
 )
 
 

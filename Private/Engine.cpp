@@ -1,6 +1,26 @@
 #include "Engine.h"
 #include <immintrin.h>
 
+Engine::Engine() :
+	m_targetUpdateDeltaTime{ FPS_400 },
+	m_updateDeltaTime{ 0.0 },
+	m_lastUpdateTime{ std::chrono::steady_clock::now() },
+	m_options{},
+	m_targetFixedDeltaTime{ FPS_60 },
+	m_fixedAccu{ 0.0 },
+	m_framesSinceLastFpsRead{ 0 },
+	m_baseTimers{ 1 },
+	m_lastReadFps{m_targetUpdateDeltaTime},
+	m_fpsCountTimer{ m_baseTimers.createTimer(true, 1.0) } {
+
+	m_baseTimers.m_incOnTimes[m_fpsCountTimer.m_timerIndex].subscribe([this]()
+		{
+			onReadFPS.notify(this, m_framesSinceLastFpsRead);
+			m_framesSinceLastFpsRead = 0;
+		});
+}
+
+
 inline double Engine::_tickDt() {
 	using namespace std::chrono;
 
@@ -56,6 +76,9 @@ void Engine::start(WindowSurface* wndPtr, InputManager* inputPtr) {
 
 
 inline void Engine::_run() {
+
+	m_baseTimers.startTimer(m_fpsCountTimer);
+
 	while (m_status != EngineStatus::PendingStop) {
 		auto dt = _tickDt();
 		m_fixedAccu += dt;
@@ -69,6 +92,10 @@ inline void Engine::_run() {
 		_updateEarly(dt);
 		_updateLate(dt);
 
+		m_baseTimers.update(dt);
+
+
+		m_framesSinceLastFpsRead++;
 		std::this_thread::yield();
 	}
 

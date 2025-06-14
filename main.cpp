@@ -21,11 +21,14 @@ int __stdcall main(HINSTANCE hInstance, HINSTANCE instance, LPSTR str, int nCmdS
 	// Setup logger
 	Log::init<DefaultTerminalLogger>();
 
+	// Setup base Arena
+	Arena mainArena{ 2048 * 2048 };
+
 	// Create Window Handle
-	WindowSurface wnd{};
-	wnd.appName = "VulkanTest";
+	WindowSurface* wnd = mainArena.construct<WindowSurface>();
+	wnd->appName = "VulkanTest";
 	auto wndResult = createSurface(
-		hInstance, instance, nullptr, nCmdShow, CLASS_NAME, WINDOW_TITLE, WND_WIDTH, WND_HEIGHT, &wnd);
+		hInstance, instance, nullptr, nCmdShow, CLASS_NAME, WINDOW_TITLE, WND_WIDTH, WND_HEIGHT, wnd);
 	if (wndResult != ErrorCode::OK) {
 		LOGLINE(LogType::Error, "Could not create HWND: " + std::to_string(static_cast<DWORD>(wndResult)));
 		return (int)wndResult;
@@ -33,21 +36,22 @@ int __stdcall main(HINSTANCE hInstance, HINSTANCE instance, LPSTR str, int nCmdS
 
 	// Create Vulkan Context
 	VkResult vkResult{};
-	VulkanContext vkCtx{};
-	Vk_CHECK(vkResult, vkCtx.create(&wnd));
-	Vk_CHECK(vkResult, vkCtx.createSwapchain(&wnd));
+	VulkanContext* vkCtx = mainArena.construct<VulkanContext>();
+	Vk_CHECK(vkResult, vkCtx->create(wnd));
+	Vk_CHECK(vkResult, vkCtx->createSwapchain(wnd, VkPresentModeKHR::VK_PRESENT_MODE_MAILBOX_KHR));
 	
 	// Set up engine parameters
-	InputManager inputMan{ &wnd };
-	Engine engine{};
-	
-	engine.onEarlyUpdateEnter.subscribe([&wnd](Engine* engPtr)
+	InputManager* inputMan = mainArena.construct<InputManager>(wnd);
+	Engine* engine = mainArena.construct<Engine>();
+	//engine->setTargetUpdateDeltaTime(0.0);
+
+	engine->onReadFPS.subscribe([&wnd](Engine* engPtr, uint32_t frames)
 		{
 			static std::wstring windowTitle;
-			windowTitle = L"TestProgram - " + std::to_wstring(1.0 / engPtr->deltaTime()) + L" FPS";
-			SetWindowTextW(wnd.windowHandle, windowTitle.c_str());
+			windowTitle = L"TestProgram - " + std::to_wstring(frames) + L" FPS";
+			SetWindowTextW(wnd->windowHandle, windowTitle.c_str());
 		});
-	engine.start(&wnd, &inputMan);	
+	engine->start(wnd, inputMan);	
 
 	// Reset timing
 	timeEndPeriod(1);

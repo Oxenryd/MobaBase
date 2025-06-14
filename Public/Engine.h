@@ -20,6 +20,10 @@
 #include "Debug.hpp"
 #include "Log.hpp"
 #include "Delegate.hpp"
+#include "Arena.hpp"
+#include "Timer.h"
+#include "TimerSystem.h"
+
 
 constexpr const double			DEFAULT_DELTATIME_JITTER_SETTING = 0.002;
 constexpr const double			FPS_400 = 1.0 / 400.0;
@@ -48,18 +52,24 @@ class Engine
 {
 private:
 	EngineSettings m_options;
-	EngineStatus m_status = EngineStatus::Stopped;
 	double m_targetUpdateDeltaTime;
 	double m_updateDeltaTime;
 	double m_targetFixedDeltaTime;
 	double m_fixedAccu;
+	uint32_t m_framesSinceLastFpsRead;
+	double m_lastReadFps;
 	std::chrono::steady_clock::time_point m_lastUpdateTime;
+	EngineStatus m_status = EngineStatus::Stopped;
 
 	inline double _tickDt();
 	inline void _updateEarly(double dt);
 	inline void _updateLate(double dt);
 	inline void _updateFixed();
 	inline void _run();
+
+	// Base Systems
+	TimerSystem m_baseTimers;
+	Timer m_fpsCountTimer;
 
 public:
 	// EVENTS
@@ -74,21 +84,16 @@ public:
 	Event<Engine*> onLateUpdateExit;
 	Event<Engine*> onFixedUpdateEnter;
 	Event<Engine*> onFixedUpdateExit;
+	Event<Engine*, uint32_t> onReadFPS;
 
-	inline explicit Engine() :
-		m_targetUpdateDeltaTime{ FPS_400 },
-		m_updateDeltaTime{ 0.0 },
-		m_lastUpdateTime{ std::chrono::steady_clock::now() },
-		m_options{},
-		m_targetFixedDeltaTime{ FPS_60 },
-		m_fixedAccu{ 0.0 }
-	{}
-	
+
+
+	Engine();
 	inline const double& deltaTime() { return m_updateDeltaTime; }
 	inline void setTargetUpdateDeltaTime(const double targetDt) { m_targetUpdateDeltaTime = targetDt; }
 	void start(WindowSurface* wndPtr, InputManager* inputPtr);
 	inline void stop();
-	
+		
 };
 
 #endif //ENGINE_H
