@@ -15,6 +15,7 @@ struct WindowSurface
 {
     uint16_t width;
     uint16_t height;
+    std::string appName;
 
 #ifdef BUILD_WIN
     WindowSurface() = default;

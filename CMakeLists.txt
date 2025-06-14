@@ -66,4 +66,5 @@ target_compile_definitions(MobaBase PRIVATE
 	BUILD_WIN
 	LOGGING
 	USE_VULKAN
+	VULKAN_VALIDATION
 )

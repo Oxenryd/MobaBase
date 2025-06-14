@@ -3,7 +3,7 @@
 
 #include "Engine.h"
 
-constexpr const wchar_t* CLASS_NAME = L"TestProgram";
+constexpr const wchar_t* CLASS_NAME = L"VulkanTest";
 constexpr const wchar_t* WINDOW_TITLE = L"Window";
 constexpr const int WND_WIDTH = 1280;
 constexpr const int WND_HEIGHT = 800;
@@ -18,8 +18,12 @@ int __stdcall main(HINSTANCE hInstance, HINSTANCE instance, LPSTR str, int nCmdS
 	// Set windows tight thread sync
 	timeBeginPeriod(1);
 
+	// Setup logger
+	Log::init<DefaultTerminalLogger>();
+
 	// Create Window Handle
 	WindowSurface wnd{};
+	wnd.appName = "VulkanTest";
 	auto wndResult = createSurface(
 		hInstance, instance, nullptr, nCmdShow, CLASS_NAME, WINDOW_TITLE, WND_WIDTH, WND_HEIGHT, &wnd);
 	if (wndResult != ErrorCode::OK) {
@@ -31,14 +35,12 @@ int __stdcall main(HINSTANCE hInstance, HINSTANCE instance, LPSTR str, int nCmdS
 	VkResult vkResult{};
 	VulkanContext vkCtx{};
 	Vk_CHECK(vkResult, vkCtx.create(&wnd));
-	Vk_CHECK(vkResult, vkCtx.CreateSwapchain(&wnd));
+	Vk_CHECK(vkResult, vkCtx.createSwapchain(&wnd));
 	
-
-
 	// Set up engine parameters
 	InputManager inputMan{ &wnd };
 	Engine engine{};
-	Log::init<DefaultTerminalLogger>();
+	
 	engine.onEarlyUpdateEnter.subscribe([&wnd](Engine* engPtr)
 		{
 			static std::wstring windowTitle;

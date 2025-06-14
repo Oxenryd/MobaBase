@@ -7,9 +7,11 @@
 #include <vector>
 
 #ifdef LOGGING
-#define LOGLINE(type, msg) Log::logLine(type, msg)
+	#define LOGLINE(type, msg) Log::logLine(type, msg)
+	#define LOG(type, msg) Log::log(type, msg)
 #else
-#define LOGLINE(type, msg) ((void)0)
+	#define LOGLINE(type, msg) ((void)0)
+	#define LOG(type, msg) ((void)0)
 #endif
 
 enum class TermColor : uint8_t
@@ -56,7 +58,8 @@ enum class LogType
 	Info,
 	Warning,
 	Success,
-	Error
+	Error,
+	Remark
 };
 
 class LoggerType
@@ -64,6 +67,7 @@ class LoggerType
 public:
 	virtual ~LoggerType() {};
 	virtual void logImpl(const LogType& type, const std::string& msg) const = 0;
+	virtual void logLineImpl(const LogType& type, const std::string& msg) const = 0;
 };
 
 class DefaultTerminalLogger : public LoggerType
@@ -74,7 +78,7 @@ private:
 	}
 public:
 	~DefaultTerminalLogger() {}
-	inline void logImpl(const LogType& type, const std::string& msg) const override {
+	inline void logLineImpl(const LogType& type, const std::string& msg) const override {
 		std::string colStr;
 		switch (type)
 		{
@@ -84,11 +88,30 @@ public:
 				colStr = std::string{ _col(TermColor::Yellow) }; break;
 			case LogType::Success:
 				colStr = std::string{ _col(TermColor::Green) }; break;
+			case LogType::Remark:
+				colStr = std::string{ _col(TermColor::Cyan) }; break;
 			default:
 				colStr = std::string{ _col(TermColor::Reset) }; break;
 		}
 
-		std::cout << colStr << std::chrono::system_clock::now() << ": " << msg << _col(TermColor::Reset) << '\n';
+		std::cout << '\n' << std::chrono::system_clock::now() << colStr << ": " << msg << _col(TermColor::Reset);
+	}
+	inline void logImpl(const LogType& type, const std::string& msg) const override {
+		std::string colStr;
+		switch (type) {
+			case LogType::Error:
+				colStr = std::string{ _col(TermColor::Red) }; break;
+			case LogType::Warning:
+				colStr = std::string{ _col(TermColor::Yellow) }; break;
+			case LogType::Success:
+				colStr = std::string{ _col(TermColor::Green) }; break;
+			case LogType::Remark:
+				colStr = std::string{ _col(TermColor::Cyan) }; break;
+			default:
+				colStr = std::string{ _col(TermColor::Reset) }; break;
+		}
+
+		std::cout << colStr << msg << _col(TermColor::Reset);
 	}
 };
 
@@ -100,6 +123,10 @@ public:
 		s_loggers.emplace_back(new T{});
 	}
 	inline static void logLine(const LogType& type, const std::string& msg) {
+		for (auto* logger : s_loggers)
+			logger->logLineImpl(type, msg);
+	}
+	inline static void log(const LogType& type, const std::string& msg) {
 		for (auto* logger : s_loggers)
 			logger->logImpl(type, msg);
 	}

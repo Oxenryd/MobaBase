@@ -17,20 +17,47 @@
 #include <vector>
 
 #include "WindowSurface.h"
+#include "Log.hpp"
 
 #define Vk_FAILED(ec) ((ec) != VK_SUCCESS)
 #define Vk_CHECK(ecVar, expr) (ecVar) = (expr); if (Vk_FAILED(ecVar)) return (ecVar);
 
 class VulkanContext
 {
+private:
+#ifdef VULKAN_VALIDATION
 	static inline const std::vector<const char*> validationLayers = {
 		"VK_LAYER_KHRONOS_validation"
 	};
 
-private:
+	inline bool checkValidationLayerSupport() {
+		uint32_t layerCount;
+		vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
+
+		std::vector<VkLayerProperties> availableLayers(layerCount);
+		vkEnumerateInstanceLayerProperties(&layerCount, availableLayers.data());
+
+		for (const char* layerName : validationLayers) {
+			bool layerFound = false;
+			for (const auto& layerProperties : availableLayers) {
+				if (strcmp(layerName, layerProperties.layerName) == 0) {
+					layerFound = true;
+					break;
+				}
+			}
+			if (!layerFound) {
+				return false;
+			}
+		}
+		return true;
+	}
+#endif
+
 	VkInstance m_vkInstance;
 	VkSurfaceKHR m_vkSurface;
 	VkPhysicalDevice m_curDevice;
+	VkPhysicalDeviceProperties m_deviceProperties;
+	VkPhysicalDeviceFeatures m_deviceFeatures;
 	VkDevice m_vkDevice;
 	VkQueue m_graphicsQueue;
 	uint32_t m_graphicsQueueFamilyIndex;
@@ -47,33 +74,50 @@ public:
 
 	inline VkResult create(WindowSurface* wndSurface) {
 		VkResult vkResult;
+		LOGLINE(LogType::Info, "VULKAN: Creating VkInstance... ");
+		VkApplicationInfo appInfo{};
+		appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
+		appInfo.pApplicationName = wndSurface->appName.c_str();
 
 		// Create instance
 		VkInstanceCreateInfo instanceCreateInfo = {};
 		instanceCreateInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+		instanceCreateInfo.pApplicationInfo = &appInfo;
 
-		const char* extensions[] = { "VK_KHR_surface", "VK_KHR_win32_surface", "VK_EXT_debug_utils" };
+		const char* extensions[] = { 
+			"VK_KHR_surface",
+			"VK_KHR_win32_surface"
+#ifdef VULKAN_VALIDATION
+			, "VK_EXT_debug_utils"
+#endif
+		};
 		instanceCreateInfo.enabledExtensionCount = 3;
 		instanceCreateInfo.ppEnabledExtensionNames = extensions;
-
+#ifdef VULKAN_VALIDATION
 		if (checkValidationLayerSupport()) {
 			instanceCreateInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
 			instanceCreateInfo.ppEnabledLayerNames = validationLayers.data();
 		} else {
 			instanceCreateInfo.enabledLayerCount = 0;
 		}
-
+#endif
 		Vk_CHECK(vkResult, vkCreateInstance(&instanceCreateInfo, nullptr, &m_vkInstance));
 
+		LOG(LogType::Success, "Done.");
+
 		// Create surface
+		LOGLINE(LogType::Info, "VULKAN: Creating Vk_Win32 Surface... ");
 		VkWin32SurfaceCreateInfoKHR surfaceCreateInfo = {};
 		surfaceCreateInfo.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
-		surfaceCreateInfo.hinstance = wndSurface->windowInstance;//GetModuleHandle(nullptr);
+		surfaceCreateInfo.hinstance = wndSurface->windowInstance;
 		surfaceCreateInfo.hwnd = wndSurface->windowHandle;
 
 		Vk_CHECK(vkResult, vkCreateWin32SurfaceKHR(m_vkInstance, &surfaceCreateInfo, nullptr, &m_vkSurface));
+		LOG(LogType::Success, "Done.");
+
 
 		// Enumerate physical devices
+		LOGLINE(LogType::Info, "VULKAN: Choosing GPU... ");
 		uint32_t deviceCount = 0;
 		Vk_CHECK(vkResult, vkEnumeratePhysicalDevices(m_vkInstance, &deviceCount, nullptr));
 		std::vector<VkPhysicalDevice> physicalDevices(deviceCount);
@@ -81,31 +125,47 @@ public:
 
 		m_curDevice = VK_NULL_HANDLE;
 
-		for (auto device : physicalDevices) {
+		std::vector<uint16_t> scores;
+		uint16_t bestScore = 0;
+		scores.resize(physicalDevices.size());
+		for (size_t d = 0; d < physicalDevices.size(); ++d) {
+			auto& device = physicalDevices[d];
+			scores[d] = 0;
 			uint32_t queueFamilyCount = 0;
 			vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, nullptr);
 			std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
 			vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, queueFamilies.data());
-
 			for (uint32_t i = 0; i < queueFamilyCount; i++) {
 				bool supportsGraphics = queueFamilies[i].queueFlags & VK_QUEUE_GRAPHICS_BIT;
 				VkBool32 supportsPresent = VK_FALSE;
 				Vk_CHECK(vkResult, vkGetPhysicalDeviceSurfaceSupportKHR(device, i, m_vkSurface, &supportsPresent));
 
 				if (supportsGraphics && supportsPresent) {
-					m_curDevice = device;
-					m_graphicsQueueFamilyIndex = i;
-					break;
+					scores[d] += 1000;
+					VkPhysicalDeviceProperties deviceProperties;
+					VkPhysicalDeviceFeatures deviceFeatures;
+					vkGetPhysicalDeviceProperties(device, &deviceProperties);
+					vkGetPhysicalDeviceFeatures(device, &deviceFeatures);
+					if (deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
+						scores[d] += 1000;
+					if (scores[d] > bestScore) {
+						bestScore = scores[d];
+						m_curDevice = device;
+						m_graphicsQueueFamilyIndex = i;
+						m_deviceProperties = deviceProperties;
+						m_deviceFeatures = deviceFeatures;
+					}
 				}
 			}
-			if (m_curDevice != VK_NULL_HANDLE)
-				break;
 		}
 
 		if (m_curDevice == VK_NULL_HANDLE)
 			return VK_ERROR_INITIALIZATION_FAILED;
 
+		LOG(LogType::Remark, "Using " + std::string{ m_deviceProperties.deviceName });
+
 		// Create logical device
+		LOGLINE(LogType::Info, "VULKAN: Creating logical device... ");
 		float queuePriority = 1.0f;
 		VkDeviceQueueCreateInfo queueCreateInfo = {};
 		queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
@@ -125,11 +185,14 @@ public:
 
 		vkGetDeviceQueue(m_vkDevice, m_graphicsQueueFamilyIndex, 0, &m_graphicsQueue);
 
+		LOG(LogType::Success, "Done.");
 		return VK_SUCCESS;
 	}
 
-	inline VkResult CreateSwapchain(WindowSurface* wndSurface) {
+	inline VkResult createSwapchain(WindowSurface* wndSurface) {
 		VkResult vkResult;
+
+		LOGLINE(LogType::Info, "VULKAN: Creating Swapchain... ");
 
 		// Query surface capabilities
 		VkSurfaceCapabilitiesKHR surfaceCaps;
@@ -150,7 +213,7 @@ public:
 		}
 
 		m_swapchainFormat = surfaceFormat.format;
-		m_swapchainExtent = { wndSurface->width, wndSurface->height };
+		m_swapchainExtent = { surfaceCaps.currentExtent.width, surfaceCaps.currentExtent.height };
 
 		// Swapchain create info
 		VkSwapchainCreateInfoKHR swapchainCreateInfo = {};
@@ -196,30 +259,8 @@ public:
 			Vk_CHECK(vkResult, vkCreateImageView(m_vkDevice, &createInfo, nullptr, &m_swapchainImageViews[i]));
 		}
 
-
+		LOG(LogType::Success, "Done.");
 		return VK_SUCCESS;
-	}
-
-	inline bool checkValidationLayerSupport() {
-		uint32_t layerCount;
-		vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
-
-		std::vector<VkLayerProperties> availableLayers(layerCount);
-		vkEnumerateInstanceLayerProperties(&layerCount, availableLayers.data());
-
-		for (const char* layerName : validationLayers) {
-			bool layerFound = false;
-			for (const auto& layerProperties : availableLayers) {
-				if (strcmp(layerName, layerProperties.layerName) == 0) {
-					layerFound = true;
-					break;
-				}
-			}
-			if (!layerFound) {
-				return false;
-			}
-		}
-		return true;
 	}
 };
 
