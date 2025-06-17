@@ -277,16 +277,6 @@ public:
 		vkDestroyDevice(m_vkDevice, nullptr);
 		vkDestroyInstance(m_vkInstance, nullptr);
 	}
-
-
-
-	// OVERRIDES
-	bool compileShader(Shader& shader) override {
-		return false;
-	}
-	bool checkForShaderChanges(Shader& shader) override {
-		return false;
-	}
 };
 
 #endif

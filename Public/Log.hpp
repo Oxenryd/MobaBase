@@ -81,7 +81,8 @@ enum class LogType
 	Warning,
 	Success,
 	Error,
-	Remark
+	Remark,
+	InProgress
 };
 
 class LoggerType
@@ -112,6 +113,8 @@ public:
 				colStr = std::string{ _col(TermColor::Green) }; break;
 			case LogType::Remark:
 				colStr = std::string{ _col(TermColor::Cyan) }; break;
+			case LogType::InProgress:
+				colStr = std::string{ _col(TermColor::White) }; break;
 			default:
 				colStr = std::string{ _col(TermColor::Reset) }; break;
 		}
@@ -129,6 +132,8 @@ public:
 				colStr = std::string{ _col(TermColor::Green) }; break;
 			case LogType::Remark:
 				colStr = std::string{ _col(TermColor::Cyan) }; break;
+			case LogType::InProgress:
+				colStr = std::string{ _col(TermColor::White) }; break;
 			default:
 				colStr = std::string{ _col(TermColor::Reset) }; break;
 		}

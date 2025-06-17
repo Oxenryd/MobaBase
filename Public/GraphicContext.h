@@ -13,12 +13,7 @@ public:
 
 	virtual ~GraphicContext() {}
 
-	virtual bool compileShader(Shader& shader) = 0;
-	virtual bool checkForShaderChanges(Shader& shader) = 0;
-
 	WindowSurface* const windowSurface;
-	std::vector<Shader> vertexShaders;
-	std::vector<Shader> fragmentShaders;
 };
 
 #endif

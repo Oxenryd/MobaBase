@@ -23,6 +23,7 @@
 #include "Arena.hpp"
 #include "Timer.h"
 #include "TimerSystem.h"
+#include "ShaderManager.h"
 
 
 constexpr const double			DEFAULT_DELTATIME_JITTER_SETTING = 0.002;
@@ -32,6 +33,9 @@ constexpr const double			FPS_120 = 1.0 / 120.0;
 constexpr const double			FPS_60 = 1.0 / 60.0;
 constexpr const double			FPS_50 = 1.0 / 50.0;
 constexpr static const double	MAX_DELTA_TIME = 0.25;
+
+
+class ShaderManager;
 
 struct EngineSettings
 {
@@ -51,6 +55,7 @@ enum class EngineStatus : uint8_t
 class Engine
 {
 private:
+	HeapArena& m_baseArena;
 	EngineSettings m_options;
 	double m_targetUpdateDeltaTime;
 	double m_updateDeltaTime;
@@ -66,8 +71,10 @@ private:
 	inline void _updateLate(double dt);
 	inline void _updateFixed();
 	inline void _run();
+	void _initShaderManager();
 
 	// Base Systems
+	ShaderManager* m_shaderMan;
 	TimerSystem m_baseTimers;
 	Timer m_fpsCountTimer;
 
@@ -88,10 +95,11 @@ public:
 
 
 
-	Engine();
+	Engine(HeapArena& heap);
 	~Engine() {}
 	inline const double& deltaTime() { return m_updateDeltaTime; }
 	inline void setTargetUpdateDeltaTime(const double targetDt) { m_targetUpdateDeltaTime = targetDt; }
+	ShaderManager* getShaderManager() { return m_shaderMan; }
 	void start(WindowSurface* wndPtr, InputManager* inputPtr);
 	void stop();
 		

@@ -2,25 +2,41 @@
 #define SHADER_HPP
 
 #include <filesystem>
+#include <cstdint>
 
 class Shader
 {
+private:
+    
+    size_t m_arrayIndex;
+
+
+
 public:
-    enum class ShaderType : uint8_t
+    enum class Type : uint8_t
     {
+        Invalid,
         Vertex,
-        Fragment
+        Fragment,
+        Compute
     };
 
-    ShaderType type;
+
+    Type type;
     std::filesystem::path sourcePath;
     std::filesystem::file_time_type lastWriteTime;
     std::vector<uint8_t> bytecode;
 
-    Shader(ShaderType type, const std::filesystem::path& path)
+    Shader(Type type, const std::filesystem::path& path)
         : type(type), sourcePath(path) {
         lastWriteTime = std::filesystem::last_write_time(sourcePath);
     }
+
+    friend void SetShaderArrayIndex(Shader& shader, size_t index);
 };
+
+inline void SetShaderArrayIndex(Shader& shader, size_t index) {
+    shader.m_arrayIndex = index;
+}
 
 #endif // ! SHADER_HPP

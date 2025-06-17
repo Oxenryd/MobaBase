@@ -21,7 +21,7 @@ int __stdcall main(HINSTANCE hInstance, HINSTANCE instance, LPSTR str, int nCmdS
 	// Setup logger
 	Log::init<DefaultTerminalLogger>();
 
-	// Setup base Arena
+	// Setup base HeapArena
 	HeapArena mainArena{ 2048 * 2048 };
 
 	// Create Window Handle
@@ -31,7 +31,8 @@ int __stdcall main(HINSTANCE hInstance, HINSTANCE instance, LPSTR str, int nCmdS
 	auto wndResult = createSurface(
 		hInstance, instance, nullptr, nCmdShow, CLASS_NAME, WINDOW_TITLE, WND_WIDTH, WND_HEIGHT, wnd);
 	if (wndResult != ErrorCode::OK) {
-		LOGLINE(LogType::Error, LogMod::Window, "Could not create HWND: " + std::to_string(static_cast<DWORD>(wndResult)));
+		LOGLINE(LogType::Error, LogMod::Window, "Could not create HWND: " + 
+				std::to_string(static_cast<DWORD>(wndResult)));
 		return (int)wndResult;
 	}
 
@@ -43,8 +44,14 @@ int __stdcall main(HINSTANCE hInstance, HINSTANCE instance, LPSTR str, int nCmdS
 	
 	// Set up engine parameters
 	InputManager* inputMan = mainArena.construct<InputManager>(wnd);
-	Engine* engine = mainArena.construct<Engine>();
-	//engine->setTargetUpdateDeltaTime(0.0); //Uncomment to unlock fps completely
+	Engine* engine = mainArena.construct<Engine>(mainArena);
+	LOGLINE(LogType::Info, LogMod::Rendering, "Compiling Shaders...\n");
+	ErrorCode EC = engine->getShaderManager()->recompileShaderCache();
+	if (EC == ErrorCode::OK)
+		LOG(LogType::Success, "Done. Compiled " + std::to_string(engine->getShaderManager()->totalShaders()) + " shaders.");
+	else
+		LOG(LogType::Error, "Failed. Code: " + std::to_string(static_cast<uint8_t>(EC)));
+
 	wnd->onClose.subscribe([engine]()
 						   {
 							   engine->stop();

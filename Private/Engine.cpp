@@ -1,7 +1,8 @@
 #include "Engine.h"
+#include "ShaderManager.h"
 #include <immintrin.h>
 
-Engine::Engine() :
+Engine::Engine(HeapArena& heap) :
 	m_targetUpdateDeltaTime{ FPS_400 },
 	m_updateDeltaTime{ 0.0 },
 	m_lastUpdateTime{ std::chrono::steady_clock::now() },
@@ -11,13 +12,17 @@ Engine::Engine() :
 	m_framesSinceLastFpsRead{ 0 },
 	m_baseTimers{ 1 },
 	m_lastReadFps{m_targetUpdateDeltaTime},
-	m_fpsCountTimer{ m_baseTimers.createTimer(true, 1.0) } {
+	m_fpsCountTimer{ m_baseTimers.createTimer(true, 1.0) },
+	m_baseArena{heap}
+ {
 
 	m_baseTimers.m_incOnTimes[m_fpsCountTimer.m_timerIndex].subscribe([this]()
 		{
 			onReadFPS.notify(this, m_framesSinceLastFpsRead);
 			m_framesSinceLastFpsRead = 0;
 		});
+
+	_initShaderManager();
 }
 
 
@@ -46,6 +51,25 @@ inline double Engine::_tickDt() {
 	m_updateDeltaTime = frameTime;
 	m_lastUpdateTime = frameStart;
 	return m_updateDeltaTime;
+}
+
+void Engine::_initShaderManager() {
+	LOGLINE(LogType::Info, LogMod::Rendering, "Setting up ShaderManager... ");
+#ifdef BUILD_WIN
+	#ifdef USE_VULKAN
+		DxcWin32VulkanShaderCompiler* w32VkCompiler = m_baseArena.construct<DxcWin32VulkanShaderCompiler>();
+		m_shaderMan = m_baseArena.construct<ShaderManager>(ShaderManager{ w32VkCompiler });
+	#endif
+#endif
+
+#ifdef SHADER_HOTRELOAD
+		m_shaderMan->m_hotreloadTimer = new Timer{ m_baseTimers.createTimer(true, 1.5) };
+		m_baseTimers.m_incOnTimes[m_shaderMan->m_hotreloadTimer->m_timerIndex].subscribe([this]()
+								{
+									m_shaderMan->hotReload();
+								});
+#endif
+		LOG(LogType::Success, "Done.");
 }
 
 void Engine::start(WindowSurface* wndPtr, InputManager* inputPtr) {

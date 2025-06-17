@@ -51,11 +51,18 @@ add_executable (MobaBase
 	"Public/Shader.hpp"
 	"Public/ArenaAllocator.hpp"
 	"Public/MemoryProviderConcept.h"
+	"Public/MathTypes.h"
+	"Public/BaseTypesHLSL.h"
+	"Public/ShaderManager.h"
+	"Public/ErrorCodes.hpp"
+	"Public/FS.h"
 
 	"Private/Engine.cpp"
 	"Private/Timer.cpp"
 	"Private/TimerSystem.cpp"
- "Public/MathTypes.h")
+	"Private/ShaderManager.cpp"
+	"Private/FS.cpp"
+)
 
 
 
@@ -80,4 +87,51 @@ target_compile_definitions(MobaBase PRIVATE
 	LOGGING
 	USE_VULKAN
 	VULKAN_VALIDATION
+	SHADER_HOTRELOAD
+
+	# Directories
+	SHADER_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/Shaders\"
+	SHADER_TARGET_DIR=\"${CMAKE_BINARY_DIR}/Shaders/Build\"
+	DXC_DIR=\"${CMAKE_SOURCE_DIR}/Ext/dxc\"
+	SHADER_TYPE_VERTEX=\"ShaderType:Vertex\"
+	SHADER_TYPE_FRAGMENT=\"ShaderType:Pixel\"
+	SHADER_TYPE_COMPUTE=\"ShaderType:Compute\"
 )
+
+
+# FILE ACTIONS -----------------------------------------------------------------------
+
+#add_custom_target(CleanShaderBuildFolder
+#    COMMAND ${CMAKE_COMMAND} -E remove_directory "${CMAKE_BINARY_DIR}/Shaders"
+#    COMMENT "Cleaning shader build output folder"
+#)
+#add_dependencies(MobaBase CleanShaderBuildFolder)
+
+# Copy Shaders
+#add_custom_command(
+#    TARGET MobaBase POST_BUILD
+#    COMMAND ${CMAKE_COMMAND} -E copy_directory
+#            "${CMAKE_SOURCE_DIR}/Shaders"
+#            "$<TARGET_FILE_DIR:MobaBase>/Shaders"
+#    COMMENT "Copying Shaders directory to output"
+#)
+
+file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/Shaders/Build")
+
+#add_custom_target(CopyShaders ALL
+#    COMMAND ${CMAKE_COMMAND} -E copy_directory
+#            "${CMAKE_SOURCE_DIR}/Shaders"
+#            "${CMAKE_BINARY_DIR}/Shaders"
+#    COMMENT "Copying Shaders directory"
+#)
+#add_dependencies(MobaBase CopyShaders)
+
+
+# Copy DXC
+#add_custom_command(
+#    TARGET MobaBase POST_BUILD
+#    COMMAND ${CMAKE_COMMAND} -E copy_directory
+#            "${CMAKE_SOURCE_DIR}/Ext/dxc"
+#            "$<TARGET_FILE_DIR:MobaBase>/Shaders/dxc"
+#    COMMENT "Copying DXC directory to output"
+#)
