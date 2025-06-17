@@ -5,14 +5,36 @@
 #include <iostream>
 #include <chrono>
 #include <vector>
+#include <unordered_map>
 
 #ifdef LOGGING
-	#define LOGLINE(type, msg) Log::logLine(type, msg)
+	#define LOGLINE(type, mod, msg) Log::logLine(type, mod, msg)
 	#define LOG(type, msg) Log::log(type, msg)
 #else
 	#define LOGLINE(type, msg) ((void)0)
 	#define LOG(type, msg) ((void)0)
 #endif
+
+enum class LogMod : uint8_t
+{
+	Memory = 0,
+	Engine,
+	Vulkan,
+	DirectX,
+	Rendering,
+	Window,
+	Input
+};
+
+constexpr const char* MODULE_STRINGS[]{
+	"MEMORY\t",
+	"ENGINE\t",
+	"VULKAN\t",
+	"DIRECTX\t",
+	"RENDER\t",
+	"WINDOW\t",
+	"INPUT\t"
+};
 
 enum class TermColor : uint8_t
 {
@@ -67,7 +89,7 @@ class LoggerType
 public:
 	virtual ~LoggerType() {};
 	virtual void logImpl(const LogType& type, const std::string& msg) const = 0;
-	virtual void logLineImpl(const LogType& type, const std::string& msg) const = 0;
+	virtual void logLineImpl(const LogType& type, const LogMod& module, const std::string& msg) const = 0;
 };
 
 class DefaultTerminalLogger : public LoggerType
@@ -78,7 +100,7 @@ private:
 	}
 public:
 	~DefaultTerminalLogger() {}
-	inline void logLineImpl(const LogType& type, const std::string& msg) const override {
+	inline void logLineImpl(const LogType& type, const LogMod& module, const std::string& msg) const override {
 		std::string colStr;
 		switch (type)
 		{
@@ -94,7 +116,7 @@ public:
 				colStr = std::string{ _col(TermColor::Reset) }; break;
 		}
 
-		std::cout << '\n' << std::chrono::system_clock::now() << colStr << ": " << msg << _col(TermColor::Reset);
+		std::cout << '\n' << std::chrono::system_clock::now() << ":\t" << MODULE_STRINGS[static_cast<uint8_t>(module)] << colStr << msg << _col(TermColor::Reset);
 	}
 	inline void logImpl(const LogType& type, const std::string& msg) const override {
 		std::string colStr;
@@ -122,9 +144,9 @@ public:
 	inline static void init() {
 		s_loggers.emplace_back(new T{});
 	}
-	inline static void logLine(const LogType& type, const std::string& msg) {
+	inline static void logLine(const LogType& type, const LogMod& module, const std::string& msg) {
 		for (auto* logger : s_loggers)
-			logger->logLineImpl(type, msg);
+			logger->logLineImpl(type, module, msg);
 	}
 	inline static void log(const LogType& type, const std::string& msg) {
 		for (auto* logger : s_loggers)

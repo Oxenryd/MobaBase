@@ -19,11 +19,13 @@
 #include "WindowSurface.h"
 #include "Log.hpp"
 
+#include "GraphicContext.h"
+
 #define Vk_FAILED(ec) ((ec) != VK_SUCCESS)
 #define Vk_CHECK(ecVar, expr) (ecVar) = (expr); if (Vk_FAILED(ecVar)) return (ecVar);
 
 
-class VulkanContext
+class VulkanContext : public GraphicContext
 {
 private:
 #ifdef VULKAN_VALIDATION
@@ -71,11 +73,14 @@ private:
 	VkDebugUtilsMessengerEXT m_debugMessenger = VK_NULL_HANDLE;
 
 public:
-	VulkanContext() = default;
+	~VulkanContext() {}
+	VulkanContext() = delete;
+	inline VulkanContext(WindowSurface* const wndSurface) :
+		GraphicContext(wndSurface) {}
 
 	inline VkResult create(WindowSurface* wndSurface) {
 		VkResult vkResult;
-		LOGLINE(LogType::Info, "VULKAN: Creating VkInstance... ");
+		LOGLINE(LogType::Info, LogMod::Vulkan, "Creating VkInstance... ");
 		VkApplicationInfo appInfo{};
 		appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
 		appInfo.pApplicationName = wndSurface->appName.c_str();
@@ -107,7 +112,7 @@ public:
 		LOG(LogType::Success, "Done.");
 
 		// Create surface
-		LOGLINE(LogType::Info, "VULKAN: Creating Vk_Win32 Surface... ");
+		LOGLINE(LogType::Info, LogMod::Vulkan, "Creating Vk_Win32 Surface... ");
 		VkWin32SurfaceCreateInfoKHR surfaceCreateInfo = {};
 		surfaceCreateInfo.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
 		surfaceCreateInfo.hinstance = wndSurface->windowInstance;
@@ -118,7 +123,7 @@ public:
 
 
 		// Enumerate physical devices
-		LOGLINE(LogType::Info, "VULKAN: Choosing GPU... ");
+		LOGLINE(LogType::Info, LogMod::Vulkan, "Choosing GPU... ");
 		uint32_t deviceCount = 0;
 		Vk_CHECK(vkResult, vkEnumeratePhysicalDevices(m_vkInstance, &deviceCount, nullptr));
 		std::vector<VkPhysicalDevice> physicalDevices(deviceCount);
@@ -166,7 +171,7 @@ public:
 		LOG(LogType::Remark, "Using " + std::string{ m_deviceProperties.deviceName });
 
 		// Create logical device
-		LOGLINE(LogType::Info, "VULKAN: Creating logical device... ");
+		LOGLINE(LogType::Info, LogMod::Vulkan, "Creating logical device... ");
 		float queuePriority = 1.0f;
 		VkDeviceQueueCreateInfo queueCreateInfo = {};
 		queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
@@ -193,7 +198,7 @@ public:
 	inline VkResult createSwapchain(WindowSurface* wndSurface, const VkPresentModeKHR mode) {
 		VkResult vkResult;
 
-		LOGLINE(LogType::Info, "VULKAN: Creating Swapchain... ");
+		LOGLINE(LogType::Info, LogMod::Vulkan, "Creating Swapchain... ");
 
 		// Query surface capabilities
 		VkSurfaceCapabilitiesKHR surfaceCaps;
@@ -264,9 +269,23 @@ public:
 		return VK_SUCCESS;
 	}
 
+	inline VkResult createGraphicsPipeline() {
+
+	}
+
 	inline void cleanUp() {
 		vkDestroyDevice(m_vkDevice, nullptr);
 		vkDestroyInstance(m_vkInstance, nullptr);
+	}
+
+
+
+	// OVERRIDES
+	bool compileShader(Shader& shader) override {
+		return false;
+	}
+	bool checkForShaderChanges(Shader& shader) override {
+		return false;
 	}
 };
 

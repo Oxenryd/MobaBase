@@ -98,6 +98,10 @@ public:
         m_field = static_cast<T>(-1);
     }
 
+    void copyField(T fieldValue) {
+        m_field = fieldValue;
+    }
+
     //uint32_t numSet() const {
     //    return std::popcount(m_field);
     //}

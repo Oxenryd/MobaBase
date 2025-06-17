@@ -49,12 +49,13 @@ inline double Engine::_tickDt() {
 }
 
 void Engine::start(WindowSurface* wndPtr, InputManager* inputPtr) {
+
+	LOGLINE(LogType::Info, LogMod::Engine, "Starting... ");
+
 	if (m_status != EngineStatus::Stopped) {
-		LOGLINE(LogType::Error, "Engine: Tried to start while not stopped. Ignoring.");
+		LOGLINE(LogType::Error, LogMod::Engine, "Tried to start while not stopped. Ignoring.");
 		return;
 	}
-
-	LOGLINE(LogType::Info, "Engine: Starting...");
 
 	// Set main window
 	m_options.inputManager = inputPtr;
@@ -70,6 +71,7 @@ void Engine::start(WindowSurface* wndPtr, InputManager* inputPtr) {
 
 	m_lastUpdateTime = std::chrono::steady_clock::now();
 
+	LOG(LogType::Success, "Done.");
 	_run();
 
 }
@@ -103,9 +105,11 @@ inline void Engine::_run() {
 
 	m_status = EngineStatus::Stopped;
 	onStopped.notify(this);
+	LOG(LogType::Success, "Done.");
 }
 
-inline void Engine::stop() {
+void Engine::stop() {
+	LOGLINE(LogType::Info, LogMod::Engine, "Stopping... ");
 	m_status = EngineStatus::PendingStop;
 	onPendingStop.notify(this);
 }

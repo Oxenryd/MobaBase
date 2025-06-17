@@ -46,11 +46,16 @@ add_executable (MobaBase
 	"Public/Timer.h"
 	"Public/Arena.hpp"
 	"Public/FSM.hpp"
+	"Public/GraphicContext.h"
+	"Public/Material.hpp"
+	"Public/Shader.hpp"
+	"Public/ArenaAllocator.hpp"
+	"Public/MemoryProviderConcept.h"
 
 	"Private/Engine.cpp"
 	"Private/Timer.cpp"
 	"Private/TimerSystem.cpp"
-)
+ "Public/MathTypes.h")
 
 
 
@@ -70,6 +75,7 @@ target_include_directories(MobaBase PRIVATE
 
 # DEFINES ----------------------------------------------------------------------------
 target_compile_definitions(MobaBase PRIVATE 
+	DEBUGGING
 	BUILD_WIN
 	LOGGING
 	USE_VULKAN

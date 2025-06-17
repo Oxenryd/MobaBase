@@ -89,10 +89,11 @@ public:
 
 
 	Engine();
+	~Engine() {}
 	inline const double& deltaTime() { return m_updateDeltaTime; }
 	inline void setTargetUpdateDeltaTime(const double targetDt) { m_targetUpdateDeltaTime = targetDt; }
 	void start(WindowSurface* wndPtr, InputManager* inputPtr);
-	inline void stop();
+	void stop();
 		
 };
 
