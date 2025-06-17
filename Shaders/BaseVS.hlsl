@@ -2,23 +2,22 @@
 
 #pragma ShaderType:Vertex
 
-float4 positions[3] =
+const static float4 positions[3] =
 {
     float4(0.0, -0.5, 1.0, 1.0),
     float4(0.5, 0.5, 1.0, 1.0),
     float4(-0.5, 0.5, 1.0, 1.0)
 };
 
-float4 colors[3] =
+const static float4 colors[3] =
 {
     float4(1.0, 0.0, 0.0, 1.0),
     float4(0.0, 1.0, 0.0, 1.0),
     float4(0.0, 0.0, 1.0, 1.0),
 };
 
-uint vertexID : SV_VertexID;
 
-VSOutput main(VSInput input)
+VSOutput main(VSInput input, uint vertexID : SV_VertexID)
 {
     VSOutput output;
 

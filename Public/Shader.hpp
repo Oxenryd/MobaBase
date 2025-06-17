@@ -8,9 +8,7 @@ class Shader
 {
 private:
     
-    size_t m_arrayIndex;
-
-
+    size_t m_arrayIndex = static_cast<size_t>(-1);
 
 public:
     enum class Type : uint8_t
@@ -21,11 +19,11 @@ public:
         Compute
     };
 
-
     Type type;
     std::filesystem::path sourcePath;
     std::filesystem::file_time_type lastWriteTime;
-    std::vector<uint8_t> bytecode;
+    std::vector<char> bytecode;
+
 
     Shader(Type type, const std::filesystem::path& path)
         : type(type), sourcePath(path) {

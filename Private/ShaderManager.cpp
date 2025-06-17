@@ -80,9 +80,9 @@ ErrorCode DxcWin32VulkanShaderCompiler::compile(Shader& shader) {
 
 	std::string target;
 	switch (shader.type) {
-		case Shader::Type::Vertex:   target = "vs_6_0"; break;
-		case Shader::Type::Fragment: target = "ps_6_0"; break;
-		case Shader::Type::Compute:  target = "cs_6_0"; break;
+		case Shader::Type::Vertex:   target = "vs_6_6"; break;
+		case Shader::Type::Fragment: target = "ps_6_6"; break;
+		case Shader::Type::Compute:  target = "cs_6_6"; break;
 	}
 	auto execDir = FS::getExecutableDir();
 	std::filesystem::path shaderDir = SHADER_SOURCE_DIR;
@@ -108,18 +108,19 @@ ErrorCode DxcWin32VulkanShaderCompiler::compile(Shader& shader) {
 		return EC;
 	}
 
-	std::ifstream spvFile(outPath, std::ios::binary);
+	std::ifstream spvFile(outPath, std::ios::ate | std::ios::binary);
 	if (!spvFile) {
 		return ErrorCode::SHADER_COULD_NOT_READ_FILE;
 	}
 
 	try {
-		spvFile.seekg(0, std::ios::end);
+		//spvFile.seekg(0, std::ios::end);
 		size_t fileSize = spvFile.tellg();
-		spvFile.seekg(0, std::ios::beg);
+		spvFile.seekg(0);
+		//spvFile.seekg(0, std::ios::beg);
 
 		shader.bytecode.resize(fileSize);
-		spvFile.read(reinterpret_cast<char*>(shader.bytecode.data()), fileSize);
+		spvFile.read(shader.bytecode.data(), fileSize);
 	} catch (std::exception& e) {
 		return ErrorCode::SHADER_COULD_NOT_READ_BYTECODE;
 	}

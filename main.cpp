@@ -35,12 +35,6 @@ int __stdcall main(HINSTANCE hInstance, HINSTANCE instance, LPSTR str, int nCmdS
 				std::to_string(static_cast<DWORD>(wndResult)));
 		return (int)wndResult;
 	}
-
-	// Create Vulkan Context
-	VkResult vkResult{};
-	VulkanContext* vkCtx = mainArena.construct<VulkanContext>(wnd);
-	Vk_CHECK(vkResult, vkCtx->create(wnd));
-	Vk_CHECK(vkResult, vkCtx->createSwapchain(wnd, VkPresentModeKHR::VK_PRESENT_MODE_MAILBOX_KHR));
 	
 	// Set up engine parameters
 	InputManager* inputMan = mainArena.construct<InputManager>(wnd);
@@ -48,9 +42,11 @@ int __stdcall main(HINSTANCE hInstance, HINSTANCE instance, LPSTR str, int nCmdS
 	LOGLINE(LogType::Info, LogMod::Rendering, "Compiling Shaders...\n");
 	ErrorCode EC = engine->getShaderManager()->recompileShaderCache();
 	if (EC == ErrorCode::OK)
-		LOG(LogType::Success, "Done. Compiled " + std::to_string(engine->getShaderManager()->totalShaders()) + " shaders.");
-	else
+		LOG(LogType::Success, "\t\t\t\t\tDone. Compiled " + std::to_string(engine->getShaderManager()->totalShaders()) + " shaders.\n");
+	else {
 		LOG(LogType::Error, "Failed. Code: " + std::to_string(static_cast<uint8_t>(EC)));
+		return (int)EC;
+	}
 
 	wnd->onClose.subscribe([engine]()
 						   {
@@ -62,6 +58,20 @@ int __stdcall main(HINSTANCE hInstance, HINSTANCE instance, LPSTR str, int nCmdS
 			windowTitle = L"VulkanTest - " + std::to_wstring(frames) + L" FPS";
 			SetWindowTextW(wnd->windowHandle, windowTitle.c_str());
 		});
+
+	// Create Vulkan Context
+	LOGLINE(LogType::Info, LogMod::Vulkan, "Creating Vulkan context... ");
+	VulkanContext* vkCtx = mainArena.construct<VulkanContext>(wnd);
+	auto vk = vkCtx->initVulkan(
+		VkPresentModeKHR::VK_PRESENT_MODE_MAILBOX_KHR,
+		engine->getShaderManager()->vertexShaders()[0], engine->getShaderManager()->pixelShaders()[0]);
+	if (vk != VK_SUCCESS) {
+		LOG(LogType::Error, "Failed. Code: " + std::to_string(static_cast<uint32_t>(vk)));
+		return (int)vk;
+	}
+	LOGLINE(LogType::Success, LogMod::Vulkan, "Vulkan init Complete.\n");
+
+	// Start Engine
 	engine->start(wnd, inputMan);	
 
 	// Reset timing

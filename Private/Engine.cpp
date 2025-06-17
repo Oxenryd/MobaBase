@@ -95,7 +95,7 @@ void Engine::start(WindowSurface* wndPtr, InputManager* inputPtr) {
 
 	m_lastUpdateTime = std::chrono::steady_clock::now();
 
-	LOG(LogType::Success, "Done.");
+	LOG(LogType::Success, "Running.");
 	_run();
 
 }
