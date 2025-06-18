@@ -26,8 +26,63 @@
 #define Vk_CHECK(ecVar, expr) (ecVar) = (expr); if (Vk_FAILED(ecVar)) return (ecVar);
 
 
+struct QueueFamilyIndices
+{
+	std::optional<uint32_t> graphicsFamily;
+	std::optional<uint32_t> presentFamily;
+
+	bool isComplete() const {
+		return graphicsFamily.has_value() && presentFamily.has_value();
+	}
+};
+
+QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device, VkSurfaceKHR surface) {
+	QueueFamilyIndices indices;
+
+	uint32_t queueFamilyCount = 0;
+	vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, nullptr);
+
+	std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
+	vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, queueFamilies.data());
+
+	for (uint32_t i = 0; i < queueFamilyCount; i++) {
+		if (queueFamilies[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) {
+			indices.graphicsFamily = i;
+		}
+
+		VkBool32 presentSupport = false;
+		vkGetPhysicalDeviceSurfaceSupportKHR(device, i, surface, &presentSupport);
+
+		if (presentSupport) {
+			indices.presentFamily = i;
+		}
+
+		if (indices.isComplete()) {
+			break;
+		}
+	}
+
+	return indices;
+}
+
 class VulkanContext : public GraphicContext
 {
+	struct RenderContext
+	{
+		float clearColor[4] = {0.0f, 0.12f, 0.55f, 1.0f};
+		uint16_t renderPassIndex = 0;
+		uint16_t pipelineIndex = 0;
+		uint16_t cmdBufferIndex = 0;
+		uint8_t imageIndex = 0;
+		float vPortPos[2] = {0,0};
+		float vPortSize[2] = {-1, -1};
+		float vPortMinDepth = 0.0f;
+		float vPortMaxDepth = 1.0f;
+		int sciOffset[2] = {0,0};
+		int sciSize[2] = {-1, -1};
+	};
+
+
 private:
 #ifdef VULKAN_VALIDATION
 	static inline const std::vector<const char*> validationLayers = {
@@ -76,6 +131,9 @@ private:
 	std::vector<VkPipelineLayout> m_pipelineLayouts;
 	std::vector<VkRenderPass> m_rendPasses;
 	std::vector<VkPipeline> m_pipelines;
+	std::vector<VkFramebuffer> m_swapChainFramebuffers;
+	VkCommandPool m_commandPool;
+	VkCommandBuffer m_commandBuffer;
 
 public:
 	~VulkanContext() {}
@@ -86,14 +144,19 @@ public:
 	inline VkResult initVulkan(const VkPresentModeKHR mode, Shader& vertShader, Shader& fragShader) {
 		VkResult vk{};
 
+		cleanUp();
+
 		Vk_CHECK(vk, createInstance());
 		Vk_CHECK(vk, createSurface());
-		Vk_CHECK(vk, pickPhysDevice());
+		Vk_CHECK(vk, pickPhysDevice(false));
 		Vk_CHECK(vk, createLogicalDevice());
 		Vk_CHECK(vk, createSwapchain(mode));
 		Vk_CHECK(vk, createImageViews());
 		Vk_CHECK(vk, createRenderPass());
-		Vk_CHECK(vk, createGraphicsPipeline(vertShader, fragShader));
+		Vk_CHECK(vk, createGraphicsPipeline(vertShader, fragShader, m_rendPasses[0]));
+		Vk_CHECK(vk, createFramebuffers(m_rendPasses[0]));
+		Vk_CHECK(vk, createCommandPool());
+		Vk_CHECK(vk, createCommandBuffer());
 
 		return VK_SUCCESS;
 	}
@@ -149,7 +212,7 @@ public:
 		return VK_SUCCESS;
 	}
 
-	inline VkResult pickPhysDevice() {
+	inline VkResult pickPhysDevice(bool prioIGpu) {
 		VkResult vkResult{};
 		// Enumerate physical devices
 		LOGLINE(LogType::Info, LogMod::Vulkan, "Choosing GPU... ");
@@ -181,8 +244,14 @@ public:
 					VkPhysicalDeviceFeatures deviceFeatures;
 					vkGetPhysicalDeviceProperties(device, &deviceProperties);
 					vkGetPhysicalDeviceFeatures(device, &deviceFeatures);
-					if (deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
-						scores[d] += 1000;
+
+					if (deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) {
+						if (prioIGpu)
+							scores[d] -= 1001;
+						else
+							scores[d] += 1000;
+					}
+
 					if (scores[d] > bestScore) {
 						bestScore = scores[d];
 						m_curDevice = device;
@@ -356,7 +425,8 @@ public:
 		return VK_SUCCESS;
 	}
 
-	inline VkResult createGraphicsPipeline(Shader& vs, Shader& ps) {
+
+	inline VkResult createGraphicsPipeline(Shader& vs, Shader& ps, VkRenderPass renderPass) {
 		LOGLINE(LogType::Info, LogMod::Vulkan, "Creating Pipeline... ");
 		VkResult vkResult{};
 		VkShaderModule vertModule{};
@@ -486,8 +556,8 @@ public:
 		pipelineInfo.pDepthStencilState = nullptr; // Optional
 		pipelineInfo.pColorBlendState = &colorBlending;
 		pipelineInfo.pDynamicState = &dynamicState;
-		pipelineInfo.layout = m_pipelineLayouts[0];
-		pipelineInfo.renderPass = m_rendPasses[0];
+		pipelineInfo.layout = m_pipelineLayouts.back();
+		pipelineInfo.renderPass = renderPass;
 		pipelineInfo.subpass = 0;
 		pipelineInfo.basePipelineHandle = VK_NULL_HANDLE; // Optional
 		pipelineInfo.basePipelineIndex = -1; // Optional
@@ -505,18 +575,149 @@ public:
 		return VK_SUCCESS;
 	}
 
+
+	inline VkResult createFramebuffers(VkRenderPass renderPass) {
+		LOGLINE(LogType::Info, LogMod::Vulkan, "Creating Framebuffers... ");
+		VkResult vkResult{};
+
+		m_swapChainFramebuffers.clear();
+		m_swapChainFramebuffers.resize(m_swapchainImageViews.size());
+
+
+		for (size_t i = 0; i < m_swapchainImageViews.size(); i++) {
+			VkImageView attachments[] = {
+				m_swapchainImageViews[i]
+			};
+
+			VkFramebufferCreateInfo framebufferInfo{};
+			framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+			framebufferInfo.renderPass = renderPass;
+			framebufferInfo.attachmentCount = 1;
+			framebufferInfo.pAttachments = attachments;
+			framebufferInfo.width = m_swapchainExtent.width;
+			framebufferInfo.height = m_swapchainExtent.height;
+			framebufferInfo.layers = 1;
+
+
+			Vk_CHECK(vkResult, vkCreateFramebuffer(m_vkDevice, &framebufferInfo, nullptr, &m_swapChainFramebuffers[i]));
+		}
+
+		LOG(LogType::Success, "Done.");
+		return VK_SUCCESS;
+	}
+
+	inline VkResult createCommandPool() {
+		LOGLINE(LogType::Info, LogMod::Vulkan, "Creating Command pool... ");
+		VkResult vkResult{};
+
+		QueueFamilyIndices queueFamilyIndices = findQueueFamilies(m_curDevice, m_vkSurface);
+
+		VkCommandPoolCreateInfo poolInfo{};
+		poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+		poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+		poolInfo.queueFamilyIndex = queueFamilyIndices.graphicsFamily.value();
+
+		Vk_CHECK(vkResult, vkCreateCommandPool(m_vkDevice, &poolInfo, nullptr, &m_commandPool));
+
+		LOG(LogType::Success, "Done.");
+		return VK_SUCCESS;
+	}
+
+	inline VkResult createCommandBuffer() {
+		LOGLINE(LogType::Info, LogMod::Vulkan, "Creating Command buffer... ");
+		VkResult vkResult{};
+
+		VkCommandBufferAllocateInfo allocInfo{};
+		allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+		allocInfo.commandPool = m_commandPool;
+		allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+		allocInfo.commandBufferCount = 1;
+
+		Vk_CHECK(vkResult, vkAllocateCommandBuffers(m_vkDevice, &allocInfo, &m_commandBuffer));
+
+		LOG(LogType::Success, "Done.");
+		return VK_SUCCESS;
+	}
+
+
+	inline VkResult recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex) {
+		LOGLINE(LogType::Info, LogMod::Vulkan, "Recording command buffer... ");
+		VkResult vkResult{};
+
+		VkCommandBufferBeginInfo beginInfo{};
+		beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+		beginInfo.flags = 0; // Optional
+		beginInfo.pInheritanceInfo = nullptr; // Optional
+
+		Vk_CHECK(vkResult, vkBeginCommandBuffer(commandBuffer, &beginInfo));
+
+		LOG(LogType::Success, "Done.");
+		return VK_SUCCESS;
+	}
+
+
 	inline void cleanUp() {
 		for (auto& layout : m_pipelineLayouts) {
 			vkDestroyPipelineLayout(m_vkDevice, layout, nullptr);
 		}
+		m_pipelineLayouts.clear();
+
 		for (auto& pass : m_rendPasses) {
 			vkDestroyRenderPass(m_vkDevice, pass, nullptr);
 		}
+		m_rendPasses.clear();
+
 		for (auto& pipeline : m_pipelines) {
 			vkDestroyPipeline(m_vkDevice, pipeline, nullptr);
 		}
+		m_pipelines.clear();
+
+		for (auto& fBuffer : m_swapChainFramebuffers) {
+			vkDestroyFramebuffer(m_vkDevice, fBuffer, nullptr);
+		}
+		m_swapChainFramebuffers.clear();
+
+		vkDestroyCommandPool(m_vkDevice, m_commandPool, nullptr);
 		vkDestroyDevice(m_vkDevice, nullptr);
 		vkDestroyInstance(m_vkInstance, nullptr);
+	}
+
+
+	inline void render(void* rendCtx) override {
+
+		auto* ctx = static_cast<RenderContext*>(rendCtx);
+
+		VkClearValue clearColor{};
+		clearColor.color.float32[0] = ctx->clearColor[0];
+		clearColor.color.float32[1] = ctx->clearColor[1];
+		clearColor.color.float32[2] = ctx->clearColor[2];
+		clearColor.color.float32[3] = ctx->clearColor[3];
+
+		VkRenderPassBeginInfo renderPassInfo{};
+		renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+		renderPassInfo.renderPass = m_rendPasses[ctx->renderPassIndex];
+		renderPassInfo.framebuffer = m_swapChainFramebuffers[ctx->imageIndex];
+		renderPassInfo.renderArea.offset = { 0, 0 };
+		renderPassInfo.renderArea.extent = m_swapchainExtent;
+		renderPassInfo.clearValueCount = 1;
+		renderPassInfo.pClearValues = &clearColor;
+
+		vkCmdBeginRenderPass(m_commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+		vkCmdBindPipeline(m_commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipelines[ctx->pipelineIndex]);
+
+		VkViewport viewport{};
+		viewport.x = ctx->vPortPos[0];
+		viewport.y = ctx->vPortPos[1];
+		viewport.width = ctx->vPortSize[0] < 0 ? static_cast<float>(m_swapchainExtent.width) : ctx->vPortSize[0];
+		viewport.height = ctx->vPortSize[1] < 0 ? static_cast<float>(m_swapchainExtent.width) : ctx->vPortSize[1];
+		viewport.minDepth = ctx->vPortMinDepth;
+		viewport.maxDepth = ctx->vPortMaxDepth;
+		vkCmdSetViewport(m_commandBuffer, 0, 1, &viewport);
+
+		VkRect2D scissor{};
+		scissor.offset = { ctx->sciOffset[0], ctx->sciOffset[1] };
+		scissor.extent = m_swapchainExtent;
+		vkCmdSetScissor(m_commandBuffer, 0, 1, &scissor);
 	}
 };
 

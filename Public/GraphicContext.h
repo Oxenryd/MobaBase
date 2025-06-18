@@ -14,6 +14,8 @@ public:
 	virtual ~GraphicContext() {}
 
 	WindowSurface* const windowSurface;
+
+	virtual void render(void* rendCtx) = 0;
 };
 
 #endif
