@@ -72,7 +72,8 @@ int __stdcall main(HINSTANCE hInstance, HINSTANCE instance, LPSTR str, int nCmdS
 	LOGLINE(LogType::Success, LogMod::Vulkan, "Vulkan init Complete.\n");
 
 	// Start Engine
-	engine->start(wnd, inputMan);	
+	engine->setTargetUpdateDeltaTime(0.0);
+	engine->start(vkCtx, inputMan);
 
 	// Reset timing
 	timeEndPeriod(1);

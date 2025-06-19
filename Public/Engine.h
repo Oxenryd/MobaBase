@@ -39,7 +39,7 @@ class ShaderManager;
 
 struct EngineSettings
 {
-	WindowSurface* mainWindow = nullptr;
+	GraphicContext* graphicContext = nullptr;
 	InputManager* inputManager = nullptr;
 	double deltaTimeJitterThreshold = DEFAULT_DELTATIME_JITTER_SETTING;
 };
@@ -62,9 +62,11 @@ private:
 	double m_targetFixedDeltaTime;
 	double m_fixedAccu;
 	uint32_t m_framesSinceLastFpsRead;
-	double m_lastReadFps;
-	std::chrono::steady_clock::time_point m_lastUpdateTime;
 	EngineStatus m_status = EngineStatus::Stopped;
+	double m_lastReadFps;
+	uint64_t m_totalFrames = 0;
+	std::chrono::steady_clock::time_point m_lastUpdateTime;
+	
 
 	inline double _tickDt();
 	inline void _updateEarly(double dt);
@@ -94,13 +96,12 @@ public:
 	Event<Engine*, uint32_t> onReadFPS;
 
 
-
 	Engine(HeapArena& heap);
 	~Engine() {}
 	inline const double& deltaTime() { return m_updateDeltaTime; }
 	inline void setTargetUpdateDeltaTime(const double targetDt) { m_targetUpdateDeltaTime = targetDt; }
 	ShaderManager* getShaderManager() { return m_shaderMan; }
-	void start(WindowSurface* wndPtr, InputManager* inputPtr);
+	void start(GraphicContext* graphicContext, InputManager* inputPtr);
 	void stop();
 		
 };

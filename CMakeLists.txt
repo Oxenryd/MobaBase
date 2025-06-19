@@ -87,6 +87,7 @@ target_compile_definitions(MobaBase PRIVATE
 	LOGGING
 	USE_VULKAN
 	VULKAN_VALIDATION
+	VULKAN_MAX_FRAMES_IN_FLIGHT=3
 	SHADER_HOTRELOAD
 
 	# Directories

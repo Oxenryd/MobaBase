@@ -15,7 +15,7 @@ public:
 
 	WindowSurface* const windowSurface;
 
-	virtual void render(void* rendCtx) = 0;
+	virtual void draw(void* rendCtx) = 0;
 };
 
 #endif

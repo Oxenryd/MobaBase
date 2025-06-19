@@ -11,8 +11,8 @@
 	#define LOGLINE(type, mod, msg) Log::logLine(type, mod, msg)
 	#define LOG(type, msg) Log::log(type, msg)
 #else
-	#define LOGLINE(type, msg) ((void)0)
-	#define LOG(type, msg) ((void)0)
+	#define LOGLINE(type, mod, msg) //((void)0)
+	#define LOG(type, msg) //((void)0)
 #endif
 
 enum class LogMod : uint8_t

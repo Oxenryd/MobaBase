@@ -11,10 +11,8 @@
 #include <vector>
 
 #include "ArenaAllocator.hpp"
+#include "Log.hpp"
 
-#ifdef LOGGING
-    #include "Log.hpp"
-#endif
 
 #ifndef HEAP_ARENA_MAX_PAGES
     #define HEAP_ARENA_MAX_PAGES 1024

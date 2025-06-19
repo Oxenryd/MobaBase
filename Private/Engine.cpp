@@ -2,6 +2,10 @@
 #include "ShaderManager.h"
 #include <immintrin.h>
 
+#ifdef USE_VULKAN
+	#include "VulkanContext.hpp"
+#endif
+
 Engine::Engine(HeapArena& heap) :
 	m_targetUpdateDeltaTime{ FPS_400 },
 	m_updateDeltaTime{ 0.0 },
@@ -72,7 +76,7 @@ void Engine::_initShaderManager() {
 		LOG(LogType::Success, "Done.");
 }
 
-void Engine::start(WindowSurface* wndPtr, InputManager* inputPtr) {
+void Engine::start(GraphicContext* graphicContext, InputManager* inputPtr) {
 
 	LOGLINE(LogType::Info, LogMod::Engine, "Starting... ");
 
@@ -83,12 +87,12 @@ void Engine::start(WindowSurface* wndPtr, InputManager* inputPtr) {
 
 	// Set main window
 	m_options.inputManager = inputPtr;
-	m_options.mainWindow = wndPtr;
+	m_options.graphicContext = graphicContext;
 
 	m_status = EngineStatus::PendingRun;
 	onStartInitiated.notify(this);
 	
-	m_options.mainWindow->showWindow(SW_NORMAL);
+	m_options.graphicContext->windowSurface->showWindow(SW_NORMAL);
 
 	m_status = EngineStatus::Running;
 	onStarted.notify(this);
@@ -120,12 +124,21 @@ inline void Engine::_run() {
 
 		m_baseTimers.update(dt);
 
+		
 
+#ifdef USE_VULKAN
+
+		VulkanContext::RenderContext drawCtx{};	
+		drawCtx.frameCount = m_totalFrames;
+#endif
+
+		m_options.graphicContext->draw(static_cast<void*>(&drawCtx));
 		m_framesSinceLastFpsRead++;
+		m_totalFrames++;
 		std::this_thread::yield();
 	}
 
-	m_options.mainWindow->destroyWindow();
+	m_options.graphicContext->windowSurface->destroyWindow();
 
 	m_status = EngineStatus::Stopped;
 	onStopped.notify(this);
