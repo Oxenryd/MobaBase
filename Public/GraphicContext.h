@@ -11,7 +11,9 @@ public:
 	explicit GraphicContext(WindowSurface* const wndSurface) :
 		windowSurface{ wndSurface } {}
 
-	virtual ~GraphicContext() {}
+	virtual ~GraphicContext() {
+
+	}
 
 	WindowSurface* const windowSurface;
 

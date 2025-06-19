@@ -148,7 +148,7 @@ private:
 	uint8_t m_currentFrame = 0;
 
 public:
-	~VulkanContext() {
+	virtual ~VulkanContext() {
 		if (!m_clean)
 			cleanUp();
 	}

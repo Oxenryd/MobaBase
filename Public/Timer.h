@@ -33,7 +33,10 @@ private:
 	Timer(const Timer& other);
 
 public:
+	Timer() = default;
+	~Timer() {
 
+	}
 	inline operator uint32_t() {
 		return static_cast<uint32_t>(m_timerIndex);
 	}

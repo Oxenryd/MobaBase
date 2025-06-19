@@ -24,13 +24,16 @@ struct ArenaPage
     uint32_t size;
     uint8_t dataStartOffset = 0;
     uint8_t free = 1;
+    //uint16_t type = static_cast<uint16_t>(-1); // for future reflection
     bool isFree() { return free == 1; }
-    void occupy(uint8_t dataOffset) { 
+    void occupy(uint8_t dataOffset /*, uint16_t typeIndex*/) {
         free = 0;
         dataStartOffset = dataOffset;
+        //type = typeIndex;
     }
     void release() { 
         free = 1;
+        //type = static_cast<uint16_t>(-1);
     }
 };
 
@@ -229,8 +232,13 @@ public:
                 std::to_string(reinterpret_cast<size_t>(m_memory)) + "... ");
         for (auto& list : *m_destructorsPtr) {
             for (auto& entry : list) {
-                if (entry.object && entry.destroyFunc)
-                    entry.destroyFunc(entry.object);
+                if (entry.object && entry.destroyFunc) {
+                    try {
+                        entry.destroyFunc(entry.object);
+                    } catch (std::exception& e) {
+                        LOGLINE(LogType::Warning, LogMod::Memory, "Failed to execute a destructor.");
+                    }                 
+                }
 #ifdef LOGGING
                 else
                     LOG(LogType::Warning, "\n\t\tDestructor missing. Skipping... ");
