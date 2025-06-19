@@ -1,6 +1,9 @@
 #ifndef VULKANCONTEXT_HPP
 #define VULKANCONTEXT_HPP
 
+#pragma warning(push)
+#pragma warning(disable : 28251)
+
 #ifdef BUILD_WIN
 	#ifndef _INC_WINAPIFAMILY
 		#define WIN32_LEAN_AND_MEAN
@@ -121,16 +124,16 @@ private:
 #endif
 
 	bool m_clean = true;
-	VkInstance m_vkInstance;
-	VkSurfaceKHR m_vkSurface;
-	VkPhysicalDevice m_curDevice;
+	VkInstance m_vkInstance = nullptr;
+	VkSurfaceKHR m_vkSurface = nullptr;
+	VkPhysicalDevice m_curDevice = nullptr;
 	VkPhysicalDeviceProperties m_deviceProperties;
 	VkPhysicalDeviceFeatures m_deviceFeatures;
-	VkDevice m_vkDevice;
-	VkQueue m_graphicsQueue;
-	uint32_t m_graphicsQueueFamilyIndex;
+	VkDevice m_vkDevice = nullptr;
+	VkQueue m_graphicsQueue = nullptr;
+	uint32_t m_graphicsQueueFamilyIndex = static_cast<uint32_t>(-1);
 
-	VkSwapchainKHR m_swapchain;
+	VkSwapchainKHR m_swapchain = nullptr;
 	std::vector<VkImage> m_swapchainImages;
 	std::vector<VkImageView> m_swapchainImageViews;
 	VkSurfaceFormatKHR m_surfaceFormat;
@@ -142,7 +145,7 @@ private:
 	std::vector<VkRenderPass> m_rendPasses;
 	std::vector<VkPipeline> m_pipelines;
 	std::vector<VkFramebuffer> m_swapChainFramebuffers;
-	VkCommandPool m_commandPool;
+	VkCommandPool m_commandPool = nullptr;
 	std::array<FrameSync, VULKAN_MAX_FRAMES_IN_FLIGHT> m_frameSync;
 	std::vector<VkSemaphore> m_imageRenderDone;
 	uint8_t m_currentFrame = 0;
@@ -154,7 +157,22 @@ public:
 	}
 	VulkanContext() = delete;
 	inline VulkanContext(WindowSurface* const wndSurface) :
-		GraphicContext(wndSurface) {}
+		GraphicContext(wndSurface),
+		m_commandPool{nullptr},
+		m_curDevice{nullptr},
+		m_deviceFeatures{},
+		m_frameSync{},
+		m_graphicsQueue{nullptr},
+		m_deviceProperties{},
+		m_vkInstance{nullptr},
+		m_vkDevice{nullptr},
+		m_graphicsQueueFamilyIndex{ static_cast<uint32_t>(-1) },
+		m_vkSurface{nullptr},
+		m_swapchain{nullptr},
+		m_swapchainFormat{},
+		m_swapchainExtent{},
+		m_surfaceFormat{}
+	{}
 
 	inline VkResult initVulkan(const VkPresentModeKHR mode, Shader& vertShader, Shader& fragShader) {
 		VkResult vk{};
@@ -697,32 +715,46 @@ public:
 
 
 	inline void cleanUp() {
-		for (auto& layout : m_pipelineLayouts) 
-			vkDestroyPipelineLayout(m_vkDevice, layout, nullptr);
-		m_pipelineLayouts.clear();
 
-		for (auto& pass : m_rendPasses) 
-			vkDestroyRenderPass(m_vkDevice, pass, nullptr);
-		m_rendPasses.clear();
+		vkDeviceWaitIdle(m_vkDevice);
 
-		for (auto& pipeline : m_pipelines) 
+		for (auto& pipeline : m_pipelines)
 			vkDestroyPipeline(m_vkDevice, pipeline, nullptr);
 		m_pipelines.clear();
 
-		for (auto& fBuffer : m_swapChainFramebuffers) 
+		for (auto& layout : m_pipelineLayouts)
+			vkDestroyPipelineLayout(m_vkDevice, layout, nullptr);
+		m_pipelineLayouts.clear();
+
+		for (auto& pass : m_rendPasses)
+			vkDestroyRenderPass(m_vkDevice, pass, nullptr);
+		m_rendPasses.clear();
+
+		for (auto& fBuffer : m_swapChainFramebuffers)
 			vkDestroyFramebuffer(m_vkDevice, fBuffer, nullptr);
 		m_swapChainFramebuffers.clear();
+
+		for (auto& view : m_swapchainImageViews)
+			vkDestroyImageView(m_vkDevice, view, nullptr);
+		m_swapchainImageViews.clear();
+
+		vkDestroySwapchainKHR(m_vkDevice, m_swapchain, nullptr);
 
 		for (auto& sync : m_frameSync) {
 			vkDestroySemaphore(m_vkDevice, sync.imageAvailable, nullptr);
 			vkDestroyFence(m_vkDevice, sync.inFlight, nullptr);
 		}
+
 		for (auto& s : m_imageRenderDone)
 			vkDestroySemaphore(m_vkDevice, s, nullptr);
 		m_imageRenderDone.clear();
-			
+
 		vkDestroyCommandPool(m_vkDevice, m_commandPool, nullptr);
+
 		vkDestroyDevice(m_vkDevice, nullptr);
+
+		vkDestroySurfaceKHR(m_vkInstance, m_vkSurface, nullptr);
+
 		vkDestroyInstance(m_vkInstance, nullptr);
 
 		m_clean = true;
@@ -848,5 +880,5 @@ public:
 		m_currentFrame = (m_currentFrame + 1) % VULKAN_MAX_FRAMES_IN_FLIGHT;
 	}
 };
-
+#pragma warning(pop)
 #endif

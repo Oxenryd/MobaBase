@@ -15,7 +15,7 @@
 
 
 #ifndef HEAP_ARENA_MAX_PAGES
-    #define HEAP_ARENA_MAX_PAGES 1024
+    #define HEAP_ARENA_MAX_PAGES 2048
 #endif
 
 struct ArenaPage
@@ -62,21 +62,25 @@ public:
 
         if (size < sizeof(ArenaPage) * HEAP_ARENA_MAX_PAGES * 2) {
             LOG(LogType::Error, "Fail. Size too small.");
+            delete[] m_memory;
             throw std::bad_alloc();
         }
 
-        size_t current = reinterpret_cast<size_t>(m_memory);
-        size_t alignment = alignof(std::max_align_t);
-        size_t aligned = alignUp(current, alignment);
-        size_t offset = aligned - reinterpret_cast<size_t>(m_memory);
-        void* ptr = m_memory + offset;
-        m_pagesPtr = new (ptr) std::vector<ArenaPage>();
-        m_pagesPtr->reserve(HEAP_ARENA_MAX_PAGES);
+        //size_t current = reinterpret_cast<size_t>(m_memory);
+        //size_t alignment = alignof(std::max_align_t);
+        //size_t aligned = alignUp(current, alignment);
+        //size_t offset = aligned - reinterpret_cast<size_t>(m_memory);
+        //void* ptr = m_memory + offset;
+        //m_pagesPtr = new (ptr) std::vector<ArenaPage>();
+        //m_pagesPtr->reserve(HEAP_ARENA_MAX_PAGES);
+
+        m_pagesPtr.reserve(HEAP_ARENA_MAX_PAGES);
 
         reset();
 
-        m_destructorsPtr = constructNoRegister<std::vector<std::vector<DestructorEntry, HeapArenaAllocator<DestructorEntry>>>>();
-        m_destructorsPtr->emplace_back(std::vector<DestructorEntry, HeapArenaAllocator<DestructorEntry>>{this});
+        //m_destructorsPtr = constructNoRegister<std::vector<std::vector<DestructorEntry, HeapArenaAllocator<DestructorEntry>>>>();
+        m_destructorsPtr.emplace_back(std::vector<DestructorEntry>{});
+        
 
         LOG(LogType::Success, "Done.");
     }
@@ -98,8 +102,8 @@ public:
     }
 
     bool findFirstFreeSpot(uint32_t size, size_t& outOffset, size_t alignment = alignof(std::max_align_t)) {
-        for (size_t i = 0; i < m_pagesPtr->size(); ++i) {
-            auto& page = m_pagesPtr->at(i);
+        for (size_t i = 0; i < m_pagesPtr.size(); ++i) {
+            auto& page = m_pagesPtr[i];
             if (!page.isFree())
                 continue;
 
@@ -112,7 +116,7 @@ public:
                 page.size = actualSize;
                 page.occupy(delta);
                 outOffset = aligned;
-                m_pagesPtr->emplace_back(ArenaPage{ page.offset + page.size, lastSize - size });
+                m_pagesPtr.emplace_back(ArenaPage{ page.offset + page.size, lastSize - size });
                 mergePages();
                 m_used += page.size;
                 return true;
@@ -140,8 +144,8 @@ public:
 
         } 
         else {
-            if (registerDestructor && m_destructorsPtr) {
-                m_destructorsPtr->at(0).push_back({[](void* p) { static_cast<T*>(p)->~T(); }, obj});
+            if (registerDestructor) {
+                m_destructorsPtr[0].push_back({ [](void* p) { static_cast<T*>(p)->~T(); }, obj });
             }
         }
 
@@ -149,7 +153,7 @@ public:
     }
 
     inline void sortPages() {
-        std::sort(m_pagesPtr->begin(), m_pagesPtr->end(),
+        std::sort(m_pagesPtr.begin(), m_pagesPtr.end(),
                   [](const ArenaPage& a, const ArenaPage& b) {
                       return a.offset < b.offset;
                   });
@@ -158,9 +162,9 @@ public:
     inline void mergePages() {
         sortPages();
         size_t writeIndex = 0;
-        for (size_t i = 1; i < m_pagesPtr->size(); ++i) {
-            ArenaPage& prev = (*m_pagesPtr)[writeIndex];
-            ArenaPage& curr = (*m_pagesPtr)[i];
+        for (size_t i = 1; i < m_pagesPtr.size(); ++i) {
+            ArenaPage& prev = (m_pagesPtr)[writeIndex];
+            ArenaPage& curr = (m_pagesPtr)[i];
 
             if (!curr.isFree()) {
                 writeIndex++;
@@ -178,13 +182,13 @@ public:
 
     uint32_t registerArena() {
         auto id = m_nextArenaId++;
-        m_destructorsPtr->emplace_back();
+        m_destructorsPtr.emplace_back();
         return id;
     }
 
     inline void slidePages(size_t fromIndex) {
-        for (size_t i = fromIndex; i < m_pagesPtr->size() - 1; ++i) {
-            m_pagesPtr->at(i) = m_pagesPtr->at(i + 1);
+        for (size_t i = fromIndex; i < m_pagesPtr.size() - 1; ++i) {
+            m_pagesPtr[i] = m_pagesPtr[i + 1];
         }
     }
 
@@ -201,7 +205,7 @@ public:
 
     ArenaPage* findPage(size_t ptr) {
         auto mem = reinterpret_cast<size_t>(m_memory);
-        for (auto& page : *m_pagesPtr) {
+        for (auto& page : m_pagesPtr) {
             if (mem + page.offset == ptr)
                 return &page;
         }
@@ -209,16 +213,16 @@ public:
     }
 
     void reset() {
-        m_pagesPtr->clear();
+        m_pagesPtr.clear();
         m_nextArenaId = 1;
         if (m_size > 0xffffffff) {
-            size_t pageStart = sizeof(ArenaPage) * HEAP_ARENA_MAX_PAGES + sizeof(std::vector<ArenaPage>);
+            size_t pageStart = 0;//sizeof(ArenaPage) * HEAP_ARENA_MAX_PAGES + sizeof(std::vector<ArenaPage>);
             uint32_t firstEnd = 0xffffffff - pageStart;
-            m_pagesPtr->emplace_back(ArenaPage{ pageStart, firstEnd });
-            m_pagesPtr->emplace_back(ArenaPage{ firstEnd + 1,  static_cast<uint32_t>(m_size - firstEnd + 1) });
+            m_pagesPtr.emplace_back(ArenaPage{ pageStart, firstEnd });
+            m_pagesPtr.emplace_back(ArenaPage{ firstEnd + 1,  static_cast<uint32_t>(m_size - firstEnd + 1) });
         } else {
-            size_t pageStart = sizeof(ArenaPage) * HEAP_ARENA_MAX_PAGES + sizeof(std::vector<ArenaPage>);
-            m_pagesPtr->emplace_back(ArenaPage{ pageStart, static_cast<uint32_t>(m_size - pageStart) });
+            size_t pageStart = 0;//sizeof(ArenaPage) * HEAP_ARENA_MAX_PAGES + sizeof(std::vector<ArenaPage>);
+            m_pagesPtr.emplace_back(ArenaPage{ pageStart, static_cast<uint32_t>(m_size - pageStart + 1) });
         }
     }
 
@@ -230,7 +234,7 @@ public:
     void destroyAll() {
         LOGLINE(LogType::Info, LogMod::Memory, "Destroying HeapArena elements, Addr: " +
                 std::to_string(reinterpret_cast<size_t>(m_memory)) + "... ");
-        for (auto& list : *m_destructorsPtr) {
+        for (auto& list : m_destructorsPtr) {
             for (auto& entry : list) {
                 if (entry.object && entry.destroyFunc) {
                     try {
@@ -245,16 +249,19 @@ public:
 #endif
             }
         }
-        for (size_t i = m_destructorsPtr->size() - 1; i > 1; --i) {
-            m_destructorsPtr->erase(m_destructorsPtr->end());
-        } 
+        for (size_t i = m_destructorsPtr.size() - 1; i > 1; --i) {
+            m_destructorsPtr.erase(m_destructorsPtr.end());
+        }
+
+        m_pagesPtr.clear();
+        m_pagesPtr.resize(0);
         reset();
         LOG(LogType::Success, "Done.");
     }
 
 private:
-    std::vector<ArenaPage>* m_pagesPtr = nullptr;
-    std::vector<std::vector<DestructorEntry, HeapArenaAllocator<DestructorEntry>>>* m_destructorsPtr = nullptr;
+    std::vector<ArenaPage> m_pagesPtr;
+    std::vector<std::vector<DestructorEntry>> m_destructorsPtr;
     uint8_t* m_memory = nullptr;
     size_t m_size;
     size_t m_lastStart;
@@ -266,6 +273,10 @@ private:
         return (addr + (alignment - 1)) & ~(alignment - 1);
     }
 };
+
+
+
+
 
 class Arena
 { 

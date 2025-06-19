@@ -100,7 +100,7 @@ private:
 		return CON_COL_FG[static_cast<uint8_t>(color)];
 	}
 public:
-	~DefaultTerminalLogger() {}
+	virtual ~DefaultTerminalLogger() {}
 	inline void logLineImpl(const LogType& type, const LogMod& module, const std::string& msg) const override {
 		std::string colStr;
 		switch (type)
@@ -163,6 +163,7 @@ public:
 			delete logger;
 			logger = nullptr;
 		}
+		s_loggers.~vector();
 	}
 private:
 	inline static std::vector<LoggerType*> s_loggers;

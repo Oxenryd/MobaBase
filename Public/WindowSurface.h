@@ -81,8 +81,8 @@ struct WindowSurface
         Minimized
     };
 
-    uint16_t width;
-    uint16_t height;
+    uint16_t width = static_cast<uint16_t>(-1);
+    uint16_t height = static_cast<uint16_t>(-1);
     std::string appName;
 
     Event<> onCreate;
@@ -114,8 +114,8 @@ struct WindowSurface
         return *this;
     }
 
-    HWND windowHandle;
-    HINSTANCE windowInstance;
+    HWND windowHandle = nullptr;
+    HINSTANCE windowInstance = nullptr;
     void showWindow(int showCommand) { 
         ShowWindow(windowHandle, showCommand);
     }

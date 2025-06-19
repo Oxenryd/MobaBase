@@ -3,18 +3,44 @@
 
 #include "Engine.h"
 
+#ifdef BUILD_WIN
+
+
+	#ifdef DEBUGGING
+		#define _CRTDBG_MAP_ALLOC
+		#include <stdlib.h>
+		#include <crtdbg.h>		
+
+		void finalBreak() {
+			Log::deInit();
+			_CrtDumpMemoryLeaks();
+			__debugbreak();
+		}
+	#endif
+
 constexpr const wchar_t* CLASS_NAME = L"VulkanTest";
 constexpr const wchar_t* WINDOW_TITLE = L"VulkanTest";
 constexpr const int WND_WIDTH = 1280;
 constexpr const int WND_HEIGHT = 800;
 
-#ifdef BUILD_WIN
+
 
 #include <mmsystem.h>
 #pragma comment(lib, "winmm.lib")
 
+void finalCleanup() {
+	Log::deInit();
+}
+
 int __stdcall main(HINSTANCE hInstance, HINSTANCE instance, LPSTR str, int nCmdShow) {
 	
+#ifdef DEBUGGING
+	_CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
+	atexit(finalBreak);
+#else
+	atexit(finalCleanup);
+#endif
+
 	// Set windows tight thread sync
 	timeBeginPeriod(1);
 
