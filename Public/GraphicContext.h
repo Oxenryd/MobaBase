@@ -18,6 +18,7 @@ public:
 	WindowSurface* const windowSurface;
 
 	virtual void draw(void* rendCtx) = 0;
+	virtual void notifyViewResized(void* ctx, uint16_t width, uint16_t height) = 0;
 };
 
 #endif

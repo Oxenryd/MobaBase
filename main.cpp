@@ -29,7 +29,7 @@ constexpr const wchar_t* WINDOW_TITLE = L"VulkanTest";
 constexpr const int WND_WIDTH = 1280;
 constexpr const int WND_HEIGHT = 800;
 
-
+size_t resizeTimes = 0;
 
 #include <mmsystem.h>
 #pragma comment(lib, "winmm.lib")
@@ -103,6 +103,12 @@ int __stdcall main(HINSTANCE hInstance, HINSTANCE instance, LPSTR str, int nCmdS
 		return (int)vk;
 	}
 	LOGLINE(LogType::Success, LogMod::Vulkan, "Vulkan init Complete.\n");
+	wnd->onResize.subscribe([vkCtx](WindowSurface::SizeType type, glm::u16vec2 newSize)
+							{
+								resizeTimes++;
+								if (resizeTimes < 2) return;
+								vkCtx->notifyViewResized(nullptr, newSize.x, newSize.y);
+							});
 
 	// Start Engine
 	engine->setTargetUpdateDeltaTime(0.0);
