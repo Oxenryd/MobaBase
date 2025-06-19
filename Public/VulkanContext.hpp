@@ -145,7 +145,6 @@ private:
 	VkCommandPool m_commandPool;
 	std::array<FrameSync, VULKAN_MAX_FRAMES_IN_FLIGHT> m_frameSync;
 	std::vector<VkSemaphore> m_imageRenderDone;
-	VkSemaphore m_timelineSemaphore;
 	uint8_t m_currentFrame = 0;
 
 public:
@@ -198,10 +197,9 @@ public:
 		const char* extensions[] = {
 			"VK_KHR_surface",
 			"VK_KHR_win32_surface",
-			"VK_KHR_timeline_semaphore",
 			"VK_EXT_debug_utils"
 		};
-		instanceCreateInfo.enabledExtensionCount = 4;
+		instanceCreateInfo.enabledExtensionCount = 3;
 
 		if (checkValidationLayerSupport()) {
 			instanceCreateInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
@@ -213,9 +211,8 @@ public:
 		const char* extensions[] = {
 			"VK_KHR_surface",
 			"VK_KHR_win32_surface",
-			"VK_KHR_timeline_semaphore",
 		};
-		instanceCreateInfo.enabledExtensionCount = 3;
+		instanceCreateInfo.enabledExtensionCount = 2;
 		instanceCreateInfo.enabledLayerCount = 0;
 #endif
 		instanceCreateInfo.ppEnabledExtensionNames = extensions;
@@ -362,8 +359,8 @@ public:
 		swapchainCreateInfo.imageColorSpace = m_surfaceFormat.colorSpace;
 		swapchainCreateInfo.imageExtent = m_swapchainExtent;
 		swapchainCreateInfo.imageArrayLayers = 1;
-		swapchainCreateInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT
-			| VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+		swapchainCreateInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+			//| VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
 		swapchainCreateInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
 		swapchainCreateInfo.preTransform = surfaceCaps.currentTransform;
 		swapchainCreateInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
@@ -694,19 +691,6 @@ public:
 			Vk_CHECK(vkResult, vkCreateSemaphore(m_vkDevice, &semaphoreInfo, nullptr, &m_imageRenderDone.back()));
 		}
 		
-		VkSemaphoreTypeCreateInfo timelineCreateInfo{};
-		timelineCreateInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO;
-		timelineCreateInfo.semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE;
-		timelineCreateInfo.initialValue = 0;
-
-		VkSemaphoreCreateInfo semaphoreInfo{};
-		semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-		semaphoreInfo.pNext = &timelineCreateInfo;
-
-
-		Vk_CHECK(vkResult, vkCreateSemaphore(m_vkDevice, &semaphoreInfo, nullptr, &m_timelineSemaphore));
-
-
 		LOG(LogType::Success, "Done.");
 		return VK_SUCCESS;
 	}
@@ -737,8 +721,6 @@ public:
 			vkDestroySemaphore(m_vkDevice, s, nullptr);
 		m_imageRenderDone.clear();
 			
-		vkDestroySemaphore(m_vkDevice, m_timelineSemaphore, nullptr);
-
 		vkDestroyCommandPool(m_vkDevice, m_commandPool, nullptr);
 		vkDestroyDevice(m_vkDevice, nullptr);
 		vkDestroyInstance(m_vkInstance, nullptr);
@@ -769,15 +751,9 @@ public:
 		// Wait for previous frame fence 
 		vkWaitForFences(m_vkDevice, 1, &frame.inFlight, VK_TRUE, UINT64_MAX);
 		vkResetFences(m_vkDevice, 1, &frame.inFlight);
-		//if (vkGetFenceStatus(m_vkDevice, frame.inFlight) == VK_SUCCESS)
-		//	vkResetFences(m_vkDevice, 1, &frame.inFlight);
-		//else
-		//	vkWaitForFences(m_vkDevice, 1, &frame.inFlight, VK_TRUE, UINT64_MAX);
-
-		// Reset Command buffer
-		vkResetCommandBuffer(frame.cmdBuffer, 0);
 
 		//Begin command buffer
+		vkResetCommandBuffer(frame.cmdBuffer, 0);
 		recordCommandBuffer(frame.cmdBuffer, m_currentFrame);
 
 		// Acquire swapchain image
