@@ -80,17 +80,6 @@ int __stdcall main(HINSTANCE hInstance, HINSTANCE instance, LPSTR str, int nCmdS
 		return (int)EC;
 	}
 
-	wnd->onClose.subscribe([engine]()
-						   {
-							   engine->stop();
-						   });
-	engine->onReadFPS.subscribe([&wnd](Engine* engPtr, uint32_t frames)
-		{
-			static std::wstring windowTitle;
-			windowTitle = L"VulkanTest - " + std::to_wstring(frames) + L" FPS";
-			SetWindowTextW(wnd->windowHandle, windowTitle.c_str());
-		});
-
 	// Create Vulkan Context
 	LOGLINE(LogType::Info, LogMod::Vulkan, "Creating Vulkan context... ");
 	VulkanContext* vkCtx = mainArena.construct<VulkanContext>(wnd);
@@ -103,11 +92,29 @@ int __stdcall main(HINSTANCE hInstance, HINSTANCE instance, LPSTR str, int nCmdS
 		return (int)vk;
 	}
 	LOGLINE(LogType::Success, LogMod::Vulkan, "Vulkan init Complete.\n");
-	wnd->onResize.subscribe([vkCtx](WindowSurface::SizeType type, glm::u16vec2 newSize)
+	
+	// Callbacks -
+	// Window -> Vulkan cb's
+	wnd->onResize.subscribe([vkCtx, engine](WindowSurface::SizeType type, glm::u16vec2 newSize)
 							{
 								resizeTimes++;
 								if (resizeTimes < 2) return;
-								vkCtx->notifyViewResized(nullptr, newSize.x, newSize.y);
+								bool pendingExit = 
+									engine->getStatus() == EngineStatus::PendingStop ? true : false;
+								vkCtx->notifyViewResized(&pendingExit, newSize.x, newSize.y);
+							});
+	wnd->onClose.subscribe([engine, vkCtx]()
+						   {
+							   vkCtx->setPendingExit();
+								engine->stop();
+						   });
+
+	// Engine - Show Fps cb
+	engine->onReadFPS.subscribe([&wnd](Engine* engPtr, uint32_t frames)
+							{
+								static std::wstring windowTitle;
+								windowTitle = L"VulkanTest - " + std::to_wstring(frames) + L" FPS";
+								SetWindowTextW(wnd->windowHandle, windowTitle.c_str());
 							});
 
 	// Start Engine

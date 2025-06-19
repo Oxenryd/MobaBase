@@ -125,18 +125,21 @@ private:
 #endif
 
 public:
-	bool isClean = true;
+	
 	VkInstance vkInstance = nullptr;
 	VkSurfaceKHR vkSurface = nullptr;
 	VkPhysicalDevice curDevice = nullptr;
-	VkPhysicalDeviceProperties deviceProperties;
-	VkPhysicalDeviceFeatures deviceFeatures;
+	//VkPhysicalDeviceProperties deviceProperties;
+	//VkPhysicalDeviceFeatures deviceFeatures;
 	VkDevice vkDevice = nullptr;
 	VkQueue graphicsQueue = nullptr;
 	uint32_t graphicsQueueFamilyIndex = static_cast<uint32_t>(-1);
 
 	VkPresentModeKHR presentMode;
 	uint32_t renderPassIndex = 0;
+	bool isClean = true;
+	uint8_t currentFrame = 0;
+	bool pendingResize = false;
 	VkSwapchainKHR swapchain = nullptr;
 	std::vector<VkImage> swapchainImages;
 	std::vector<VkImageView> swapchainImageViews;
@@ -152,8 +155,6 @@ public:
 	VkCommandPool commandPool = nullptr;
 	std::array<FrameSync, VULKAN_MAX_FRAMES_IN_FLIGHT> frameSync;
 	std::vector<VkSemaphore> imageRenderDone;
-	uint8_t currentFrame = 0;
-	bool pendingResize = false;
 
 	virtual ~VulkanContext() {
 		if (!isClean)
@@ -164,10 +165,10 @@ public:
 		GraphicContext(wndSurface),
 		commandPool{nullptr},
 		curDevice{nullptr},
-		deviceFeatures{},
+		//deviceFeatures{},
 		frameSync{},
 		graphicsQueue{nullptr},
-		deviceProperties{},
+		//deviceProperties{},
 		vkInstance{nullptr},
 		vkDevice{nullptr},
 		graphicsQueueFamilyIndex{ static_cast<uint32_t>(-1) },
@@ -274,7 +275,7 @@ public:
 		Vk_CHECK(vkResult, vkEnumeratePhysicalDevices(vkInstance, &deviceCount, physicalDevices.data()));
 
 		curDevice = VK_NULL_HANDLE;
-
+		VkPhysicalDeviceProperties deviceProperties;
 		std::vector<uint16_t> scores;
 		uint16_t bestScore = 0;
 		scores.resize(physicalDevices.size());
@@ -292,6 +293,7 @@ public:
 
 				if (supportsGraphics && supportsPresent) {
 					scores[d] += 1000;
+					
 					VkPhysicalDeviceFeatures deviceFeatures;
 					vkGetPhysicalDeviceProperties(device, &deviceProperties);
 					vkGetPhysicalDeviceFeatures(device, &deviceFeatures);
@@ -306,7 +308,7 @@ public:
 						bestScore = scores[d];
 						curDevice = device;
 						graphicsQueueFamilyIndex = i;
-						deviceFeatures = deviceFeatures;
+						//deviceFeatures = deviceFeatures;
 					}
 				}
 			}
@@ -816,6 +818,11 @@ public:
 	}
 
 	inline void draw(void* rendCtx) override {
+
+		if (isPendingExit()) {
+			vkDeviceWaitIdle(vkDevice);
+			return;
+		}
 
 		auto* ctx = static_cast<RenderContext*>(rendCtx);
 		auto& frame = frameSync[currentFrame];

@@ -103,6 +103,7 @@ public:
 	ShaderManager* getShaderManager() { return m_shaderMan; }
 	void start(GraphicContext* graphicContext, InputManager* inputPtr);
 	void stop();
+	inline const EngineStatus& getStatus() const { return m_status; }
 		
 };
 
