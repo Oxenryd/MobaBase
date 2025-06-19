@@ -1,7 +1,8 @@
-#ifndef LOG_HPP
+﻿#ifndef LOG_HPP
 #define LOG_HPP
 
 #include <string>
+#include <cstdint>
 #include <iostream>
 #include <chrono>
 #include <vector>
@@ -9,10 +10,12 @@
 
 #ifdef LOGGING
 	#define LOGLINE(type, mod, msg) Log::logLine(type, mod, msg)
+	#define LOGLINE_IND(type, mod, msg, ind) Log::logLine(type, mod, msg, ind)
 	#define LOG(type, msg) Log::log(type, msg)
 #else
-	#define LOGLINE(type, mod, msg) //((void)0)
-	#define LOG(type, msg) //((void)0)
+	#define LOGLINE(type, mod, msg) ((void)0)
+	#define LOGLINE_IND(type, mod, msg, ind) ((void)0)
+	#define LOG(type, msg) ((void)0)
 #endif
 
 enum class LogMod : uint8_t
@@ -23,7 +26,8 @@ enum class LogMod : uint8_t
 	DirectX,
 	Rendering,
 	Window,
-	Input
+	Input,
+	Log
 };
 
 constexpr const char* MODULE_STRINGS[]{
@@ -33,7 +37,8 @@ constexpr const char* MODULE_STRINGS[]{
 	"DIRECTX\t",
 	"RENDER\t",
 	"WINDOW\t",
-	"INPUT\t"
+	"INPUT\t",
+	"LOGGER\t"
 };
 
 enum class TermColor : uint8_t
@@ -89,20 +94,29 @@ class LoggerType
 {
 public:
 	virtual ~LoggerType() {};
-	virtual void logImpl(const LogType& type, const std::string& msg) const = 0;
-	virtual void logLineImpl(const LogType& type, const LogMod& module, const std::string& msg) const = 0;
+	virtual void logImpl(const LogType& type, const std::string& msg) = 0;
+	virtual void logLineImpl(const LogType& type, const LogMod& module, const std::string& msg, const int8_t ind) = 0;
 };
 
 class DefaultTerminalLogger : public LoggerType
 {
 private:
+	uint8_t m_indent = 0;
 	constexpr const char* _col(TermColor color) const {
 		return CON_COL_FG[static_cast<uint8_t>(color)];
 	}
 public:
 	virtual ~DefaultTerminalLogger() {}
-	inline void logLineImpl(const LogType& type, const LogMod& module, const std::string& msg) const override {
-		std::string colStr;
+	inline void logLineImpl(const LogType& type, const LogMod& module, const std::string& msg, const int8_t indent) override {
+		
+		if (indent < 0) {
+			m_indent--;
+			if (m_indent >= 0xf1)
+				m_indent = 0;
+		}
+
+		std::string colStr;			
+	
 		switch (type)
 		{
 			case LogType::Error:
@@ -118,10 +132,19 @@ public:
 			default:
 				colStr = std::string{ _col(TermColor::Reset) }; break;
 		}
-
-		std::cout << '\n' << std::chrono::system_clock::now() << ":\t" << MODULE_STRINGS[static_cast<uint8_t>(module)] << colStr << msg << _col(TermColor::Reset);
+		std::string indentStr{};
+		for (size_t i = 0; i < m_indent; ++i) {
+			indentStr.append("   -> ");
+		}
+		std::cout << '\n' << std::chrono::system_clock::now() << ":\t" << MODULE_STRINGS[static_cast<uint8_t>(module)] << indentStr << colStr << msg << _col(TermColor::Reset);
+	
+		if (indent > 0) {
+			m_indent++;
+			if (m_indent >= 0xf0)
+				m_indent = 0xf0;
+		}
 	}
-	inline void logImpl(const LogType& type, const std::string& msg) const override {
+	inline void logImpl(const LogType& type, const std::string& msg) override {
 		std::string colStr;
 		switch (type) {
 			case LogType::Error:
@@ -145,13 +168,29 @@ public:
 class Log
 {
 public:
-	template <typename T>
+	template<typename... LoggerTs>
 	inline static void init() {
-		s_loggers.emplace_back(new T{});
+
+#ifndef LOGGING
+		return;
+#endif
+		static_assert((std::is_base_of_v<LoggerType, LoggerTs> && ...),
+					  "All LoggerTs must derive from LoggerType");
+		if (!s_loggers.empty()) {
+			logLine(LogType::Remark, LogMod::Log, "Reinit...\n");
+			s_loggers.clear();
+		}
+		(_init<LoggerTs>(), ...);
+		
+		logLine(LogType::Info, LogMod::Log, "Initialized.");
 	}
 	inline static void logLine(const LogType& type, const LogMod& module, const std::string& msg) {
 		for (auto* logger : s_loggers)
-			logger->logLineImpl(type, module, msg);
+			logger->logLineImpl(type, module, msg, 0);
+	}
+	inline static void logLine(const LogType& type, const LogMod& module, const std::string& msg, int8_t ind) {
+		for (auto* logger : s_loggers)
+			logger->logLineImpl(type, module, msg, ind);
 	}
 	inline static void log(const LogType& type, const std::string& msg) {
 		for (auto* logger : s_loggers)
@@ -159,14 +198,23 @@ public:
 	}
 
 	inline static void deInit() {
+#ifndef LOGGING
+		return;
+#endif
+		logLine(LogType::Info, LogMod::Log, "Cleaning up...\n");
 		for (auto* logger : s_loggers) {
 			delete logger;
 			logger = nullptr;
 		}
+		s_loggers.clear();
 		s_loggers.~vector();
 	}
 private:
 	inline static std::vector<LoggerType*> s_loggers;
+	template <typename T>
+	static void _init() {
+		s_loggers.emplace_back(new T{});
+	}
 };
 
 #endif

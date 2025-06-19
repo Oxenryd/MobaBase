@@ -232,8 +232,11 @@ public:
     size_t capacity() const { return m_size; }
 
     void destroyAll() {
-        LOGLINE(LogType::Info, LogMod::Memory, "Destroying HeapArena elements, Addr: " +
-                std::to_string(reinterpret_cast<size_t>(m_memory)) + "... ");
+        size_t address = reinterpret_cast<size_t>(m_memory);
+        std::string addrStr = std::to_string(address);
+
+        LOGLINE_IND(LogType::Info, LogMod::Memory, "Destroying HeapArena elements, Addr: " +
+                addrStr + "... ", 1);
         for (auto& list : m_destructorsPtr) {
             for (auto& entry : list) {
                 if (entry.object && entry.destroyFunc) {
@@ -256,7 +259,7 @@ public:
         m_pagesPtr.clear();
         m_pagesPtr.resize(0);
         reset();
-        LOG(LogType::Success, "Done.");
+        LOGLINE_IND(LogType::Success, LogMod::Memory, "HeapArena, Addr: " + addrStr + " deallocated.", -1);
     }
 
 private:

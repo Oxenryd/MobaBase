@@ -3,6 +3,12 @@
 
 #include "Engine.h"
 
+#ifdef IGPU_PRIO
+	const bool igpuPriority = true;
+#else
+	const bool igpuPriority = false;
+#endif
+
 #ifdef BUILD_WIN
 
 
@@ -14,7 +20,7 @@
 		void finalBreak() {
 			Log::deInit();
 			_CrtDumpMemoryLeaks();
-			__debugbreak();
+			//__debugbreak();
 		}
 	#endif
 
@@ -90,7 +96,8 @@ int __stdcall main(HINSTANCE hInstance, HINSTANCE instance, LPSTR str, int nCmdS
 	VulkanContext* vkCtx = mainArena.construct<VulkanContext>(wnd);
 	auto vk = vkCtx->initVulkan(
 		VkPresentModeKHR::VK_PRESENT_MODE_MAILBOX_KHR,
-		engine->getShaderManager()->vertexShaders()[0], engine->getShaderManager()->pixelShaders()[0]);
+		engine->getShaderManager()->vertexShaders()[0], engine->getShaderManager()->pixelShaders()[0],
+		igpuPriority);
 	if (vk != VK_SUCCESS) {
 		LOG(LogType::Error, "Failed. Code: " + std::to_string(static_cast<uint32_t>(vk)));
 		return (int)vk;

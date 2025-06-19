@@ -174,7 +174,7 @@ public:
 		m_surfaceFormat{}
 	{}
 
-	inline VkResult initVulkan(const VkPresentModeKHR mode, Shader& vertShader, Shader& fragShader) {
+	inline VkResult initVulkan(const VkPresentModeKHR mode, Shader& vertShader, Shader& fragShader, bool prioIGpu = false) {
 		VkResult vk{};
 
 		for (size_t i = 0; i < VULKAN_MAX_FRAMES_IN_FLIGHT; ++i) {
@@ -183,7 +183,7 @@ public:
 
 		Vk_CHECK(vk, createInstance());
 		Vk_CHECK(vk, createSurface());
-		Vk_CHECK(vk, pickPhysDevice(false));
+		Vk_CHECK(vk, pickPhysDevice(prioIGpu));
 		Vk_CHECK(vk, createLogicalDevice());
 		Vk_CHECK(vk, createSwapchain(mode));
 		Vk_CHECK(vk, createImageViews());
@@ -201,7 +201,7 @@ public:
 
 	inline VkResult createInstance() {
 		VkResult vkResult;
-		LOGLINE(LogType::Info, LogMod::Vulkan, "Creating VkInstance... ");
+		LOGLINE_IND(LogType::Info, LogMod::Vulkan, "Creating VkInstance... ", 1);
 		VkApplicationInfo appInfo{};
 		appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
 		appInfo.apiVersion = VK_API_VERSION_1_3;
@@ -225,6 +225,7 @@ public:
 		} else {
 			instanceCreateInfo.enabledLayerCount = 0;
 		}
+		LOGLINE(LogType::Info, LogMod::Vulkan, "Validation is ON. ");
 #else
 		const char* extensions[] = {
 			"VK_KHR_surface",
@@ -232,11 +233,12 @@ public:
 		};
 		instanceCreateInfo.enabledExtensionCount = 2;
 		instanceCreateInfo.enabledLayerCount = 0;
+		LOGLINE(LogType::Info, LogMod::Vulkan, "Validation is OFF. ");
 #endif
 		instanceCreateInfo.ppEnabledExtensionNames = extensions;
 		Vk_CHECK(vkResult, vkCreateInstance(&instanceCreateInfo, nullptr, &m_vkInstance));
 
-		LOG(LogType::Success, "Done.");
+		LOGLINE_IND(LogType::Success, LogMod::Vulkan, "VkInstance created.", -1);
 		return VK_SUCCESS;
 	}
 
@@ -288,11 +290,10 @@ public:
 					vkGetPhysicalDeviceProperties(device, &deviceProperties);
 					vkGetPhysicalDeviceFeatures(device, &deviceFeatures);
 
-					if (deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) {
-						if (prioIGpu)
-							scores[d] -= 1001;
-						else
+					if (deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU && !prioIGpu) {
 							scores[d] += 1000;
+					} else if (deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU && prioIGpu) {
+						scores[d] += 1000;
 					}
 
 					if (scores[d] > bestScore) {
@@ -691,7 +692,7 @@ public:
 	}
 
 	inline VkResult createSyncObjects() {
-		LOGLINE(LogType::Info, LogMod::Vulkan, "Creating sync objects... ");
+		LOGLINE(LogType::Info, LogMod::Vulkan, "Creating Sync objects... ");
 		VkResult vkResult{};
 
 		VkSemaphoreCreateInfo semaphoreInfo{};
@@ -715,6 +716,8 @@ public:
 
 
 	inline void cleanUp() {
+
+		LOGLINE(LogType::Info, LogMod::Vulkan, "Cleaning up... ");
 
 		vkDeviceWaitIdle(m_vkDevice);
 
@@ -758,6 +761,8 @@ public:
 		vkDestroyInstance(m_vkInstance, nullptr);
 
 		m_clean = true;
+
+		LOG(LogType::Success, "Done.");
 	}
 
 	inline VkResult recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex) {
