@@ -481,7 +481,7 @@ public:
 	}
 
 
-	inline VkResult createGraphicsPipeline(Shader& vs, Shader& ps) {
+	inline VkResult createGraphicsPipeline(Shader& vs, Shader& ps, size_t index = static_cast<size_t>(-1)) {
 		LOGLINE(LogType::Info, LogMod::Vulkan, "Creating Pipeline... ");
 		VkResult vkResult{};
 		VkShaderModule vertModule{};
@@ -596,7 +596,11 @@ public:
 		VkPipelineLayout pipelineLayout;
 		Vk_CHECK(vkResult, vkCreatePipelineLayout(vkDevice, &pipelineLayoutInfo, nullptr, &pipelineLayout));
 
-		pipelineLayouts.push_back(pipelineLayout);
+		if (index == static_cast<size_t>(-1))
+			pipelineLayouts.push_back(pipelineLayout);
+		else {
+			pipelineLayouts[index] = pipelineLayout;
+		}
 
 		// The Sauce!
 		VkGraphicsPipelineCreateInfo pipelineInfo{};
@@ -611,7 +615,7 @@ public:
 		pipelineInfo.pDepthStencilState = nullptr; // Optional
 		pipelineInfo.pColorBlendState = &colorBlending;
 		pipelineInfo.pDynamicState = &dynamicState;
-		pipelineInfo.layout = pipelineLayouts.back();
+		pipelineInfo.layout = index == static_cast<size_t>(-1) ? pipelineLayouts.back() : pipelineLayouts[index];
 		pipelineInfo.renderPass = rendPasses[renderPassIndex];
 		pipelineInfo.subpass = 0;
 		pipelineInfo.basePipelineHandle = VK_NULL_HANDLE; // Optional
@@ -620,7 +624,13 @@ public:
 		VkPipeline pipeline;
 		Vk_CHECK(vkResult, vkCreateGraphicsPipelines(vkDevice, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &pipeline));
 
-		pipelines.push_back(pipeline);
+
+		if (index == static_cast<size_t>(-1))
+			pipelines.push_back(pipeline);
+		else {
+			pipelines[index] = pipeline;
+		}
+		
 
 		// clean up
 		vkDestroyShaderModule(vkDevice, vertModule, nullptr);
@@ -765,6 +775,22 @@ public:
 		for (auto& s : imageRenderDone)
 			vkDestroySemaphore(vkDevice, s, nullptr);
 		imageRenderDone.clear();
+	}
+	
+	inline VkResult resetPipeline(size_t pipelineIndex, Shader& vs, Shader& ps) {
+		VkResult vkResult{};
+
+		LOGLINE_IND(LogType::Info, LogMod::Vulkan, "Hot Reloading shaders... ", 1);
+
+		Vk_CHECK(vkResult, vkDeviceWaitIdle(vkDevice));
+		vkDestroyPipelineLayout(vkDevice, pipelineLayouts[pipelineIndex], nullptr);
+		vkDestroyPipeline(vkDevice, pipelines[pipelineIndex], nullptr);
+
+		Vk_CHECK(vkResult, createGraphicsPipeline(vs, ps, pipelineIndex));
+
+		LOGLINE_IND(LogType::Success, LogMod::Vulkan, "Hot Reload completed.", -1);
+		return VK_SUCCESS;
+
 	}
 
 	inline void cleanUp() {

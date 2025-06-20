@@ -3,6 +3,7 @@
 
 #include <filesystem>
 #include <cstdint>
+#include <chrono>
 
 class Shader
 {
@@ -21,13 +22,14 @@ public:
 
     Type type;
     std::filesystem::path sourcePath;
-    std::filesystem::file_time_type lastWriteTime;
+    std::filesystem::file_time_type lastSourceChangedTime;
     std::vector<char> bytecode;
 
 
     Shader(Type type, const std::filesystem::path& path)
         : type(type), sourcePath(path) {
-        lastWriteTime = std::filesystem::last_write_time(sourcePath);
+
+        lastSourceChangedTime = std::filesystem::last_write_time(sourcePath);
     }
 
     friend void SetShaderArrayIndex(Shader& shader, size_t index);

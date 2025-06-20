@@ -8,7 +8,7 @@
 #include "Shader.hpp"
 #include "ErrorCodes.hpp"
 #include "Timer.h"
-
+#include "Delegate.hpp"
 
 class ShaderManager;
 
@@ -49,9 +49,11 @@ public:
 	ErrorCode hotReload() { if (m_compiler) return m_compiler->hotReload(*this); return ErrorCode::IS_NULL; }
 	size_t totalShaders() { return m_vShaders.size() + m_pShaders.size() + m_cShaders.size(); }
 
-	std::vector<Shader> vertexShaders() { return m_vShaders; }
-	std::vector<Shader> pixelShaders() { return m_pShaders; }
-	std::vector<Shader> computeShaders()  { return m_cShaders; }
+	std::vector<Shader>& vertexShaders() { return m_vShaders; }
+	std::vector<Shader>& pixelShaders() { return m_pShaders; }
+	std::vector<Shader>& computeShaders()  { return m_cShaders; }
+
+	Event<void*> onShaderHotReloaded;
 };
 
 class DxcWin32VulkanShaderCompiler : public ShaderCompilerBase

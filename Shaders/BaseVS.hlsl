@@ -16,21 +16,38 @@ const static float4 colors[3] =
     float4(0.0, 0.0, 1.0, 1.0),
 };
 
+ObjectPush obj;
 
 VSOutput main(VSInput input, uint vertexID : SV_VertexID)
 {
     VSOutput output;
 
-    output.worldPosition = positions[vertexID];
-    output.color = colors[vertexID];
+    output.worldPos = positions[vertexID];
+    return output;
     
-    //float4 worldPos = mul(world, float4(input.position, 1.0));
-    //output.position = mul(viewProj, worldPos);
-    //output.worldPos = worldPos.xyz;
+    // Skinning
+    float4 skinnedPos;
+    if (obj.g_boneCount == 0)
+    {
+        skinnedPos = float4(input.position, 1.0f);
+    }
+    else
+    {
+        float4x4 skinMatrix = 0;
+        [unroll]
+        for (int i = 0; i < 4; ++i)
+        {
+            uint index = obj.g_boneOffset + input.boneIndices[i];
+            skinMatrix += input.boneWeights[i] * BoneMatrices[index];
+        }
+        skinnedPos = mul(skinMatrix, float4(input.position, 1.0f));
+    }
     
-    //// Transform normal into world space (without translation)
-    //output.normal = mul((float3x3) world, input.normal);
-    //output.uv = input.uv;
-
+    float4x4 mvp = mul(proj, mul(view, obj.model));
+    
+    output.worldPos = mul(mvp, skinnedPos);
+    output.normal = input.normal;
+    output.localPos = input.position;
+    output.uv = input.uv;
     return output;
 }

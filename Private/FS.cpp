@@ -64,7 +64,7 @@ ErrorCode FS::execAndCapture(const std::string& command, std::string& outStr) {
     if (returnCode == 0)
         return ErrorCode::OK;
     else {
-        outStr = "execAndCapture() exited with Code: " + std::to_string(returnCode);
+        outStr = "execAndCapture() exited with Code: " + std::to_string(returnCode) + ". ";
         return static_cast<ErrorCode>(returnCode);
     }
 }

@@ -109,6 +109,16 @@ int __stdcall main(HINSTANCE hInstance, HINSTANCE instance, LPSTR str, int nCmdS
 								engine->stop();
 						   });
 
+	// Shader Hotreloaded
+#ifdef SHADER_HOTRELOAD	
+	engine->getShaderManager()->onShaderHotReloaded.subscribe([engine, vkCtx](void*)
+							{
+								vkCtx->resetPipeline(0,
+									engine->getShaderManager()->vertexShaders()[0],
+									engine->getShaderManager()->pixelShaders()[0]);
+							});
+#endif
+
 	// Engine - Show Fps cb
 	engine->onReadFPS.subscribe([&wnd](Engine* engPtr, uint32_t frames)
 							{

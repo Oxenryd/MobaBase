@@ -12,7 +12,7 @@ float4 main(VSOutput input) : SV_Target
 
     //float4 texColor = baseTexture.Sample(baseSampler, input.uv);
 
-    float4 texColor = input.color;
+    float4 texColor = float4(1.0f, 0.0f, 1.0f, 1.0f);
     
     return texColor;
 }

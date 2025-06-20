@@ -125,7 +125,6 @@ ErrorCode DxcWin32VulkanShaderCompiler::compile(Shader& shader) {
 		return ErrorCode::SHADER_COULD_NOT_READ_BYTECODE;
 	}
 
-	shader.lastWriteTime = std::filesystem::last_write_time(shader.sourcePath);
 	return ErrorCode::OK;
 }
 
@@ -136,20 +135,40 @@ ErrorCode DxcWin32VulkanShaderCompiler::checkForShaderChanges(Shader& shader) {
 ErrorCode DxcWin32VulkanShaderCompiler::hotReload(ShaderManager& manager) {
 
 	ErrorCode EC{};
+	bool changed = false;
 	for (auto& ps : manager.pixelShaders()) {
-		if (ps.lastWriteTime < std::filesystem::last_write_time(ps.sourcePath)) {
+		auto writeTime = std::filesystem::last_write_time(ps.sourcePath);
+		if (ps.lastSourceChangedTime < writeTime) {
+			LOGLINE(LogType::Info, LogMod::Rendering, "Recompiling PS: " + ps.sourcePath.string() + "... ");
 			EC_CHECK(EC, compile(ps));
+			LOG(LogType::Success, "Done.");
+			changed = true;
+			ps.lastSourceChangedTime = writeTime;
 		}
 	}
 	for (auto& vs : manager.vertexShaders()) {
-		if (vs.lastWriteTime < std::filesystem::last_write_time(vs.sourcePath)) {
+		auto writeTime = std::filesystem::last_write_time(vs.sourcePath);
+		if (vs.lastSourceChangedTime < writeTime) {
+			LOGLINE(LogType::Info, LogMod::Rendering, "Recompiling VS: " + vs.sourcePath.string() + "... ");
 			EC_CHECK(EC, compile(vs));
+			LOG(LogType::Success, "Done.");
+			changed = true;
+			vs.lastSourceChangedTime = writeTime;
 		}
 	}
 	for (auto& cs : manager.computeShaders()) {
-		if (cs.lastWriteTime < std::filesystem::last_write_time(cs.sourcePath)) {
+		auto writeTime = std::filesystem::last_write_time(cs.sourcePath);
+		if (cs.lastSourceChangedTime < writeTime) {
+			LOGLINE(LogType::Info, LogMod::Rendering, "Recompiling CS: " + cs.sourcePath.string() + "... ");
 			EC_CHECK(EC, compile(cs));
+			LOG(LogType::Success, "Done.");
+			changed = true;
+			cs.lastSourceChangedTime = writeTime;
 		}
+	}
+
+	if (changed) {
+		manager.onShaderHotReloaded.notify(nullptr);
 	}
 
 	return ErrorCode::OK;
