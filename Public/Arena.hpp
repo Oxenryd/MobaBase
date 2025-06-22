@@ -66,19 +66,10 @@ public:
             throw std::bad_alloc();
         }
 
-        //size_t current = reinterpret_cast<size_t>(m_memory);
-        //size_t alignment = alignof(std::max_align_t);
-        //size_t aligned = alignUp(current, alignment);
-        //size_t offset = aligned - reinterpret_cast<size_t>(m_memory);
-        //void* ptr = m_memory + offset;
-        //m_pagesPtr = new (ptr) std::vector<ArenaPage>();
-        //m_pagesPtr->reserve(HEAP_ARENA_MAX_PAGES);
-
         m_pagesPtr.reserve(HEAP_ARENA_MAX_PAGES);
 
         reset();
 
-        //m_destructorsPtr = constructNoRegister<std::vector<std::vector<DestructorEntry, HeapArenaAllocator<DestructorEntry>>>>();
         m_destructorsPtr.emplace_back(std::vector<DestructorEntry>{});
         
 

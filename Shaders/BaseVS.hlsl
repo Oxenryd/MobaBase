@@ -25,29 +25,29 @@ VSOutput main(VSInput input, uint vertexID : SV_VertexID)
     output.worldPos = positions[vertexID];
     return output;
     
-    // Skinning
-    float4 skinnedPos;
-    if (obj.g_boneCount == 0)
-    {
-        skinnedPos = float4(input.position, 1.0f);
-    }
-    else
-    {
-        float4x4 skinMatrix = 0;
-        [unroll]
-        for (int i = 0; i < 4; ++i)
-        {
-            uint index = obj.g_boneOffset + input.boneIndices[i];
-            skinMatrix += input.boneWeights[i] * BoneMatrices[index];
-        }
-        skinnedPos = mul(skinMatrix, float4(input.position, 1.0f));
-    }
+    //// Skinning
+    //float4 skinnedPos;
+    //if (obj.g_boneCount == 0)
+    //{
+    //    skinnedPos = float4(input.position, 1.0f);
+    //}
+    //else
+    //{
+    //    float4x4 skinMatrix = 0;
+    //    [unroll]
+    //    for (int i = 0; i < 4; ++i)
+    //    {
+    //        uint index = obj.g_boneOffset + input.boneIndices[i];
+    //        skinMatrix += input.boneWeights[i] * BoneMatrices[index];
+    //    }
+    //    skinnedPos = mul(skinMatrix, float4(input.position, 1.0f));
+    //}
     
-    float4x4 mvp = mul(proj, mul(view, obj.model));
+    //float4x4 mvp = mul(proj, mul(view, obj.model));
     
-    output.worldPos = mul(mvp, skinnedPos);
-    output.normal = input.normal;
-    output.localPos = input.position;
-    output.uv = input.uv;
-    return output;
+    //output.worldPos = mul(mvp, skinnedPos);
+    //output.normal = input.normal;
+    //output.localPos = input.position;
+    //output.uv = input.uv;
+    //return output;
 }

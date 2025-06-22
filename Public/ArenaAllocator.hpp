@@ -16,6 +16,12 @@ class HeapArenaAllocator
 public:
     using value_type = T;
 
+    template<typename U>
+    struct rebind
+    {
+        using other = HeapArenaAllocator<U>;
+    };
+
     HeapArenaAllocator() noexcept : m_provider(static_cast<HeapArena*>(nullptr)) {}
 
     HeapArenaAllocator(HeapArena* memProvider) noexcept
@@ -52,6 +58,7 @@ public:
     }
 
     HeapArena* getMemoryProvider() const noexcept { return m_provider; }
+
 
 private:
     HeapArena* m_provider;

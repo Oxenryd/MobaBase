@@ -22,6 +22,14 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(glm)
 
+#EnTT
+FetchContent_Declare(
+  EnTT
+  GIT_REPOSITORY https://github.com/skypjack/entt.git
+  GIT_TAG        v3.13.1  # or latest stable tag; check the GitHub repo
+)
+FetchContent_MakeAvailable(EnTT)
+
 
 
 get_property(all_targets DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY BUILDSYSTEM_TARGETS)
@@ -56,13 +64,19 @@ add_executable (MobaBase
 	"Public/ShaderManager.h"
 	"Public/ErrorCodes.hpp"
 	"Public/FS.h"
+	"Public/HlslTypes.h"
+	"Public/Transform.h"
+	"Public/FrameData.hpp"
+	"Public/Scene.h"
+	"Public/SceneTemplate.hpp"
 
 	"Private/Engine.cpp"
 	"Private/Timer.cpp"
 	"Private/TimerSystem.cpp"
 	"Private/ShaderManager.cpp"
 	"Private/FS.cpp"
-)
+    "Private/Scene.cpp"
+	)
 
 
 
@@ -72,6 +86,7 @@ find_package(Vulkan REQUIRED)
 target_link_libraries(MobaBase PRIVATE
     glm::glm
 	Vulkan::Vulkan
+	EnTT::EnTT
 )
 
 target_include_directories(MobaBase PRIVATE 

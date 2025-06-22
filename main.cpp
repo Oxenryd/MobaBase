@@ -2,6 +2,7 @@
 //
 
 #include "Engine.h"
+#include "SceneTemplate.hpp"
 
 #ifdef IGPU_PRIO
 	const bool igpuPriority = true;
@@ -128,6 +129,7 @@ int __stdcall main(HINSTANCE hInstance, HINSTANCE instance, LPSTR str, int nCmdS
 							});
 
 	// Start Engine
+	engine->createNewScene<GameScene>(nullptr);
 	engine->setTargetUpdateDeltaTime(0.0);
 	engine->start(vkCtx, inputMan);
 

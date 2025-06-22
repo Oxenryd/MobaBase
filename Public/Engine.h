@@ -14,6 +14,8 @@
 #endif
 
 #include <cstdint>
+#include <type_traits>
+#include <list>
 
 #include "WindowSurface.h"
 #include "InputManager.hpp"
@@ -24,7 +26,7 @@
 #include "Timer.h"
 #include "TimerSystem.h"
 #include "ShaderManager.h"
-
+#include "Scene.h"
 
 constexpr const double			DEFAULT_DELTATIME_JITTER_SETTING = 0.002;
 constexpr const double			FPS_400 = 1.0 / 400.0;
@@ -36,7 +38,6 @@ constexpr static const double	MAX_DELTA_TIME = 0.25;
 
 
 class ShaderManager;
-
 struct EngineSettings
 {
 	GraphicContext* graphicContext = nullptr;
@@ -57,6 +58,8 @@ class Engine
 private:
 	HeapArena& m_baseArena;
 	EngineSettings m_options;
+	std::vector<SceneBase*> m_scenes;
+	size_t m_curSceneIndex;
 	double m_targetUpdateDeltaTime;
 	double m_updateDeltaTime;
 	double m_targetFixedDeltaTime;
@@ -64,6 +67,8 @@ private:
 	uint32_t m_framesSinceLastFpsRead;
 	EngineStatus m_status = EngineStatus::Stopped;
 	double m_lastReadFps;
+	bool m_sceneTransitionRequested = true;
+	size_t m_requestedSceneIndex = static_cast<size_t>(-1);
 	uint64_t m_totalFrames = 0;
 	std::chrono::steady_clock::time_point m_lastUpdateTime;
 	
@@ -95,16 +100,30 @@ public:
 	Event<Engine*> onFixedUpdateExit;
 	Event<Engine*, uint32_t> onReadFPS;
 
+	template <SceneConcept T>	
+	inline SceneBase* createNewScene(void* argument) {
+		m_scenes.emplace_back(T::createDefault(argument));
+		if (m_scenes.size() == 1)
+			m_curSceneIndex = 0;
+		return m_scenes.back();
+	}
 
 	Engine(HeapArena& heap);
-	~Engine() {}
+	~Engine();
 	inline const double& deltaTime() { return m_updateDeltaTime; }
 	inline void setTargetUpdateDeltaTime(const double targetDt) { m_targetUpdateDeltaTime = targetDt; }
 	ShaderManager* getShaderManager() { return m_shaderMan; }
 	void start(GraphicContext* graphicContext, InputManager* inputPtr);
 	void stop();
 	inline const EngineStatus& getStatus() const { return m_status; }
-		
+	inline SceneBase* const getScene(const size_t index) { return m_scenes[index]; }
+	inline SceneBase* const getCurrentScene() { return m_scenes[m_curSceneIndex]; }
+	inline void requestSceneTransition(const size_t requestedSceneIndex) {
+		if (!m_sceneTransitionRequested) {
+			m_sceneTransitionRequested = true;
+			m_requestedSceneIndex = requestedSceneIndex;
+		}
+	}
 };
 
 #endif //ENGINE_H

@@ -29,6 +29,12 @@ Engine::Engine(HeapArena& heap) :
 	_initShaderManager();
 }
 
+Engine::~Engine() {
+	for (auto* scene : m_scenes) {
+		delete scene;
+	}
+}
+
 
 inline double Engine::_tickDt() {
 	using namespace std::chrono;
@@ -58,7 +64,7 @@ inline double Engine::_tickDt() {
 }
 
 void Engine::_initShaderManager() {
-	LOGLINE(LogType::Info, LogMod::Rendering, "Setting up ShaderManager... ");
+	LOGLINE_IND(LogType::Info, LogMod::Rendering, "Setting up ShaderManager... ", 1);
 #ifdef BUILD_WIN
 	#ifdef USE_VULKAN
 		DxcWin32VulkanShaderCompiler* w32VkCompiler = m_baseArena.construct<DxcWin32VulkanShaderCompiler>();
@@ -67,22 +73,33 @@ void Engine::_initShaderManager() {
 #endif
 
 #ifdef SHADER_HOTRELOAD
+		LOGLINE(LogType::Info, LogMod::Rendering, "Shader HotReload is ON.");
 		m_shaderMan->m_hotreloadTimer = new Timer{ m_baseTimers.createTimer(true, 1.5) };
 		m_baseTimers.m_incOnTimes[m_shaderMan->m_hotreloadTimer->m_timerIndex].subscribe([this]()
 								{
 									m_shaderMan->hotReload();
 								});
+#else
+		LOGLINE(LogType::Info, LogMod::Rendering, "Shader HotReload is OFF.");
 #endif
-		LOG(LogType::Success, "Done.");
+		LOGLINE_IND(LogType::Success, LogMod::Rendering, "ShaderManager initialized.", -1);
 }
 
 void Engine::start(GraphicContext* graphicContext, InputManager* inputPtr) {
 
-	LOGLINE(LogType::Info, LogMod::Engine, "Starting... ");
-
 	if (m_status != EngineStatus::Stopped) {
-		LOGLINE(LogType::Error, LogMod::Engine, "Tried to start while not stopped. Ignoring.");
+		LOGLINE(LogType::Warning, LogMod::Engine, "Tried to start while not stopped. Ignoring.");
 		return;
+	}
+
+	LOGLINE_IND(LogType::Info, LogMod::Engine, "Starting... ", 1);
+
+	// No scenes, create default and run.
+	if (m_scenes.empty()) {
+		LOGLINE(LogType::Remark, LogMod::Engine, "Creating a default scene... ");
+		auto* scenePtr = this->createNewScene<DefaultScene>(nullptr);
+		m_curSceneIndex = 0;
+		LOGLINE(LogType::Remark, LogMod::Engine, "Scene created.");
 	}
 
 	// Set main window
@@ -99,7 +116,7 @@ void Engine::start(GraphicContext* graphicContext, InputManager* inputPtr) {
 
 	m_lastUpdateTime = std::chrono::steady_clock::now();
 
-	LOG(LogType::Success, "Running.");
+	LOGLINE_IND(LogType::Success, LogMod::Engine, "Engine running! ", -1);
 	_run();
 
 }
@@ -152,19 +169,19 @@ void Engine::stop() {
 }
 
 inline void Engine::_updateEarly(double dt) {
-	onEarlyUpdateEnter.notify(this);
-	// TODO
+	onEarlyUpdateEnter.notify(this);	
+	m_scenes[m_curSceneIndex]->updateDispatch(dt);
 	onEarlyUpdateExit.notify(this);
 }
 
 inline void Engine::_updateLate(double dt) {
 	onLateUpdateEnter.notify(this);
-	// TODO
+	m_scenes[m_curSceneIndex]->lateUpdateDispatch(dt);
 	onLateUpdateExit.notify(this);
 }
 
 inline void Engine::_updateFixed() {
 	onFixedUpdateEnter.notify(this);
-	// TODO
+	m_scenes[m_curSceneIndex]->fixedUpdateDispatch();
 	onFixedUpdateExit.notify(this);
 }
