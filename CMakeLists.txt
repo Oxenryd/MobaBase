@@ -30,6 +30,31 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(EnTT)
 
+#Boost
+FetchContent_Declare(
+  boost_sort
+  GIT_REPOSITORY https://github.com/boostorg/sort.git
+  GIT_TAG        boost-1.85.0
+)
+
+#SPIR-V reflect
+FetchContent_Declare(
+  spirv-reflect
+  GIT_REPOSITORY https://github.com/KhronosGroup/SPIRV-Reflect.git
+  GIT_TAG        main  # or use a specific commit or tag
+)
+set(SPIRV_REFLECT_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(SPIRV_REFLECT_TOOLS OFF CACHE BOOL "" FORCE)
+set(SPIRV_REFLECT_STATIC_LIB ON CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(spirv-reflect)
+
+# nlohmann/json
+FetchContent_Declare(
+  json
+  GIT_REPOSITORY https://github.com/nlohmann/json.git
+  GIT_TAG v3.11.3 # Use latest stable or pin to your desired version
+)
+FetchContent_MakeAvailable(json)
 
 
 get_property(all_targets DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY BUILDSYSTEM_TARGETS)
@@ -56,7 +81,7 @@ add_executable (MobaBase
 	"Public/FSM.hpp"
 	"Public/GraphicContext.h"
 	"Public/Material.hpp"
-	"Public/Shader.hpp"
+	"Public/Shader.h"
 	"Public/ArenaAllocator.hpp"
 	"Public/MemoryProviderConcept.h"
 	"Public/MathTypes.h"
@@ -68,7 +93,12 @@ add_executable (MobaBase
 	"Public/Transform.h"
 	"Public/FrameData.hpp"
 	"Public/Scene.h"
-	"Public/SceneTemplate.hpp"
+	"Public/Templates.hpp"
+	"Public/PSO.hpp"
+	"Public/IShaderProvider.h"
+	"Public/Texture.hpp"
+	"Public/Hashes.hpp"
+	
 
 	"Private/Engine.cpp"
 	"Private/Timer.cpp"
@@ -76,7 +106,9 @@ add_executable (MobaBase
 	"Private/ShaderManager.cpp"
 	"Private/FS.cpp"
     "Private/Scene.cpp"
-	)
+	"Private/Shader.cpp"
+    "Private/Material.cpp"
+)
 
 
 
@@ -87,10 +119,13 @@ target_link_libraries(MobaBase PRIVATE
     glm::glm
 	Vulkan::Vulkan
 	EnTT::EnTT
+	spirv-reflect-static
+	nlohmann_json
 )
 
 target_include_directories(MobaBase PRIVATE 
     "Public/"
+	${boost_sort_SOURCE_DIR}/include
 )
 
 
@@ -105,50 +140,18 @@ target_compile_definitions(MobaBase PRIVATE
 	#IGPU_PRIO
 	VULKAN_MAX_FRAMES_IN_FLIGHT=3
 	SHADER_HOTRELOAD
+	MAX_SPRITE_INSTANCES=1048576
 
 	# Directories
 	SHADER_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/Shaders\"
 	SHADER_TARGET_DIR=\"${CMAKE_BINARY_DIR}/Shaders/Build\"
 	DXC_DIR=\"${CMAKE_SOURCE_DIR}/Ext/dxc\"
 	SHADER_TYPE_VERTEX=\"ShaderType:Vertex\"
-	SHADER_TYPE_FRAGMENT=\"ShaderType:Pixel\"
+	SHADER_TYPE_FRAGMENT=\"ShaderType:Fragment\"
 	SHADER_TYPE_COMPUTE=\"ShaderType:Compute\"
+	SHADER_NAME=\"Name:\"
 )
 
 
 # FILE ACTIONS -----------------------------------------------------------------------
-
-#add_custom_target(CleanShaderBuildFolder
-#    COMMAND ${CMAKE_COMMAND} -E remove_directory "${CMAKE_BINARY_DIR}/Shaders"
-#    COMMENT "Cleaning shader build output folder"
-#)
-#add_dependencies(MobaBase CleanShaderBuildFolder)
-
-# Copy Shaders
-#add_custom_command(
-#    TARGET MobaBase POST_BUILD
-#    COMMAND ${CMAKE_COMMAND} -E copy_directory
-#            "${CMAKE_SOURCE_DIR}/Shaders"
-#            "$<TARGET_FILE_DIR:MobaBase>/Shaders"
-#    COMMENT "Copying Shaders directory to output"
-#)
-
 file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/Shaders/Build")
-
-#add_custom_target(CopyShaders ALL
-#    COMMAND ${CMAKE_COMMAND} -E copy_directory
-#            "${CMAKE_SOURCE_DIR}/Shaders"
-#            "${CMAKE_BINARY_DIR}/Shaders"
-#    COMMENT "Copying Shaders directory"
-#)
-#add_dependencies(MobaBase CopyShaders)
-
-
-# Copy DXC
-#add_custom_command(
-#    TARGET MobaBase POST_BUILD
-#    COMMAND ${CMAKE_COMMAND} -E copy_directory
-#            "${CMAKE_SOURCE_DIR}/Ext/dxc"
-#            "$<TARGET_FILE_DIR:MobaBase>/Shaders/dxc"
-#    COMMENT "Copying DXC directory to output"
-#)

@@ -36,7 +36,6 @@ constexpr const double			FPS_60 = 1.0 / 60.0;
 constexpr const double			FPS_50 = 1.0 / 50.0;
 constexpr static const double	MAX_DELTA_TIME = 0.25;
 
-
 class ShaderManager;
 struct EngineSettings
 {
@@ -67,8 +66,9 @@ private:
 	uint32_t m_framesSinceLastFpsRead;
 	EngineStatus m_status = EngineStatus::Stopped;
 	double m_lastReadFps;
-	bool m_sceneTransitionRequested = true;
+	bool m_sceneTransitionRequested = false;
 	size_t m_requestedSceneIndex = static_cast<size_t>(-1);
+	SceneTransitionMode m_sceneTransitMode = SceneTransitionMode::WaitForDone;
 	uint64_t m_totalFrames = 0;
 	std::chrono::steady_clock::time_point m_lastUpdateTime;
 	
@@ -118,9 +118,10 @@ public:
 	inline const EngineStatus& getStatus() const { return m_status; }
 	inline SceneBase* const getScene(const size_t index) { return m_scenes[index]; }
 	inline SceneBase* const getCurrentScene() { return m_scenes[m_curSceneIndex]; }
-	inline void requestSceneTransition(const size_t requestedSceneIndex) {
+	inline void requestSceneTransition(const SceneTransitionMode mode, const size_t requestedSceneIndex) {
 		if (!m_sceneTransitionRequested) {
 			m_sceneTransitionRequested = true;
+			m_sceneTransitMode = mode;
 			m_requestedSceneIndex = requestedSceneIndex;
 		}
 	}

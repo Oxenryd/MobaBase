@@ -1,6 +1,7 @@
 #include "BaseTypes.hlsl"
 
 #pragma ShaderType:Vertex
+#pragma Name:BaseVS
 
 const static float4 positions[3] =
 {

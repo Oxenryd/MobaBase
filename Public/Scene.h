@@ -37,6 +37,7 @@ private:
 protected:
     HeapArena m_heap;
     HeapArenaEnttRegistry m_reg;
+    bool m_firstFrame = true;
 
 public:
     virtual ~SceneBase() = default;
@@ -46,10 +47,16 @@ public:
     SceneBase() : SceneBase(DEFAULT_HEAP_SIZE) {}
 
     HeapArena& heapArena() { return m_heap; }
+    const bool& isFirstFrame() const { return m_firstFrame; }
+
 
     virtual void updateDispatch(double deltaTime) {}
     virtual void lateUpdateDispatch(double deltaTime) {}
     virtual void fixedUpdateDispatch() {}
+    virtual void loadDispatch() {}
+    virtual void startDispatch() {}
+    virtual void unloadDispatch() {}
+    virtual SceneTransitionStatus transitioningDispatch() { return SceneTransitionStatus::Done; }
 };
 
 template<typename Derived>
@@ -63,13 +70,21 @@ public:
         return new Derived{};
     }
 
-    void load() {
+    void loadDispatch() override {
         if constexpr (requires (Derived & d) { d.load(); }) {
+            static_cast<Derived&>(*this).m_firstFrame = true;
             static_cast<Derived&>(*this).load();
         }
     }
 
-    void start() {
+    void unloadDispatch() override {
+        if constexpr (requires (Derived & d) { d.unload(); }) {
+            static_cast<Derived&>(*this).unload();
+        }
+    }
+
+    void startDispatch() override {
+        m_firstFrame = false;
         if constexpr (requires (Derived & d) { d.start(); }) {
             static_cast<Derived&>(*this).start();
         }
@@ -93,25 +108,13 @@ public:
         }
     }
 
-    void transitionEnter() {
-        if constexpr (requires (Derived & d) { d.transitionEnter(); }) {
-            static_cast<Derived&>(*this).transitionEnter();
-        }
-    }
-
-    SceneTransitionStatus transitioning() {
+    SceneTransitionStatus transitioningDispatch() override {
         if constexpr (requires (Derived & d) {
             { d.transitioning() } -> std::convertible_to<SceneTransitionStatus>;
         }) {
             return static_cast<Derived&>(*this).transitioning();
         } else {
             return SceneTransitionStatus::Done;
-        }
-    }
-
-    void transitionExit() {
-        if constexpr (requires (Derived & d) { d.transitionExit(); }) {
-            static_cast<Derived&>(*this).transitionExit();
         }
     }
 

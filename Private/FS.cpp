@@ -48,6 +48,24 @@ Shader::Type FS::parseShaderTypeFromFile(const std::filesystem::path& filePath) 
 	return Shader::Type::Invalid;
 }
 
+std::string FS::parseShaderNameFromFile(const std::filesystem::path& filePath) {
+    std::ifstream file(filePath);
+    std::string line;
+
+    while (std::getline(file, line)) {
+        if (line.find("#pragma") != std::string::npos) {
+            std::size_t namePos = line.find(SHADER_NAME);
+            if (namePos != std::string::npos) {
+                std::string name = line.substr(namePos + std::strlen(SHADER_NAME));
+                name.erase(0, name.find_first_not_of(" \t\r\n"));
+                name.erase(name.find_last_not_of(" \t\r\n") + 1);
+                return name;
+            }
+        }
+    }
+    return "";
+}
+
 ErrorCode FS::execAndCapture(const std::string& command, std::string& outStr) {
     std::array<char, 1024> buffer;
     outStr.clear();

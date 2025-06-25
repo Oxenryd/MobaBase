@@ -4,8 +4,6 @@
 #include <vector>
 #include <thread>
 
-#include "Shader.hpp"
-
 class GraphicContext
 {
 public:

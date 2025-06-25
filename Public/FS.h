@@ -8,7 +8,7 @@
 #include <memory>
 #include <cstdio>
 
-#include "Shader.hpp"
+#include "Shader.h"
 #include "ErrorCodes.hpp"
 
 class FS
@@ -22,5 +22,7 @@ public:
 	static Shader::Type parseShaderTypeFromFile(const std::filesystem::path& filePath);
 
 	static ErrorCode execAndCapture(const std::string& command, std::string& outStr);
+
+	static std::string parseShaderNameFromFile(const std::filesystem::path& filePath);
 };
 #endif

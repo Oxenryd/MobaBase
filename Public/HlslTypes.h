@@ -28,6 +28,7 @@ struct ObjectPush
 	alignas (16) glm::mat4x4 model;
 	alignas (4) uint32_t g_boneOffset;
 	alignas (4) uint32_t g_boneCount;
+	alignas (8) uint64_t _pad;
 };
 
 struct GlobalData
@@ -36,6 +37,20 @@ struct GlobalData
 	alignas (16) glm::mat4x4 proj;
 	alignas (16) glm::vec4 cameraPosition;
 	alignas (16) double time;
+	double _pad;
+};
+
+struct SpriteInstance
+{
+	float position[2];
+	float size[2];
+	float origin[2];
+	float rotation;
+	float layerDepth;
+	uint32_t texRect[4];
+	uint32_t texIndex;
+	uint32_t _pad;
+	uint64_t _pad2;
 };
 
 #endif

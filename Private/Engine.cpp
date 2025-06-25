@@ -82,6 +82,7 @@ void Engine::_initShaderManager() {
 #else
 		LOGLINE(LogType::Info, LogMod::Rendering, "Shader HotReload is OFF.");
 #endif
+		ShaderManager::s_instance = m_shaderMan;
 		LOGLINE_IND(LogType::Success, LogMod::Rendering, "ShaderManager initialized.", -1);
 }
 
@@ -135,6 +136,40 @@ inline void Engine::_run() {
 			m_fixedAccu -= m_targetFixedDeltaTime;
 		}
 
+		// Scene transit
+		if (m_sceneTransitionRequested) {
+			switch (m_sceneTransitMode)
+			{
+				case SceneTransitionMode::DontRunTransitioning:
+				{
+					m_scenes[m_requestedSceneIndex]->loadDispatch();
+					m_scenes[m_curSceneIndex]->unloadDispatch();
+					m_curSceneIndex = m_requestedSceneIndex;
+					m_sceneTransitionRequested = false;
+				} break;
+
+				case SceneTransitionMode::RunOnce:
+				{
+					m_scenes[m_curSceneIndex]->transitioningDispatch();
+					m_scenes[m_requestedSceneIndex]->loadDispatch();
+					m_scenes[m_curSceneIndex]->unloadDispatch();
+					m_curSceneIndex = m_requestedSceneIndex;
+					m_sceneTransitionRequested = false;
+				} break;
+
+				case SceneTransitionMode::WaitForDone:
+				{
+					auto doneStatus = m_scenes[m_curSceneIndex]->transitioningDispatch();
+					if (doneStatus == SceneTransitionStatus::Done) {
+						m_scenes[m_requestedSceneIndex]->loadDispatch();
+						m_scenes[m_curSceneIndex]->unloadDispatch();
+						m_curSceneIndex = m_requestedSceneIndex;
+						m_sceneTransitionRequested = false;
+					}
+				} break;
+			}
+		}
+
 		m_options.inputManager->pollEvents();
 		_updateEarly(dt);
 		_updateLate(dt);
@@ -169,7 +204,10 @@ void Engine::stop() {
 }
 
 inline void Engine::_updateEarly(double dt) {
-	onEarlyUpdateEnter.notify(this);	
+	onEarlyUpdateEnter.notify(this);
+	if (m_scenes[m_curSceneIndex]->isFirstFrame())
+		m_scenes[m_curSceneIndex]->startDispatch();
+
 	m_scenes[m_curSceneIndex]->updateDispatch(dt);
 	onEarlyUpdateExit.notify(this);
 }

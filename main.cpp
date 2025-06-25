@@ -2,7 +2,7 @@
 //
 
 #include "Engine.h"
-#include "SceneTemplate.hpp"
+#include "Templates.hpp"
 
 #ifdef IGPU_PRIO
 	const bool igpuPriority = true;
@@ -55,7 +55,7 @@ int __stdcall main(HINSTANCE hInstance, HINSTANCE instance, LPSTR str, int nCmdS
 	Log::init<DefaultTerminalLogger>();
 
 	// Setup base HeapArena
-	HeapArena mainArena{ 2048 * 2048 };
+	HeapArena mainArena{ 1048 * 1048 * 128 };
 
 	// Create Window Handle
 	WindowSurface* wnd = mainArena.construct<WindowSurface>();
@@ -84,16 +84,18 @@ int __stdcall main(HINSTANCE hInstance, HINSTANCE instance, LPSTR str, int nCmdS
 	// Create Vulkan Context
 	LOGLINE(LogType::Info, LogMod::Vulkan, "Creating Vulkan context... ");
 	VulkanContext* vkCtx = mainArena.construct<VulkanContext>(wnd);
-	auto vk = vkCtx->initVulkan(
-		VkPresentModeKHR::VK_PRESENT_MODE_MAILBOX_KHR,
-		engine->getShaderManager()->vertexShaders()[0], engine->getShaderManager()->pixelShaders()[0],
-		igpuPriority);
+	auto vk = vkCtx->initVulkan(VkPresentModeKHR::VK_PRESENT_MODE_MAILBOX_KHR, igpuPriority);
 	if (vk != VK_SUCCESS) {
 		LOG(LogType::Error, "Failed. Code: " + std::to_string(static_cast<uint32_t>(vk)));
 		return (int)vk;
 	}
 	LOGLINE(LogType::Success, LogMod::Vulkan, "Vulkan init Complete.\n");
 	
+	// Create Base Material
+	auto* vs = engine->getShaderManager()->getShader("SpriteBatchVS");
+	auto* ps = engine->getShaderManager()->getShader("SpriteBatchPS");
+	auto spriteMat = Material{"SpriteMaterialUnlit", *vs, *ps };
+
 	// Callbacks -
 	// Window -> Vulkan cb's
 	wnd->onResize.subscribe([vkCtx, engine](WindowSurface::SizeType type, glm::u16vec2 newSize)

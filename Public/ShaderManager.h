@@ -5,10 +5,13 @@
 #include <unordered_map>
 #include <utility>
 
-#include "Shader.hpp"
 #include "ErrorCodes.hpp"
 #include "Timer.h"
 #include "Delegate.hpp"
+
+#include "IShaderProvider.h"
+#include "Material.hpp"
+#include "Hashes.hpp"
 
 class ShaderManager;
 
@@ -23,37 +26,61 @@ public:
 };
 
 using Index = size_t;
-
-class ShaderManager
+class Engine;
+class ShaderManager : public IShaderProvider
 {
 private:
 	friend Engine;
+	static ShaderManager* s_instance;
+	friend Engine;
 	ShaderCompilerBase* const m_compiler;
 	friend ShaderCompilerBase;
-	std::unordered_map<std::string, std::pair<Shader::Type, Index>> m_shaderMap;
 	std::vector<Shader> m_vShaders;
 	std::vector<Shader> m_pShaders;
 	std::vector<Shader> m_cShaders;
+	std::vector<Material> m_materials;
 	Timer* m_hotreloadTimer = nullptr;
+
+	// Mapping
+	std::unordered_map<std::string, size_t> m_mat_NameIndexMap;
+	std::unordered_map<size_t, std::string> m_mat_IndexNameMap;
+	std::unordered_map<std::string, std::pair<Shader::Type, Index>> m_shader_NamePairMap;
+	std::unordered_map<std::pair<Shader::Type, Index>, std::string, PairHash<Shader::Type, size_t>> m_shader_PairNameMap;
+	
 
 public:
 	ShaderManager() = delete;
-	~ShaderManager() {
-		delete m_hotreloadTimer;
-	}
+	~ShaderManager() { delete m_hotreloadTimer; }
 	ShaderManager(ShaderCompilerBase* compiler);
 
 	ShaderCompilerBase* const getCompiler() { return m_compiler; }
-	Shader* const getShader(Shader::Type type, size_t index);
-	ErrorCode recompileShaderCache();
-	ErrorCode hotReload() { if (m_compiler) return m_compiler->hotReload(*this); return ErrorCode::IS_NULL; }
-	size_t totalShaders() { return m_vShaders.size() + m_pShaders.size() + m_cShaders.size(); }
 
 	std::vector<Shader>& vertexShaders() { return m_vShaders; }
 	std::vector<Shader>& pixelShaders() { return m_pShaders; }
-	std::vector<Shader>& computeShaders()  { return m_cShaders; }
+	std::vector<Shader>& computeShaders() { return m_cShaders; }
+	Shader* const getShader(Shader::Type type, size_t index);
+	Shader* const getShader(const std::string& name) const override;
+	Shader* const getShader(const std::string& name);
+	const std::string& getShaderName(const Shader& shader);
+	//const std::string& getShaderName(const Shader::Type type, const size_t index);
+	ErrorCode recompileShaderCache();
+	ErrorCode hotReload() { if (m_compiler) return m_compiler->hotReload(*this); return ErrorCode::MEMORY_IS_NULL; }
+	size_t totalShaders() { return m_vShaders.size() + m_pShaders.size() + m_cShaders.size(); }
+	ErrorCode registerShader(const std::string& name, Shader& shader);
+
+	std::vector<Material>& materials() { return m_materials; }
+	Material* getMaterial(const std::string& name);
+	Material* getMaterial(const size_t& index);
+	std::string& getMaterialName(const Material& mat);
+	//std::string& getMaterialName(const size_t matIndex);
+	ErrorCode registerMaterial(const std::string& name, Material& material);
 
 	Event<void*> onShaderHotReloaded;
+
+	// 'Singleton'
+	static ShaderManager* getInstance() { 
+		return s_instance;
+	}
 };
 
 class DxcWin32VulkanShaderCompiler : public ShaderCompilerBase
