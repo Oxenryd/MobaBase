@@ -124,12 +124,39 @@ public:
         if (!typeDesc)
             return param;
 
-        param.rows = typeDesc->traits.numeric.matrix.row_count;
-        param.cols = typeDesc->traits.numeric.matrix.column_count;
-        auto vecCount = typeDesc->traits.numeric.vector.component_count;
         SpvReflectNumericTraits numeric = typeDesc->traits.numeric;
 
         switch (typeDesc->op) {
+            case SpvOp::SpvOpTypeStruct:
+            {
+                param.base = MatParamType::Base::Struct;
+            } break;
+
+            case SpvOp::SpvOpTypeSampler:
+            {
+                param.base = MatParamType::Base::Sampler;
+            } break;
+
+            case SpvOp::SpvOpTypeRuntimeArray:
+            {
+                param.base = MatParamType::Base::RuntimeArray;
+            } break;
+
+            case SpvOp::SpvOpTypeMatrix:
+            {
+                param.rows = numeric.matrix.row_count;
+                param.cols = numeric.matrix.column_count;
+                if (numeric.scalar.width == 32) param.base = MatParamType::Base::FloatMatrix;
+                else if (numeric.scalar.width == 64) param.base = MatParamType::Base::DoubleMatrix;
+            } break;
+
+            case SpvOp::SpvOpTypeVector:
+            {
+                param.rows = numeric.vector.component_count;
+                if (numeric.scalar.width == 32) param.base = MatParamType::Base::FloatVector;
+                else if (numeric.scalar.width == 64) param.base = MatParamType::Base::DoubleVector;
+            } break;
+
             case SpvOp::SpvOpTypeBool:
             {
                 param.base = MatParamType::Base::Bool;

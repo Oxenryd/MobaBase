@@ -26,15 +26,27 @@ struct MatParamType
 	{
 		None = 0,
 		Invalid,
+		Struct,
+		CBuffer,
+		VertexInput,
+		VertexOutput,
 		Bool,
 		UInt32,
 		Int32,
 		UInt64,
 		Int64,
+		IntVector,
+		IntMatrix,
 		Float,
+		FloatVector,
+		FloatMatrix,
 		Double,
+		DoubleVector,
+		DoubleMatrix,
 		String,
 		Texture,
+		RuntimeArray,
+		Sampler,
 		Other
 	};
 	MatParamType() = default;
@@ -62,53 +74,78 @@ struct MatParamType
 
 	inline static constexpr const char* toString(MatParamType::Base base) {
 		switch (base) {
-			case MatParamType::Base::None:    return "None";
-			case MatParamType::Base::Bool:    return "Bool";
-			case MatParamType::Base::UInt32:  return "UInt32";
-			case MatParamType::Base::Int32:   return "Int32";
-			case MatParamType::Base::UInt64:  return "UInt64";
-			case MatParamType::Base::Int64:   return "Int64";
-			case MatParamType::Base::Float:   return "Float";
-			case MatParamType::Base::Double:  return "Double";
-			case MatParamType::Base::String:  return "String";
-			case MatParamType::Base::Texture: return "Texture";
-			case MatParamType::Base::Other:   return "Other";
-			default:						  return "Invalid";
+			case MatParamType::Base::None:			return "None";
+			case MatParamType::Base::Invalid:		return "Invalid";
+			case MatParamType::Base::CBuffer:		return "CBuffer";
+			case MatParamType::Base::Struct:		return "Struct";
+			case MatParamType::Base::VertexInput:	return "VertexInput";
+			case MatParamType::Base::VertexOutput:	return "VertexOutput";
+			case MatParamType::Base::Bool:			return "Bool";
+			case MatParamType::Base::UInt32:		return "UInt32";
+			case MatParamType::Base::Int32:			return "Int32";
+			case MatParamType::Base::UInt64:		return "UInt64";
+			case MatParamType::Base::Int64:			return "Int64";
+			case MatParamType::Base::IntVector:		return "IntVector";
+			case MatParamType::Base::IntMatrix:		return "Intmatrix";
+			case MatParamType::Base::Float:			return "Float";
+			case MatParamType::Base::FloatVector:	return "FloatVector";
+			case MatParamType::Base::FloatMatrix:	return "FloatMatrix";
+			case MatParamType::Base::Double:		return "Double";
+			case MatParamType::Base::DoubleVector:	return "DoubleVector";
+			case MatParamType::Base::DoubleMatrix:	return "DoubleMatrix";
+			case MatParamType::Base::String:		return "String";
+			case MatParamType::Base::Texture:		return "Texture";
+			case MatParamType::Base::Other:			return "Other";
+			case MatParamType::Base::RuntimeArray:	return "RuntimeArray";
+			case MatParamType::Base::Sampler:		return "Sampler";
+			default:								return "Invalid";
 		}
 	}
 
 	inline constexpr MatParamType::Base fromString(const std::string& s) {
-		if (s == "None")    return MatParamType::Base::None;
-		if (s == "Bool")    return MatParamType::Base::Bool;
-		if (s == "UInt32")  return MatParamType::Base::UInt32;
-		if (s == "Int32")   return MatParamType::Base::Int32;
-		if (s == "UInt64")  return MatParamType::Base::UInt64;
-		if (s == "Int64")   return MatParamType::Base::Int64;
-		if (s == "Float")   return MatParamType::Base::Float;
-		if (s == "Double")  return MatParamType::Base::Double;
-		if (s == "String")  return MatParamType::Base::String;
-		if (s == "Texture") return MatParamType::Base::Texture;
-		if (s == "Other")   return MatParamType::Base::Other;
+		if (s == "None")			return MatParamType::Base::None;
+		if (s == "Invalid")			return MatParamType::Base::Invalid;
+		if (s == "Struct")			return MatParamType::Base::Struct;
+		if (s == "CBuffer")			return MatParamType::Base::CBuffer;
+		if (s == "VertexInput")		return MatParamType::Base::VertexInput;
+		if (s == "VertexOutput")	return MatParamType::Base::VertexOutput;
+		if (s == "Bool")			return MatParamType::Base::Bool;
+		if (s == "UInt32")			return MatParamType::Base::UInt32;
+		if (s == "Int32")			return MatParamType::Base::Int32;
+		if (s == "UInt64")			return MatParamType::Base::UInt64;
+		if (s == "Int64")			return MatParamType::Base::Int64;
+		if (s == "IntVector")		return MatParamType::Base::IntVector;
+		if (s == "FloatVector")		return MatParamType::Base::FloatVector;
+		if (s == "FloatMatrix")		return MatParamType::Base::FloatMatrix;
+		if (s == "Float")			return MatParamType::Base::Float;
+		if (s == "Double")			return MatParamType::Base::Double;
+		if (s == "DoubleVector")	return MatParamType::Base::DoubleVector;
+		if (s == "DoubleMatrix")	return MatParamType::Base::DoubleMatrix;
+		if (s == "String")			return MatParamType::Base::String;
+		if (s == "Texture")			return MatParamType::Base::Texture;
+		if (s == "Other")			return MatParamType::Base::Other;
+		if (s == "RuntimeArray")	return MatParamType::Base::RuntimeArray;
+		if (s == "Sampler")			return MatParamType::Base::Sampler;
 		throw std::invalid_argument("Invalid MatParamType::Base: " + s);
 	}
 
-	inline constexpr MatParamType::Base deduceMatParamType(VkDescriptorType type) {
-		switch (type) {
-			case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
-			case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
-			case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
-				return MatParamType::Base::Texture;
+	//inline constexpr MatParamType::Base deduceMatParamType(VkDescriptorType type) {
+	//	switch (type) {
+	//		case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
+	//		case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
+	//		case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
+	//			return MatParamType::Base::Texture;
 
-			case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
-			case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
-			case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
-			case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:
-				return MatParamType::Base::Other;
+	//		case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
+	//		case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
+	//		case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
+	//		case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:
+	//			return MatParamType::Base::Other;
 
-			default:
-				return MatParamType::Base::Other;
-		}
-	}
+	//		default:
+	//			return MatParamType::Base::Other;
+	//	}
+	//}
 };
 
 struct MatParam
@@ -147,30 +184,30 @@ struct MatParam
 	T& getValueRef() {
 		if (state.count > 1) throw std::exception("MATERIAL: Trying to get single value from array binding.");
 		if constexpr (state.type.base == MatParamType::Base::Bool)		return value.asBool;
-		if constexpr (state.type.base == MatParamType::Base::Float)	return value.asFloat;
+		if constexpr (state.type.base == MatParamType::Base::Float)		return value.asFloat;
 		if constexpr (state.type.base == MatParamType::Base::Double)	return value.asDouble;
 		if constexpr (state.type.base == MatParamType::Base::UInt32)	return value.asUint32;
-		if constexpr (state.type.base == MatParamType::Base::Int32)	return value.asInt32;
+		if constexpr (state.type.base == MatParamType::Base::Int32)		return value.asInt32;
 		if constexpr (state.type.base == MatParamType::Base::UInt64)	return value.asUint64;
-		if constexpr (state.type.base == MatParamType::Base::Int64)	return value.asInt64;
+		if constexpr (state.type.base == MatParamType::Base::Int64)		return value.asInt64;
 		if constexpr (state.type.base == MatParamType::Base::String)	return *static_cast<std::string*>(value.asPtr);
 		if constexpr (state.type.base == MatParamType::Base::Texture)	return *static_cast<Texture2D*>(value.asPtr);
-		if constexpr (state.type.base == MatParamType::Base::Other)	return *static_cast<T*>(value.asPtr);
+		if constexpr (state.type.base == MatParamType::Base::Other)		return *static_cast<T*>(value.asPtr);
 	}
 
 	template <typename T>
 	T* getValuePtr(uint32_t& countOut) {
 		countOut = state.count;
 		if constexpr (state.type.base == MatParamType::Base::Bool)		return static_cast<bool*>(value.asPtr);
-		if constexpr (state.type.base == MatParamType::Base::Float)	return static_cast<float*>(value.asPtr);
+		if constexpr (state.type.base == MatParamType::Base::Float)		return static_cast<float*>(value.asPtr);
 		if constexpr (state.type.base == MatParamType::Base::Double)	return static_cast<double*>(value.asPtr);
 		if constexpr (state.type.base == MatParamType::Base::UInt32)	return static_cast<uint32_t*>(value.asPtr);
-		if constexpr (state.type.base == MatParamType::Base::Int32)	return static_cast<int32_t*>(value.asPtr);
+		if constexpr (state.type.base == MatParamType::Base::Int32)		return static_cast<int32_t*>(value.asPtr);
 		if constexpr (state.type.base == MatParamType::Base::UInt64)	return static_cast<uint64_t*>(value.asPtr);
-		if constexpr (state.type.base == MatParamType::Base::Int64)	return static_cast<int64_t*>(value.asPtr);
+		if constexpr (state.type.base == MatParamType::Base::Int64)		return static_cast<int64_t*>(value.asPtr);
 		if constexpr (state.type.base == MatParamType::Base::String)	return static_cast<std::string*>(value.asPtr);
 		if constexpr (state.type.base == MatParamType::Base::Texture)	return static_cast<Texture2D*>(value.asPtr);
-		if constexpr (state.type.base == MatParamType::Base::Other)	return static_cast<T*>(value.asPtr);
+		if constexpr (state.type.base == MatParamType::Base::Other)		return static_cast<T*>(value.asPtr);
 
 		return nullptr;
 	}

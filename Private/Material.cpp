@@ -36,6 +36,7 @@ void Material::addShaderParams(
 {
 	for (ShaderParameter& param : s) {
 		MatParam matParam;
+		matParam.name = param.name;
 		matParam.state.type = Shader::parseReflectedTypeDesc(&param.spvTypeDesc);
 		matParam.state.stage = static_cast<uint32_t>(stage);
 		matParam.state.count = param.count;
@@ -43,7 +44,7 @@ void Material::addShaderParams(
 		matParam.descriptorType = param.descriptorType;
 		matParam.offset = param.offset;
 		matParam.value.asPtr = nullptr;
-		addShaderParams(params, param.members, stage);
+		addShaderParams(matParam.members, param.members, stage);
 		params.push_back(std::move(matParam));
 	}
 }
@@ -72,6 +73,21 @@ void Material::initFromShaders(const std::string& newName, Shader& vertex, Shade
 
 	addShaderParams(params, vertex.parameters, MatParamStage::Vertex);
 	addShaderParams(params, fragment.parameters, MatParamStage::Fragment);
+
+	//// Check duplicate stages
+	//for (auto& vShaderParam : vertex.parameters) {
+	//	for (auto& vsMatParam : vShaderParam.members) {
+	//		for (auto& pShaderParam : fragment.parameters) {
+	//			for (auto& psMatParam : pShaderParam.members) {
+	//				if (vsMatParam.name == psMatParam.name) {
+	//					vsMatParam.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+	//					psMatParam.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+	//					vShaderParam
+	//				}
+	//			}
+	//		}
+	//	}
+	//}
 
 	ShaderManager::getInstance()->registerMaterial(newName, *this);
 }
