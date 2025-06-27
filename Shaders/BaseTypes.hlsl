@@ -33,8 +33,8 @@ cbuffer GlobalData : register(b0)
 {
     float4x4 view;
     float4x4 proj;
-    float3 cameraPosition;
-    double time;
+    float4 cameraPosition;
+    float time;
 };
 
 // Sprite batching

@@ -98,6 +98,7 @@ add_executable (MobaBase
 	"Public/IShaderProvider.h"
 	"Public/Texture.hpp"
 	"Public/Hashes.hpp"
+	"Public/MaterialParams.h"
 	
 
 	"Private/Engine.cpp"
@@ -108,7 +109,7 @@ add_executable (MobaBase
     "Private/Scene.cpp"
 	"Private/Shader.cpp"
     "Private/Material.cpp"
-)
+ )
 
 
 

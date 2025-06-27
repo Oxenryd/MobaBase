@@ -367,6 +367,10 @@ public:
 		queueCreateInfo.queueCount = 1;
 		queueCreateInfo.pQueuePriorities = &queuePriority;
 
+		VkPhysicalDeviceVulkan13Features features13{};
+		features13.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
+		features13.shaderDemoteToHelperInvocation = VK_TRUE;
+
 		VkPhysicalDeviceDescriptorIndexingFeatures indexingFeatures{};
 		indexingFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;
 		indexingFeatures.runtimeDescriptorArray = VK_TRUE;
@@ -374,14 +378,19 @@ public:
 		indexingFeatures.descriptorBindingPartiallyBound = VK_TRUE;
 		indexingFeatures.descriptorBindingVariableDescriptorCount = VK_TRUE;
 
-		const char* deviceExtensions[] = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
+		features13.pNext = &indexingFeatures;
+
+		const char* deviceExtensions[] = { 
+			VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+		};
+
 		VkDeviceCreateInfo deviceCreateInfo = {};
 		deviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
 		deviceCreateInfo.queueCreateInfoCount = 1;
 		deviceCreateInfo.pQueueCreateInfos = &queueCreateInfo;
 		deviceCreateInfo.enabledExtensionCount = 1;
 		deviceCreateInfo.ppEnabledExtensionNames = deviceExtensions;
-		deviceCreateInfo.pNext = &indexingFeatures;
+		deviceCreateInfo.pNext = &features13;
 
 		Vk_CHECK(vkResult, vkCreateDevice(m_phyDevice, &deviceCreateInfo, nullptr, &m_vkDevice));
 		vkGetDeviceQueue(m_vkDevice, m_graphicsQueueFamilyIndex, 0, &m_graphicsQueue);
@@ -534,8 +543,8 @@ public:
 		VkResult vkResult{};
 		VkShaderModuleCreateInfo createInfo{};
 		createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-		createInfo.codeSize = shader.bytecode.size();
-		createInfo.pCode = reinterpret_cast<const uint32_t*>(shader.bytecode.data());
+		createInfo.codeSize = shader.bytecode.size() * sizeof(uint32_t);
+		createInfo.pCode = shader.bytecode.data();
 		Vk_CHECK(vkResult, vkCreateShaderModule(m_vkDevice, &createInfo, nullptr, outShaderModule));
 		return VK_SUCCESS;
 	}
@@ -1083,6 +1092,12 @@ public:
 		clearColor.color.float32[1] = ctx->clearColor[1];
 		clearColor.color.float32[2] = ctx->clearColor[2];
 		clearColor.color.float32[3] = ctx->clearColor[3];
+		VkClearValue stencilClear{};
+		stencilClear.depthStencil.depth = 0.0f;
+		VkClearValue clearValues[] = {
+			clearColor,
+			stencilClear
+		};
 
 		VkRenderPassBeginInfo renderPassInfo{};
 		renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -1090,8 +1105,8 @@ public:
 		renderPassInfo.framebuffer = swapChainFramebuffers[imageIndex];
 		renderPassInfo.renderArea.offset = { 0, 0 };
 		renderPassInfo.renderArea.extent = swapchainExtent;
-		renderPassInfo.clearValueCount = 1;
-		renderPassInfo.pClearValues = &clearColor;
+		renderPassInfo.clearValueCount = 2;
+		renderPassInfo.pClearValues = &clearValues[0];
 		vkCmdBeginRenderPass(frame.cmdBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
 		// Set Dynamic state

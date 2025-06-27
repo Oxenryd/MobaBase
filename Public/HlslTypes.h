@@ -36,8 +36,7 @@ struct GlobalData
 	alignas (16) glm::mat4x4 view;
 	alignas (16) glm::mat4x4 proj;
 	alignas (16) glm::vec4 cameraPosition;
-	alignas (16) double time;
-	double _pad;
+	alignas (16) float time;
 };
 
 struct SpriteInstance

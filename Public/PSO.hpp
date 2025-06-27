@@ -52,7 +52,7 @@ struct PsoDesc
 public:
 	PsoDesc() = delete;
 	PsoDesc(const std::string& name, IShaderProvider& provider) :
-		shaderProvider{&provider} {}
+		shaderProvider{&provider}, name{name} {}
 	std::string name;
 	std::vector<BufferBindingDesc> bufferBindingDescs;
 	DescriptorSetLayoutDesc descriptorSetLayoutDesc;
@@ -230,7 +230,13 @@ public:
 		instanceBuffDesc.type = VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 		instanceBuffDesc.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
 		pso.bufferBindingDescs.push_back(instanceBuffDesc);
+
+		pso.vs = "SpriteBatchVS";
+		pso.ps = "SpriteBatchPS";
+
+		return pso;
 	}
+
 };
 
 #endif

@@ -7,7 +7,9 @@
 #include <vector>
 #include <utility>
 
+#include "ErrorCodes.hpp"
 #include "Bits.hpp"
+#include "MaterialParams.h"
 
 #ifdef USE_VULKAN
     #ifndef VULKAN_CORE_H_
@@ -15,22 +17,27 @@
     #endif
 #include <spirv_reflect.h>
 
+
 struct ShaderParameter
 {
     std::string name;
+    SpvReflectTypeDescription spvTypeDesc;
     uint32_t set;
     uint32_t binding;
     VkDescriptorType descriptorType;
     VkShaderStageFlags stageFlags;
     uint32_t count = 1;
     uint32_t offset = 0;
+    std::vector<ShaderParameter> members;
 };
 
 struct ShaderPushConstant
 {
     std::string name;
+    SpvReflectTypeDescription spvTypeDesc;
     uint32_t offset;
     uint32_t size;
+    std::vector<ShaderParameter> members;
     VkShaderStageFlags stageFlags;
 
     VkPushConstantRange toVkRange() const {
@@ -42,7 +49,8 @@ struct ShaderPushConstant
     }
 };
 
-#endif
+#endif // USE_VULKAN
+
 class ShaderManager;
 class Shader
 {
@@ -61,7 +69,7 @@ public:
     Type type;
     std::filesystem::path sourcePath;
     std::filesystem::file_time_type lastSourceChangedTime;
-    std::vector<char> bytecode;
+    std::vector<uint32_t> bytecode;
     std::vector<ShaderParameter> parameters;
     std::vector<ShaderPushConstant> pushConstants;
 
@@ -69,15 +77,15 @@ public:
 
     const std::string& name();
 
-    void reflect();
+    ErrorCode reflect();
 
     static std::pair<
         std::vector<ShaderParameter>, std::vector<ShaderPushConstant>
     > reflectShader(const std::vector<uint32_t>& spirv);
 
-    static std::vector<uint32_t> toUint32Vector(const std::vector<char>& charVec);
-    inline static std::pair<std::vector<ShaderParameter>, std::vector<ShaderPushConstant>> reflectShader(
-        const std::vector<char>& spirv) { return reflectShader(toUint32Vector(spirv)); }
+    //static std::vector<uint32_t> toUint32Vector(const std::vector<char>& charVec);
+    //inline static std::pair<std::vector<ShaderParameter>, std::vector<ShaderPushConstant>> reflectShader(
+    //    const std::vector<char>& spirv) { return reflectShader(toUint32Vector(spirv)); }
 
 #ifdef USE_VULKAN
     inline static VkDescriptorType mapReflectToVkDescriptorType(SpvReflectDescriptorType reflectType) {
@@ -109,7 +117,54 @@ public:
         }
     }
 
-#endif
+
+    inline static MatParamType parseReflectedTypeDesc(const SpvReflectTypeDescription* typeDesc) {
+        auto param = MatParamType{ MatParamType::Base::Invalid };
+        
+        if (!typeDesc)
+            return param;
+
+        param.rows = typeDesc->traits.numeric.matrix.row_count;
+        param.cols = typeDesc->traits.numeric.matrix.column_count;
+        auto vecCount = typeDesc->traits.numeric.vector.component_count;
+        SpvReflectNumericTraits numeric = typeDesc->traits.numeric;
+
+        switch (typeDesc->op) {
+            case SpvOp::SpvOpTypeBool:
+            {
+                param.base = MatParamType::Base::Bool;
+            } break;
+
+            case SpvOp::SpvOpTypeFloat:
+            {
+                if (numeric.scalar.width == 32) param.base = MatParamType::Base::Float;
+                else if (numeric.scalar.width == 64) param.base = MatParamType::Base::Double;
+            } break;
+
+            case SpvOp::SpvOpTypeInt:
+            {
+                if (numeric.scalar.width <= 32) {
+                    param.base = numeric.scalar.signedness ? MatParamType::Base::Int32 : MatParamType::Base::UInt32;
+                } else if (numeric.scalar.width == 64) {
+                    param.base = numeric.scalar.signedness ? MatParamType::Base::Int64 : MatParamType::Base::UInt64;
+                }
+            } break;
+
+
+        }
+
+        return param;
+    }
+
+    static ShaderParameter parseMember(const SpvReflectBlockVariable& member,
+                                       uint32_t set, uint32_t binding,
+                                       VkShaderStageFlags stageFlags,
+                                       VkDescriptorType descriptorType);
+
+
+#endif // USE_VULKAN
+
+
 };
 
 #endif // ! SHADER_HPP

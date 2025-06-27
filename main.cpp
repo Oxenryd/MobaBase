@@ -131,6 +131,8 @@ int __stdcall main(HINSTANCE hInstance, HINSTANCE instance, LPSTR str, int nCmdS
 							});
 
 	// Start Engine
+	auto basePso = PsoDesc::createBase2DPipeline(*engine->getShaderManager());
+	vkCtx->createGraphicsPipeline(basePso);
 	engine->createNewScene<GameScene>(nullptr);
 	engine->setTargetUpdateDeltaTime(0.0);
 	engine->start(vkCtx, inputMan);

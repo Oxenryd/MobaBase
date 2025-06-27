@@ -9,7 +9,7 @@ json Material::toJson() {
 	j["pShaderName"] = pShaderName;
 
 	j["params"] = json::array();
-	for (const auto& p : params)
+	for (auto& p : params)
 		j["params"].push_back(p.toJson());
 
 	return j;
@@ -29,6 +29,25 @@ void Material::fromJson(const json& j) {
 	ShaderManager::getInstance()->registerMaterial(newName, *this);
 }
 
+void Material::addShaderParams(
+	std::vector<MatParam>& params,
+	std::vector<ShaderParameter>& s,
+	MatParamStage stage)
+{
+	for (ShaderParameter& param : s) {
+		MatParam matParam;
+		matParam.state.type = Shader::parseReflectedTypeDesc(&param.spvTypeDesc);
+		matParam.state.stage = static_cast<uint32_t>(stage);
+		matParam.state.count = param.count;
+		matParam.bindingIndex = param.binding;
+		matParam.descriptorType = param.descriptorType;
+		matParam.offset = param.offset;
+		matParam.value.asPtr = nullptr;
+		addShaderParams(params, param.members, stage);
+		params.push_back(std::move(matParam));
+	}
+}
+
 void Material::initFromShaders(const std::string& newName, Shader& vertex, Shader& fragment) {
 	vShaderName = vertex.name();
 	pShaderName = fragment.name();
@@ -36,22 +55,23 @@ void Material::initFromShaders(const std::string& newName, Shader& vertex, Shade
 	params.clear();
 
 	// Merge descriptors from both shaders
-	auto addShaderParams = [&](const Shader& s, MatParamStage stage) {
-		for (const auto& param : s.parameters) {
-			MatParam matParam;
-			matParam.state.type = MatParamUtils::deduceMatParamType(param.descriptorType);
-			matParam.state.stage = stage;
-			matParam.state.count = param.count;
-			matParam.bindingIndex = param.binding;
-			matParam.descriptorType = param.descriptorType;
-			matParam.offset = param.offset;
-			matParam.value.asPtr = nullptr;
-			params.push_back(std::move(matParam));
-		}
-		};
+	//void* addShaderParams = [](std::vector<MatParam> params, const std::vector<ShaderParameter>& s, MatParamStage stage) {
+	//	for (const auto& param : s) {
+	//		MatParam matParam;
+	//		matParam.state.type = Shader::parseReflectedTypeDesc(&param.spvTypeDesc);
+	//		matParam.state.stage = static_cast<uint32_t>(stage);
+	//		matParam.state.count = param.count;
+	//		matParam.bindingIndex = param.binding;
+	//		matParam.descriptorType = param.descriptorType;
+	//		matParam.offset = param.offset;
+	//		matParam.value.asPtr = nullptr;
+	//		addShaderParams(param.members, stage);
+	//		params.push_back(std::move(matParam));
+	//	}
+	//};
 
-	addShaderParams(vertex, MatParamStage::Vertex);
-	addShaderParams(fragment, MatParamStage::Fragment);
+	addShaderParams(params, vertex.parameters, MatParamStage::Vertex);
+	addShaderParams(params, fragment.parameters, MatParamStage::Fragment);
 
 	ShaderManager::getInstance()->registerMaterial(newName, *this);
 }

@@ -181,6 +181,8 @@ ErrorCode ShaderManager::registerMaterial(const std::string& name, Material& mat
 	m_mat_IndexNameMap.insert({ m_materials.size() , name});
 	material.m_arrayIndex = m_materials.size();
 	m_materials.push_back(material);
+
+	return ErrorCode::OK;
 }
 
 ErrorCode DxcWin32VulkanShaderCompiler::compileShaders(ShaderManager*) {
@@ -219,22 +221,49 @@ ErrorCode DxcWin32VulkanShaderCompiler::compile(Shader& shader) {
 		return EC;
 	}
 
+	//std::ifstream spvFile(outPath, std::ios::ate | std::ios::binary);
+	//if (!spvFile) {
+	//	return ErrorCode::SHADER_COULD_NOT_READ_FILE;
+	//}
+
+	//try {
+	//	//spvFile.seekg(0, std::ios::end);
+	//	size_t fileSize = spvFile.tellg();
+	//	spvFile.seekg(0);
+	//	//spvFile.seekg(0, std::ios::beg);
+
+	//	shader.bytecode.resize(fileSize);
+	//	spvFile.read(shader.bytecode.data(), fileSize);
+	//} catch (std::exception& e) {
+	//	return ErrorCode::SHADER_COULD_NOT_READ_BYTECODE;
+	//}
+
 	std::ifstream spvFile(outPath, std::ios::ate | std::ios::binary);
 	if (!spvFile) {
 		return ErrorCode::SHADER_COULD_NOT_READ_FILE;
 	}
 
 	try {
-		//spvFile.seekg(0, std::ios::end);
 		size_t fileSize = spvFile.tellg();
+		if (fileSize % 4 != 0) {
+			return ErrorCode::SHADER_INVALID_BYTECODE_ALIGNMENT;
+		}
 		spvFile.seekg(0);
-		//spvFile.seekg(0, std::ios::beg);
 
-		shader.bytecode.resize(fileSize);
-		spvFile.read(shader.bytecode.data(), fileSize);
+		size_t wordCount = fileSize / sizeof(uint32_t);
+		shader.bytecode.resize(wordCount); // vector<uint32_t>
+		spvFile.read(reinterpret_cast<char*>(shader.bytecode.data()), fileSize);
+
+		if (!spvFile || spvFile.gcount() != fileSize) {
+			return ErrorCode::SHADER_COULD_NOT_READ_BYTECODE;
+		}
 	} catch (std::exception& e) {
 		return ErrorCode::SHADER_COULD_NOT_READ_BYTECODE;
 	}
+
+	EC = shader.reflect();
+	if (EC != ErrorCode::OK)
+		return EC;
 
 	return ErrorCode::OK;
 }
