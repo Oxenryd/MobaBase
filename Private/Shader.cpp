@@ -16,16 +16,17 @@ const std::string& Shader::name() {
 ErrorCode Shader::reflect() {
     try {
         auto result = reflectShader(bytecode);
-        parameters = result.first;
-        pushConstants = result.second;
+        parameters = std::get<0>(result);
+        pushConstants = std::get<1>(result);
+        iaInput = std::get<2>(result);
     } catch (std::exception& e) {
         return ErrorCode::SHADER_REFLECTION_ERROR;
     }
     return ErrorCode::OK;
 }
 
-std::pair<std::vector<
-    ShaderParameter>, std::vector<ShaderPushConstant>
+std::tuple<
+    std::vector<ShaderBinding>, std::vector<ShaderPushConstant>, ShaderInput
 > Shader::reflectShader(const std::vector<uint32_t>& spirv)
 {
     SpvReflectShaderModule module;
@@ -33,52 +34,36 @@ std::pair<std::vector<
 
     VkShaderStageFlagBits stage = static_cast<VkShaderStageFlagBits>(module.shader_stage);
     uint32_t count = 0;
+
     spvReflectEnumerateDescriptorBindings(&module, &count, nullptr);
     std::vector<SpvReflectDescriptorBinding*> bindings(count);
     spvReflectEnumerateDescriptorBindings(&module, &count, bindings.data());
-    uint32_t pcCount = 0;
-    spvReflectEnumeratePushConstantBlocks(&module, &pcCount, nullptr);
-    std::vector<SpvReflectBlockVariable*> pConstants(pcCount);
-    spvReflectEnumeratePushConstantBlocks(&module, &pcCount, pConstants.data());
-    std::vector<ShaderParameter> params;
+
+    spvReflectEnumeratePushConstantBlocks(&module, &count, nullptr);
+    std::vector<SpvReflectBlockVariable*> pConstants(count);
+    spvReflectEnumeratePushConstantBlocks(&module, &count, pConstants.data());
+
+    spvReflectEnumerateDescriptorSets(&module, &count, nullptr);
+    std::vector<SpvReflectDescriptorSet*> descSets(count);
+    spvReflectEnumerateDescriptorSets(&module, &count, descSets.data());
+
+    spvReflectEnumerateInputVariables(&module, &count, nullptr);
+    std::vector<SpvReflectInterfaceVariable*> inputVars(count);
+    spvReflectEnumerateInputVariables(&module, &count, inputVars.data());
+    ShaderInput ia;
+    for (auto& var : inputVars) {
+        ShaderInput::Attribute attrib{};
+        attrib.location = var->location;
+        //attrib.spvTypeDesc = *var->type_description;
+        attrib.type = parseReflectedTypeDesc(var->type_description);
+        ia.attributes.push_back(attrib);
+    }
+
+    std::vector<ShaderBinding> params;
     for (auto* b : bindings) {
         if (!b) continue;
 
-    //    // Only go deeper for UBOs or SSBOs
-    //    if (b->descriptor_type == SPV_REFLECT_DESCRIPTOR_TYPE_UNIFORM_BUFFER ||
-    //        b->descriptor_type == SPV_REFLECT_DESCRIPTOR_TYPE_STORAGE_BUFFER) {
-
-    //        const SpvReflectBlockVariable* block = &b->block;
-
-    //        for (uint32_t i = 0; i < block->member_count; ++i) {
-    //            const SpvReflectBlockVariable& member = block->members[i];
-
-    //            ShaderParameter p;
-    //            p.name = member.name;
-    //            p.set = b->set;
-    //            p.binding = b->binding;
-    //            p.stageFlags = stage;
-    //            p.count = member.array.dims_count > 0 ? member.array.dims[0] : 1;
-    //            p.descriptorType = mapReflectToVkDescriptorType(b->descriptor_type);
-    //            p.offset = member.offset;
-
-    //            params.push_back(p);
-    //        }
-
-    //    } else {
-    //        ShaderParameter p;
-    //        p.name = b->name;
-    //        p.set = b->set;
-    //        p.binding = b->binding;
-    //        p.stageFlags = stage;
-    //        p.count = b->count;
-    //        p.descriptorType = mapReflectToVkDescriptorType(b->descriptor_type);
-    //        p.offset = 0;
-
-    //        params.push_back(p);
-    //    }
-
-        ShaderParameter p;
+        ShaderBinding p;
         p.name = b->name;
         p.set = b->set;
         p.binding = b->binding;
@@ -115,30 +100,21 @@ std::pair<std::vector<
         }
 
         consts.push_back(pcParam);
-
-        //ShaderPushConstant p;
-        //p.name = pc->name;
-        //p.offset = pc->offset;
-        //p.size = pc->size;
-        //p.stageFlags = stage;
-
-        //consts.push_back(p);
     }
 
-
     spvReflectDestroyShaderModule(&module);
-    return { params, consts };
+    return std::make_tuple( params, consts, ia );
 }
 
 
-ShaderParameter Shader::parseMember(
+ShaderBinding Shader::parseMember(
     const SpvReflectBlockVariable& member,
     uint32_t set,
     uint32_t binding,
     VkShaderStageFlags stageFlags,
     VkDescriptorType descriptorType)
 {
-    ShaderParameter param;
+    ShaderBinding param;
     param.name = member.name ? member.name : "";
     param.spvTypeDesc = member.type_description ? *member.type_description : SpvReflectTypeDescription{};
     param.set = set;
@@ -157,10 +133,3 @@ ShaderParameter Shader::parseMember(
     
     return param;
 }
-
-//std::vector<uint32_t> Shader::toUint32Vector(const std::vector<char>& charVec) {
-//    size_t wordCount = charVec.size() / sizeof(uint32_t);
-//    std::vector<uint32_t> out(wordCount);
-//    std::memcpy(out.data(), charVec.data(), wordCount * sizeof(uint32_t));
-//    return out;
-//}

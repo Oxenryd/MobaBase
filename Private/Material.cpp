@@ -10,7 +10,7 @@ json Material::toJson() {
 
 	j["params"] = json::array();
 	for (auto& p : params)
-		j["params"].push_back(p.toJson());
+		j["params"].push_back(p.second.toJson());
 
 	return j;
 }
@@ -24,18 +24,19 @@ void Material::fromJson(const json& j) {
 	for (const auto& jp : j.at("params")) {
 		MatParam param;
 		param.fromJson(jp);
-		params.push_back(std::move(param));
+		params.insert({param.name, std::move(param) });
 	}
 	ShaderManager::getInstance()->registerMaterial(newName, *this);
 }
 
 void Material::addShaderParams(
-	std::vector<MatParam>& params,
-	std::vector<ShaderParameter>& s,
-	MatParamStage stage)
+	std::map<std::string, MatParam>& params,
+	std::vector<ShaderBinding>& s,
+	MatParamStage stage, const std::string& parentName)
 {
-	for (ShaderParameter& param : s) {
+	for (ShaderBinding& param : s) {
 		MatParam matParam;
+		matParam.parentName = parentName;
 		matParam.name = param.name;
 		matParam.state.type = Shader::parseReflectedTypeDesc(&param.spvTypeDesc);
 		matParam.state.stage = static_cast<uint32_t>(stage);
@@ -44,8 +45,8 @@ void Material::addShaderParams(
 		matParam.descriptorType = param.descriptorType;
 		matParam.offset = param.offset;
 		matParam.value.asPtr = nullptr;
-		addShaderParams(matParam.members, param.members, stage);
-		params.push_back(std::move(matParam));
+		addShaderParams(matParam.members, param.members, stage, matParam.name);
+		params.insert({ matParam.name, std::move(matParam) });
 	}
 }
 
@@ -71,26 +72,29 @@ void Material::initFromShaders(const std::string& newName, Shader& vertex, Shade
 	//	}
 	//};
 
-	addShaderParams(params, vertex.parameters, MatParamStage::Vertex);
-	addShaderParams(params, fragment.parameters, MatParamStage::Fragment);
+	std::map<std::string, MatParam> vsParam;
+	std::map<std::string, MatParam> psParam;
+	addShaderParams(vsParam, vertex.parameters, MatParamStage::Vertex, "");
+	addShaderParams(psParam, fragment.parameters, MatParamStage::Fragment, "");
 
-	//// Check duplicate stages
-	//for (auto& vShaderParam : vertex.parameters) {
-	//	for (auto& vsMatParam : vShaderParam.members) {
-	//		for (auto& pShaderParam : fragment.parameters) {
-	//			for (auto& psMatParam : pShaderParam.members) {
-	//				if (vsMatParam.name == psMatParam.name) {
-	//					vsMatParam.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
-	//					psMatParam.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
-	//					vShaderParam
-	//				}
-	//			}
-	//		}
-	//	}
-	//}
+	for (auto& vsMatParam : vsParam) {
+		auto it = psParam.find(vsMatParam.first);
+		if (it != psParam.end()) {
+			if (it->second.parentName == vsMatParam.second.parentName) {
+				vsMatParam.second.state.stage = static_cast<uint32_t>(MatParamStage::Both);
+				it->second.state.stage = static_cast<uint32_t>(MatParamStage::Both);
+				psParam.erase(it->first);
+			}
+		}
+	}
+	for (auto& vsMatParam : vsParam) 
+		params.insert({vsMatParam.first, vsMatParam.second});
+	for (auto& psMatParam : psParam)
+		params.insert({ psMatParam.first, psMatParam.second });
 
 	ShaderManager::getInstance()->registerMaterial(newName, *this);
 }
+
 
 std::string& Material::name() {
 	return ShaderManager::getInstance()->getMaterialName(*this);

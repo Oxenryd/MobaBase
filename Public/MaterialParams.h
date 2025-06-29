@@ -6,8 +6,10 @@
 #include <stdexcept>
 #include <vulkan/vulkan_core.h>
 #include <vector>
+#include <map>
 #include <nlohmann/json.hpp>
 #include <glm/glm.hpp>
+
 #include "Texture.hpp"
 
 using json = nlohmann::json;
@@ -177,8 +179,9 @@ struct MatParam
 	};
 	MatParamValue value;
 	MatParamState state;
+	std::string parentName;
 	std::string name;
-	std::vector<MatParam> members;
+	std::map<std::string, MatParam> members;
 
 	template <typename T>
 	T& getValueRef() {

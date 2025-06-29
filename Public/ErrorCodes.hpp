@@ -29,6 +29,7 @@ enum class ErrorCode : uint32_t
 
 	// Materials
 	MATERIAL_NAME_ALREADY_EXISTS		= 20004,
+	MATERIAL_COULD_NOT_FETCH_SHADERS	= 20005,
 
 	// MEMORY
 	MEMORY_IS_NULL						= 20000

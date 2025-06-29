@@ -18,7 +18,20 @@
 #include <spirv_reflect.h>
 
 
-struct ShaderParameter
+
+struct ShaderInput
+{
+    struct Attribute
+    {
+        uint16_t offset;
+        uint8_t location;
+        MatParamType type;
+        //SpvReflectTypeDescription spvTypeDesc;
+    };
+    std::vector<Attribute> attributes;
+};
+
+struct ShaderBinding
 {
     std::string name;
     SpvReflectTypeDescription spvTypeDesc;
@@ -28,7 +41,7 @@ struct ShaderParameter
     VkShaderStageFlags stageFlags;
     uint32_t count = 1;
     uint32_t offset = 0;
-    std::vector<ShaderParameter> members;
+    std::vector<ShaderBinding> members;
 };
 
 struct ShaderPushConstant
@@ -37,7 +50,7 @@ struct ShaderPushConstant
     SpvReflectTypeDescription spvTypeDesc;
     uint32_t offset;
     uint32_t size;
-    std::vector<ShaderParameter> members;
+    std::vector<ShaderBinding> members;
     VkShaderStageFlags stageFlags;
 
     VkPushConstantRange toVkRange() const {
@@ -70,7 +83,8 @@ public:
     std::filesystem::path sourcePath;
     std::filesystem::file_time_type lastSourceChangedTime;
     std::vector<uint32_t> bytecode;
-    std::vector<ShaderParameter> parameters;
+    ShaderInput iaInput;
+    std::vector<ShaderBinding> parameters;
     std::vector<ShaderPushConstant> pushConstants;
 
     Shader(Type type, const std::filesystem::path& path);
@@ -79,8 +93,8 @@ public:
 
     ErrorCode reflect();
 
-    static std::pair<
-        std::vector<ShaderParameter>, std::vector<ShaderPushConstant>
+    static std::tuple<
+        std::vector<ShaderBinding>, std::vector<ShaderPushConstant>, ShaderInput
     > reflectShader(const std::vector<uint32_t>& spirv);
 
     //static std::vector<uint32_t> toUint32Vector(const std::vector<char>& charVec);
@@ -183,7 +197,7 @@ public:
         return param;
     }
 
-    static ShaderParameter parseMember(const SpvReflectBlockVariable& member,
+    static ShaderBinding parseMember(const SpvReflectBlockVariable& member,
                                        uint32_t set, uint32_t binding,
                                        VkShaderStageFlags stageFlags,
                                        VkDescriptorType descriptorType);

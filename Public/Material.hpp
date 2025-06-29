@@ -5,8 +5,9 @@
 #include <vector>
 #include <cstdint>
 #include <type_traits>
-#include <unordered_map>
+#include <map>
 
+#include "ErrorCodes.hpp"
 #include "MaterialParams.h"
 
 #ifdef USE_VULKAN
@@ -19,16 +20,18 @@
 
 class Shader;
 class ShaderManager;
-struct ShaderParameter;
+struct ShaderBinding;
+struct PsoDesc;
+
 class Material
 {
 private:
 	friend ShaderManager;
 	size_t m_arrayIndex;
 	void fromJson(const json& j);
-	void addShaderParams(std::vector<MatParam>& params, std::vector<ShaderParameter>& s, MatParamStage stage);
+	void addShaderParams(std::map<std::string, MatParam>& params, std::vector<ShaderBinding>& s, MatParamStage stage, const std::string& parentName);
 public:
-	std::vector<MatParam> params;
+	std::map<std::string, MatParam> params;
 	std::string vShaderName;
 	std::string pShaderName;
 
