@@ -3,10 +3,12 @@
 #include "FS.h"
 #include "Log.hpp"
 
+
 ShaderManager* ShaderManager::s_instance = nullptr;
 
 ShaderManager::ShaderManager(ShaderCompilerBase* compiler) :
-	m_compiler{ compiler }
+	m_compiler{ compiler },
+	m_paramArena{MB(16)}
 {
 }
 

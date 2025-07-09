@@ -48,7 +48,7 @@ struct SpritebatchVSOutput
 {
     [[vk::location(0)]] float4 position : SV_Position;
     [[vk::location(1)]] float2 uv : TEXCOORD0;
-    [[vk::location(2)]] uint texIndex : TEXCOORD1;
+    [[vk::location(2)]] uint instanceId : TEXCOORD1;
 };
 
 [[vk::binding(0, 0)]] Texture2D atlas[] : register(t0);

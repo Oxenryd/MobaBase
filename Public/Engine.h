@@ -28,6 +28,7 @@
 #include "ShaderManager.h"
 #include "Scene.h"
 
+
 constexpr const double			DEFAULT_DELTATIME_JITTER_SETTING = 0.002;
 constexpr const double			FPS_400 = 1.0 / 400.0;
 constexpr const double			FPS_165 = 1.0 / 165.0;
@@ -81,6 +82,7 @@ private:
 	void _initShaderManager();
 
 	// Base Systems
+
 	ShaderManager* m_shaderMan;
 	TimerSystem m_baseTimers;
 	Timer m_fpsCountTimer;

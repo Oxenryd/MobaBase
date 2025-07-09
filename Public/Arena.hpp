@@ -10,6 +10,12 @@
 #include <memory>
 #include <vector>
 
+
+#ifndef GLOBAL_MACROS_H
+    #include "GlobalMacros.h"
+#endif
+
+
 #include "ArenaAllocator.hpp"
 #include "Log.hpp"
 
@@ -282,8 +288,14 @@ public:
         LOGLINE(LogType::Info, LogMod::Memory, "Creating Arena, Addr: " + std::to_string(reinterpret_cast<size_t>(m_memory)) +
                 ", " + std::to_string(m_size / 1024) + "kB... ");
         m_arenaId = memProvider->registerArena();
-        m_destructorsPtr = constructNoRegister<std::vector<DestructorEntry, HeapArenaAllocator<DestructorEntry>>>(HeapArenaAllocator<DestructorEntry>(memProvider));
+        //m_destructorsPtr = constructNoRegister<std::vector<DestructorEntry, HeapArenaAllocator<DestructorEntry>>>(HeapArenaAllocator<DestructorEntry>(memProvider));
         LOG(LogType::Success, "Done.");
+    }
+
+    Arena(size_t size) :
+        m_size{ size }, m_offset(0) {
+        m_arenaId = static_cast<uint32_t>(-1);
+
     }
 
     ~Arena() {
@@ -308,26 +320,26 @@ public:
         return ptr;
     }
 
-    template<typename T, typename... Args>
-    T* construct(Args&&... args) {
-        return constructImpl<T>(true, std::forward<Args>(args)...);
-    }
+    //template<typename T, typename... Args>
+    //T* construct(Args&&... args) {
+    //    return constructImpl<T>(true, std::forward<Args>(args)...);
+    //}
 
-    template<typename T, typename... Args>
-    T* constructNoRegister(Args&&... args) {
-        return constructImpl<T>(false, std::forward<Args>(args)...);
-    }
+    //template<typename T, typename... Args>
+    //T* constructNoRegister(Args&&... args) {
+    //    return constructImpl<T>(false, std::forward<Args>(args)...);
+    //}
 
-    template<typename T, typename... Args>
-    T* constructImpl(bool registerDestructor, Args&&... args) {
-        void* mem = allocate(sizeof(T), alignof(T));
-        T* obj = new (mem) T(std::forward<Args>(args)...);
+    //template<typename T, typename... Args>
+    //T* constructImpl(bool registerDestructor, Args&&... args) {
+    //    void* mem = allocate(sizeof(T), alignof(T));
+    //    T* obj = new (mem) T(std::forward<Args>(args)...);
 
-        if (registerDestructor && m_destructorsPtr) {
-            m_destructorsPtr->push_back({ [](void* p) { static_cast<T*>(p)->~T(); }, obj });
-        }
-        return obj;
-    }
+    //    if (registerDestructor && m_destructorsPtr) {
+    //        m_destructorsPtr->push_back({ [](void* p) { static_cast<T*>(p)->~T(); }, obj });
+    //    }
+    //    return obj;
+    //}
 
     void reset() {
         m_offset = 0;
@@ -340,16 +352,16 @@ public:
     void destroyAll() {
         LOGLINE(LogType::Info, LogMod::Memory, "Destroying Arena elements, Addr: " +
                 std::to_string(reinterpret_cast<size_t>(m_memory)) + "... ");
-        for (auto& entry : *m_destructorsPtr) {
-            entry.destroyFunc(entry.object);
-        }
-        m_destructorsPtr->clear();
+        //for (auto& entry : *m_destructorsPtr) {
+        //    entry.destroyFunc(entry.object);
+        //}
+        //m_destructorsPtr->clear();
         reset();
         LOG(LogType::Success, "Done.");
     }
 
 private:
-    std::vector<DestructorEntry, HeapArenaAllocator<DestructorEntry>>* m_destructorsPtr = nullptr;
+    //std::vector<DestructorEntry, HeapArenaAllocator<DestructorEntry>>* m_destructorsPtr = nullptr;
     uint8_t* m_memory = nullptr;
     size_t m_size;
     size_t m_offset;

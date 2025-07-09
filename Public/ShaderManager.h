@@ -12,6 +12,8 @@
 #include "IShaderProvider.h"
 #include "Material.hpp"
 #include "Hashes.hpp"
+#include "ArenaAllocator.hpp"
+#include "GlobalMacros.h"
 
 class ShaderManager;
 
@@ -32,20 +34,24 @@ class ShaderManager : public IShaderProvider
 private:
 	friend Engine;
 	static ShaderManager* s_instance;
-	friend Engine;
 	ShaderCompilerBase* const m_compiler;
 	friend ShaderCompilerBase;
 	std::vector<Shader> m_vShaders;
 	std::vector<Shader> m_pShaders;
 	std::vector<Shader> m_cShaders;
 	std::vector<Material> m_materials;
+	std::vector<std::string> m_paramNames;
 	Timer* m_hotreloadTimer = nullptr;
 
 	// Mapping
+	std::unordered_map<std::string, size_t> m_param_NameIndexMap;
 	std::unordered_map<std::string, size_t> m_mat_NameIndexMap;
 	std::unordered_map<size_t, std::string> m_mat_IndexNameMap;
 	std::unordered_map<std::string, std::pair<Shader::Type, Index>> m_shader_NamePairMap;
 	std::unordered_map<std::pair<Shader::Type, Index>, std::string, PairHash<Shader::Type, size_t>> m_shader_PairNameMap;
+
+	// Memory
+	Arena m_paramArena;
 	
 
 public:
@@ -72,7 +78,24 @@ public:
 	Material* getMaterial(const std::string& name);
 	Material* getMaterial(const size_t& index);
 	std::string& getMaterialName(const Material& mat);
+
 	//std::string& getMaterialName(const size_t matIndex);
+	size_t getParamNameIndex(const std::string& name) {
+		auto it = m_param_NameIndexMap.find(name);
+		if (it != m_param_NameIndexMap.end())
+			return it->second;
+		
+		return SIZE_T_INVALID;
+	}
+	std::string& getParamName(size_t index) { return m_paramNames[index]; }
+	std::string& getParamName(size_t index) const { return const_cast<std::string&>(m_paramNames[index]); }
+	size_t registerParamName(const std::string& name) {
+		auto index = m_paramNames.size();
+		m_param_NameIndexMap.insert({name, index});
+		m_paramNames.push_back(name);
+		return index;
+	}
+	std::vector<std::string>& paramNames() { return m_paramNames; }
 	ErrorCode registerMaterial(const std::string& name, Material& material);
 
 	Event<void*> onShaderHotReloaded;

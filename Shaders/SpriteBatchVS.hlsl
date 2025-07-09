@@ -27,6 +27,6 @@ SpritebatchVSOutput main(SpritebatchVSInput vin)
     uint2 texSize;
     atlas[inst.texIndex].GetDimensions(texSize.x, texSize.y);
 	vout.uv = (float2(inst.texRect.xy) + uv * float2(inst.texRect.zw)) / texSize;
-	vout.texIndex = inst.texIndex;
+    vout.instanceId = vin.instanceId;
 	return vout;
 }

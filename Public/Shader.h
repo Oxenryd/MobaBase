@@ -25,7 +25,7 @@ struct ShaderInput
     {
         uint16_t offset;
         uint8_t location;
-        MatParamType type;
+        TypeBase type;
         //SpvReflectTypeDescription spvTypeDesc;
     };
     std::vector<Attribute> attributes;
@@ -102,7 +102,8 @@ public:
     //    const std::vector<char>& spirv) { return reflectShader(toUint32Vector(spirv)); }
 
 #ifdef USE_VULKAN
-    inline static VkDescriptorType mapReflectToVkDescriptorType(SpvReflectDescriptorType reflectType) {
+    inline static VkDescriptorType mapReflectToVkDescriptorType(
+        SpvReflectDescriptorType reflectType) {
         switch (reflectType) {
             case SPV_REFLECT_DESCRIPTOR_TYPE_SAMPLER:
                 return VK_DESCRIPTOR_TYPE_SAMPLER;
@@ -132,69 +133,210 @@ public:
     }
 
 
-    inline static MatParamType parseReflectedTypeDesc(const SpvReflectTypeDescription* typeDesc) {
-        auto param = MatParamType{ MatParamType::Base::Invalid };
+    inline static TypeBase parseReflectedTypeDesc(
+        const SpvReflectTypeDescription* typeDesc, const VkDescriptorType* vkDescType) {
         
         if (!typeDesc)
-            return param;
+            return TypeBase::Invalid;
 
         SpvReflectNumericTraits numeric = typeDesc->traits.numeric;
 
         switch (typeDesc->op) {
             case SpvOp::SpvOpTypeStruct:
             {
-                param.base = MatParamType::Base::Struct;
-            } break;
+                if (vkDescType) {
+                    switch (*vkDescType) {
+                        case VkDescriptorType::VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
+                            return TypeBase::CBuffer;
+
+                        case VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
+                            return TypeBase::StructBuffer;
+                    }
+                }
+                return TypeBase::Struct;
+            } 
 
             case SpvOp::SpvOpTypeSampler:
             {
-                param.base = MatParamType::Base::Sampler;
-            } break;
+                return TypeBase::Sampler;
+            } 
 
             case SpvOp::SpvOpTypeRuntimeArray:
             {
-                param.base = MatParamType::Base::RuntimeArray;
-            } break;
+                if (vkDescType) {
+                    switch (*vkDescType) {
+                        case VkDescriptorType::VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
+                            return TypeBase::Texture2DArray;
+
+                        case VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
+                        {
+                            return TypeBase::Struct;
+                        }
+                    }
+                }
+
+                return TypeBase::RuntimeArray;
+            }
 
             case SpvOp::SpvOpTypeMatrix:
             {
-                param.rows = numeric.matrix.row_count;
-                param.cols = numeric.matrix.column_count;
-                if (numeric.scalar.width == 32) param.base = MatParamType::Base::FloatMatrix;
-                else if (numeric.scalar.width == 64) param.base = MatParamType::Base::DoubleMatrix;
-            } break;
+                auto& rows = numeric.matrix.row_count;
+                auto& cols = numeric.matrix.column_count;
 
-            case SpvOp::SpvOpTypeVector:
-            {
-                param.rows = numeric.vector.component_count;
-                if (numeric.scalar.width == 32) param.base = MatParamType::Base::FloatVector;
-                else if (numeric.scalar.width == 64) param.base = MatParamType::Base::DoubleVector;
-            } break;
+                switch (cols) {
+                    case 3:
+                    {
+                        switch (rows) {
+                            case 3:
+                            {
+                                if (numeric.scalar.width == 32) return TypeBase::FloatMatrix3x3;
+                                else return TypeBase::DoubleMatrix3x3;
+                            } 
+                        }
+                    } break;
 
-            case SpvOp::SpvOpTypeBool:
-            {
-                param.base = MatParamType::Base::Bool;
+                    case 4:
+                    {
+                        switch (rows) {
+                            case 4:
+                            {
+                                if (numeric.scalar.width == 32) return TypeBase::FloatMatrix4x4;
+                                else return TypeBase::DoubleMatrix4x4;
+                            }
+                        }
+                    } break;
+                }
+
             } break;
 
             case SpvOp::SpvOpTypeFloat:
             {
-                if (numeric.scalar.width == 32) param.base = MatParamType::Base::Float;
-                else if (numeric.scalar.width == 64) param.base = MatParamType::Base::Double;
+                if (numeric.scalar.width <= 32) {
+                    return  TypeBase::Float;
+                } else {
+                    return TypeBase::Double;
+                }
+            }
+
+            case SpvOp::SpvOpTypeVector:
+            {
+                enum
+                {
+                    UInt = 0,
+                    Int = 1,
+                };
+
+                bool isFloating = typeDesc->type_flags & SPV_REFLECT_TYPE_FLAG_FLOAT;
+
+                if (!isFloating)
+                {
+                    switch (numeric.scalar.signedness)
+                    {
+
+                        case UInt:
+                        {
+                            switch (numeric.vector.component_count) {
+                                default:
+                                {
+                                    if (numeric.scalar.width <= 32) return TypeBase::UInt32;
+                                    else return TypeBase::UInt64;
+                                }
+
+                                case 2:
+                                {
+                                    if (numeric.scalar.width <= 32) return TypeBase::UInt32Vector2;
+                                    else return TypeBase::UInt64Vector2;
+                                }
+
+                                case 3:
+                                {
+                                    if (numeric.scalar.width <= 32) return TypeBase::UInt32Vector3;
+                                    else return TypeBase::UInt64Vector3;
+                                }
+
+                                case 4:
+                                {
+                                    if (numeric.scalar.width <= 32) return TypeBase::UInt32Vector4;
+                                    else return TypeBase::UInt64Vector4;
+                                }
+                            }
+                        }
+
+                        case Int:
+                        {
+                            switch (numeric.vector.component_count) {
+                                default:
+                                {
+                                    if (numeric.scalar.width <= 32) return TypeBase::Int32;
+                                    else return TypeBase::Int64;
+                                }
+
+                                case 2:
+                                {
+                                    if (numeric.scalar.width <= 32) return TypeBase::Int32Vector2;
+                                    else return TypeBase::Int64Vector2;
+                                }
+
+                                case 3:
+                                {
+                                    if (numeric.scalar.width <= 32) return TypeBase::Int32Vector3;
+                                    else return TypeBase::Int64Vector3;
+                                }
+
+                                case 4:
+                                {
+                                    if (numeric.scalar.width <= 32) return TypeBase::Int32Vector4;
+                                    else return TypeBase::Int64Vector4;
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    switch (numeric.vector.component_count) {
+                        default:
+                        {
+                            if (numeric.scalar.width <= 32) return TypeBase::Float;
+                            else return TypeBase::Double;
+                        }
+
+                        case 2:
+                        {
+                            if (numeric.scalar.width <= 32) return TypeBase::FloatVector2;
+                            else return TypeBase::DoubleVector2;
+                        }
+
+                        case 3:
+                        {
+                            if (numeric.scalar.width <= 32) return TypeBase::FloatVector3;
+                            else return TypeBase::DoubleVector3;
+                        }
+
+                        case 4:
+                        {
+                            if (numeric.scalar.width <= 32) return TypeBase::FloatVector4;
+                            else return TypeBase::DoubleVector4;
+                        }
+                    }
+                }
+
             } break;
+
+            case SpvOp::SpvOpTypeBool:
+            {
+                return TypeBase::Bool;
+            } 
+
 
             case SpvOp::SpvOpTypeInt:
             {
                 if (numeric.scalar.width <= 32) {
-                    param.base = numeric.scalar.signedness ? MatParamType::Base::Int32 : MatParamType::Base::UInt32;
-                } else if (numeric.scalar.width == 64) {
-                    param.base = numeric.scalar.signedness ? MatParamType::Base::Int64 : MatParamType::Base::UInt64;
+                    return  numeric.scalar.signedness ? TypeBase::Int32 : TypeBase::UInt32;
+                } else  {
+                    return  numeric.scalar.signedness ? TypeBase::Int64 : TypeBase::UInt64;
                 }
-            } break;
-
-
+            }
         }
-
-        return param;
+        return TypeBase::None;
     }
 
     static ShaderBinding parseMember(const SpvReflectBlockVariable& member,

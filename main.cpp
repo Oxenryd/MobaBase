@@ -54,7 +54,7 @@ int __stdcall main(HINSTANCE hInstance, HINSTANCE instance, LPSTR str, int nCmdS
 	// Setup logger
 	Log::init<DefaultTerminalLogger>();
 
-	// Setup base HeapArena
+	// Setup base HeapArenad
 	HeapArena mainArena{ 1048 * 1048 * 128 };
 
 	// Create Window Handle
@@ -75,7 +75,8 @@ int __stdcall main(HINSTANCE hInstance, HINSTANCE instance, LPSTR str, int nCmdS
 	LOGLINE(LogType::Info, LogMod::Rendering, "Compiling Shaders...\n");
 	ErrorCode EC = engine->getShaderManager()->recompileShaderCache();
 	if (EC == ErrorCode::OK)
-		LOG(LogType::Success, "\t\t\t\t\tDone. Compiled " + std::to_string(engine->getShaderManager()->totalShaders()) + " shaders.\n");
+		LOG(LogType::Success,
+			"\t\t\t\t\tDone. Compiled " + std::to_string(engine->getShaderManager()->totalShaders()) + " shaders.\n");
 	else {
 		LOG(LogType::Error, "Failed. Code: " + std::to_string(static_cast<uint8_t>(EC)));
 		return (int)EC;
@@ -95,6 +96,10 @@ int __stdcall main(HINSTANCE hInstance, HINSTANCE instance, LPSTR str, int nCmdS
 	auto* vs = engine->getShaderManager()->getShader("SpriteBatchVS");
 	auto* ps = engine->getShaderManager()->getShader("SpriteBatchPS");
 	auto spriteMat = Material{"SpriteMaterialUnlit", *vs, *ps };
+
+
+	std::cout << "\n";
+	spriteMat.debugPrintMaterialInfo();
 
 	// Callbacks -
 	// Window -> Vulkan cb's

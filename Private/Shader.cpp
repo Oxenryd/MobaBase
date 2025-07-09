@@ -55,9 +55,13 @@ std::tuple<
         ShaderInput::Attribute attrib{};
         attrib.location = var->location;
         //attrib.spvTypeDesc = *var->type_description;
-        attrib.type = parseReflectedTypeDesc(var->type_description);
+        attrib.type = parseReflectedTypeDesc(var->type_description, nullptr);
         ia.attributes.push_back(attrib);
     }
+    spvReflectEnumerateOutputVariables(&module, &count, nullptr);
+    std::vector<SpvReflectInterfaceVariable*> outputVars(count);
+    spvReflectEnumerateOutputVariables(&module, &count, outputVars.data());
+
 
     std::vector<ShaderBinding> params;
     for (auto* b : bindings) {
@@ -69,7 +73,7 @@ std::tuple<
         p.binding = b->binding;
         p.stageFlags = stage;
         p.count = b->count;
-        p.spvTypeDesc = b->type_description ? *b->type_description : SpvReflectTypeDescription{};
+        p.spvTypeDesc = b->type_description ? SpvReflectTypeDescription{ *b->type_description } : SpvReflectTypeDescription{};
         p.descriptorType = mapReflectToVkDescriptorType(b->descriptor_type);
         p.offset = 0;
         
@@ -115,8 +119,13 @@ ShaderBinding Shader::parseMember(
     VkDescriptorType descriptorType)
 {
     ShaderBinding param;
-    param.name = member.name ? member.name : "";
-    param.spvTypeDesc = member.type_description ? *member.type_description : SpvReflectTypeDescription{};
+    param.spvTypeDesc = member.type_description ? SpvReflectTypeDescription{ *member.type_description } : SpvReflectTypeDescription{};
+    param.name = member.name
+        ? member.name
+        : param.spvTypeDesc.op == SpvOpTypeRuntimeArray || param.spvTypeDesc.op == SpvOpTypeArray
+        ? param.spvTypeDesc.type_name
+        : "";
+    
     param.set = set;
     param.binding = binding;
     param.stageFlags = stageFlags;
