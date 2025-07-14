@@ -56,6 +56,19 @@ struct SpritebatchVSOutput
 [[vk::binding(0, 0)]] SamplerState smp : register(s0);
 
 
+
+// DEBUG DEBUG
+struct PushData
+{
+    float4 color;
+    int2 uvOffset;
+};
+
+[[vk::push_constant]]
+PushData pushData;
+
+
+
 // base
 //struct VSInput
 //{

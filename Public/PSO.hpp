@@ -66,7 +66,7 @@ public:
 	RenderPassDesc renderPassDesc;
 	PipelineDesc pipelineDesc;
 	PipelineLayoutDesc layout;
-	IShaderProvider* const shaderProvider;
+	IShaderProvider* const shaderProvider = nullptr;
 
 	Shader* const getVS() {
 		if (!vs.empty() || vs != "") {
@@ -240,56 +240,60 @@ public:
 	}
 
 
-	//using Set = uint32_t;
-	//static ErrorCode createFromMaterial(Material& material, PsoDesc& outPso) {
-	//	std::string name = material.name() + "_PSO";
-	//	PsoDesc pso{ name, provider };
+	using Set = uint32_t;
+	static ErrorCode createFromMaterial(IShaderProvider& provider, Material& material, PsoDesc& pso) {
+		std::string name = material.name() + "_PSO";
+	
+		pso.name = name;
 
-	//	Shader* vertex = provider.getShader(material.vShaderName);
-	//	Shader* fragment = provider.getShader(material.pShaderName);
+		Shader* vertex = provider.getShader(material.vShaderName);
+		Shader* fragment = provider.getShader(material.pShaderName);
 
-	//	if (!vertex || !fragment)
-	//		return ErrorCode::MATERIAL_COULD_NOT_FETCH_SHADERS;
+		if (!vertex || !fragment)
+			return ErrorCode::MATERIAL_COULD_NOT_FETCH_SHADERS;
 
-	//	pso.vs = vertex->name();
-	//	pso.ps = fragment->name();
+		pso.vs = vertex->name();
+		pso.ps = fragment->name();
 
-	//	std::map<Set, std::vector<VkDescriptorSetLayoutBinding>> setBindings;	
-	//	for (auto& pair : material.params) {
-	//		auto& param = pair.second;
-	//		VkDescriptorSetLayoutBinding binding{};
-	//		binding.binding = param.bindingIndex;
-	//		binding.descriptorType = param.descriptorType;
-	//		binding.descriptorCount = param.state.count;
-	//		binding.stageFlags = (param.state.stage == static_cast<uint32_t>(MatParamStage::Both))
-	//			? (VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT)
-	//			: (param.state.stage == static_cast<uint32_t>(MatParamStage::Vertex)
-	//			   ? VK_SHADER_STAGE_VERTEX_BIT
-	//			   : VK_SHADER_STAGE_FRAGMENT_BIT);
-	//		binding.pImmutableSamplers = nullptr;
+		std::map<Set, std::vector<VkDescriptorSetLayoutBinding>> setBindings;	
+		for (auto& param : material.params) {
+			
+			VkDescriptorSetLayoutBinding binding{};
+			binding.binding = param.bindingIndex;
+			
+			binding.descriptorType = param.descriptorType;
+			binding.descriptorCount = param.count;
+			binding.stageFlags = (param.stage == MatParamStage::Both)
+				? (VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT)
+				: (param.stage == MatParamStage::Vertex)
+				   ? VK_SHADER_STAGE_VERTEX_BIT
+				   : VK_SHADER_STAGE_FRAGMENT_BIT;
+			binding.pImmutableSamplers = nullptr;
 
-	//		setBindings[param.bindingIndex].push_back(binding); // assumes one set only for now
-	//	}
+			setBindings[param.bindingIndex].push_back(binding); // assumes one set only for now
+		}
 
-	//	std::vector<VkDescriptorSetLayout> descriptorSetLayouts;
-	//	for (auto& [set, bindings] : setBindings) {
-	//		VkDescriptorSetLayoutCreateInfo layoutInfo{};
-	//		layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-	//		layoutInfo.bindingCount = bindings.size();
-	//		layoutInfo.pBindings = bindings.data();
-	//		pso.descriptorSetLayoutDesc.setLayoutCreateInfos.push_back(layoutInfo);
-	//	}
+		std::vector<VkDescriptorSetLayout> descriptorSetLayouts;
+		for (auto& [set, bindings] : setBindings) {
+			VkDescriptorSetLayoutCreateInfo layoutInfo{};
+			layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+			layoutInfo.bindingCount = bindings.size();
+			layoutInfo.pBindings = bindings.data();
+			pso.descriptorSetLayoutDesc.setLayoutCreateInfos.push_back(layoutInfo);
+		}
 
-	//	std::vector<VkPushConstantRange> pushConstantRanges;
-	//	for (const auto& pc : vertex->pushConstants) {
-	//		pushConstantRanges.push_back(pc.toVkRange());
-	//	}
-	//	for (const auto& pc : fragment->pushConstants) {
-	//		pushConstantRanges.push_back(pc.toVkRange());
-	//	}
+		std::vector<VkPushConstantRange> pushConstantRanges;
+		for (const auto& pc : vertex->pushConstants) {
+			pushConstantRanges.push_back(pc.toVkRange());
+		}
+		for (const auto& pc : fragment->pushConstants) {
+			pushConstantRanges.push_back(pc.toVkRange());
+		}
 
-	//	return ErrorCode::OK;
-	//}
+		
+
+		return ErrorCode::OK;
+	}
 
 };
 

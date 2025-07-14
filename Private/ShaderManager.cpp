@@ -209,6 +209,7 @@ ErrorCode DxcWin32VulkanShaderCompiler::compile(Shader& shader) {
 	cmd << " -spirv -fspv-target-env=vulkan1.3";
 	cmd << " -T " << target;
 	cmd << " -E main";
+	cmd << " -fspv-reflect";
 	cmd << " -I " << shaderDir.string();
 	cmd << " -Fo " << outPath.string();
 	//cmd << " -D USE_VULKAN";

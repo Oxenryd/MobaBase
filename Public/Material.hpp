@@ -10,13 +10,14 @@
 #include "ErrorCodes.hpp"
 #include "MaterialParams.h"
 
-#ifdef USE_VULKAN
-	#ifndef VULKAN_CORE_H_
-		#include <vulkan/vulkan_core.h>
-	#endif
-#endif
+//#ifdef USE_VULKAN
+//	#ifndef VULKAN_CORE_H_
+//		#include <vulkan/vulkan_core.h>
+//	#endif
+//#endif
 
 #include "Texture.hpp"
+#include "MaterialStates.h"
 
 class Shader;
 class ShaderManager;
@@ -47,6 +48,10 @@ public:
 	std::vector<MatParam> params;
 	std::string vShaderName;
 	std::string pShaderName;
+	BlendMode blendMode = BlendMode::Premultiplied;
+	DepthMode depthMode = DepthMode::None;
+	RasterMode rasterMode = RasterMode::RasterDefault;
+	MultiSampling msaaMode = MultiSampling::MSAA_None;
 
 	Material() = default;
 	//Material(const json& j) { fromJson(j); }

@@ -26,23 +26,191 @@
 
 #include "GraphicContext.h"
 #include "PSO.hpp"
+#include "MaterialStates.h"
 
 #define Vk_FAILED(ec) ((ec) != VK_SUCCESS)
 #define Vk_CHECK(ecVar, expr) (ecVar) = (expr); if (Vk_FAILED(ecVar)) return (ecVar);
 
 
-struct PipelineResources
+//struct PipelineDesc
+//{
+//	PipelineDesc() = delete;
+//	~PipelineDesc() {}
+//	PipelineDesc(const std::string& psoName) : psoName{psoName} {}
+//	std::string psoName;
+//	VkPipeline pipeline;
+//	VkRenderPass renderPass;
+//	VkPipelineLayout layout;
+//	std::vector<VkDescriptorSetLayout> setLayouts;
+//	std::vector<BufferBindingDesc> bufferBindings;
+//	std::vector<VkBuffer> globalUBOs;
+//
+//	// Vertex input
+//	std::vector<VkVertexInputBindingDescription> vertexBindings;
+//	std::vector<VkVertexInputAttributeDescription> vertexAttributes;
+//
+//	// Shaders
+//	VkPipelineShaderStageCreateInfo vsStage{};
+//	VkPipelineShaderStageCreateInfo psStage{};
+//
+//	// Fixed function pipeline state
+//	VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
+//	VkPipelineRasterizationStateCreateInfo rasterizer{};
+//	VkPipelineViewportStateCreateInfo viewportState{};
+//	VkPipelineMultisampleStateCreateInfo multisampling{};
+//	VkPipelineDepthStencilStateCreateInfo depthStencil{};
+//	VkPipelineColorBlendStateCreateInfo colorBlending{};
+//	std::vector<VkPipelineColorBlendAttachmentState> colorBlendAttachments;
+//};
+
+
+
+class VkBlendModes
 {
-	PipelineResources() = delete;
-	~PipelineResources() {}
-	PipelineResources(const std::string& psoName) : psoName{psoName} {}
-	std::string psoName;
-	VkPipeline pipeline;
-	VkRenderPass renderPass;
-	VkPipelineLayout layout;
-	std::vector<VkDescriptorSetLayout> setLayouts;
-	std::vector<BufferBindingDesc> bufferBindings;
-	std::vector<VkBuffer> globalUBOs;
+public:
+	static inline const VkPipelineColorBlendAttachmentState BlendOpaque = {
+	.blendEnable = VK_FALSE,
+	.srcColorBlendFactor = VK_BLEND_FACTOR_ONE,
+	.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO,
+	.colorBlendOp = VK_BLEND_OP_ADD,
+	.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
+	.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO,
+	.alphaBlendOp = VK_BLEND_OP_ADD,
+	.colorWriteMask = VK_COLOR_COMPONENT_R_BIT |
+						   VK_COLOR_COMPONENT_G_BIT |
+						   VK_COLOR_COMPONENT_B_BIT |
+						   VK_COLOR_COMPONENT_A_BIT,
+	};
+
+	static inline const VkPipelineColorBlendAttachmentState BlendAlpha = {
+	.blendEnable = VK_TRUE,
+	.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA,
+	.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+	.colorBlendOp = VK_BLEND_OP_ADD,
+	.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
+	.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+	.alphaBlendOp = VK_BLEND_OP_ADD,
+	.colorWriteMask = VK_COLOR_COMPONENT_R_BIT |
+						   VK_COLOR_COMPONENT_G_BIT |
+						   VK_COLOR_COMPONENT_B_BIT |
+						   VK_COLOR_COMPONENT_A_BIT,
+	};
+
+	static inline const VkPipelineColorBlendAttachmentState BlendPremultiplied = {
+	.blendEnable = VK_TRUE,
+	.srcColorBlendFactor = VK_BLEND_FACTOR_ONE,
+	.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+	.colorBlendOp = VK_BLEND_OP_ADD,
+	.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
+	.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+	.alphaBlendOp = VK_BLEND_OP_ADD,
+	.colorWriteMask = VK_COLOR_COMPONENT_R_BIT |
+						   VK_COLOR_COMPONENT_G_BIT |
+						   VK_COLOR_COMPONENT_B_BIT |
+						   VK_COLOR_COMPONENT_A_BIT,
+	};
+
+	static inline const VkPipelineColorBlendAttachmentState BlendAdditive = {
+	.blendEnable = VK_TRUE,
+	.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA,
+	.dstColorBlendFactor = VK_BLEND_FACTOR_ONE,
+	.colorBlendOp = VK_BLEND_OP_ADD,
+	.srcAlphaBlendFactor = VK_BLEND_FACTOR_ZERO,
+	.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
+	.alphaBlendOp = VK_BLEND_OP_ADD,
+	.colorWriteMask = VK_COLOR_COMPONENT_R_BIT |
+						   VK_COLOR_COMPONENT_G_BIT |
+						   VK_COLOR_COMPONENT_B_BIT |
+						   VK_COLOR_COMPONENT_A_BIT,
+	};
+};
+
+static inline VkPipelineColorBlendAttachmentState GetBlendPreset(BlendMode mode) {
+	switch (mode) {
+		case BlendMode::Opaque:         return VkBlendModes::BlendOpaque;
+		case BlendMode::Alpha:          return VkBlendModes::BlendAlpha;
+		case BlendMode::Premultiplied:  return VkBlendModes::BlendPremultiplied;
+		case BlendMode::Additive:       return VkBlendModes::BlendAdditive;
+		default: return VkBlendModes::BlendOpaque;
+	}
+}
+
+class VkDepthStates
+{
+	static inline const VkPipelineDepthStencilStateCreateInfo DepthDefault = {
+	.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+	.depthTestEnable = VK_TRUE,
+	.depthWriteEnable = VK_TRUE,
+	.depthCompareOp = VK_COMPARE_OP_LESS,
+	.depthBoundsTestEnable = VK_FALSE,
+	.stencilTestEnable = VK_FALSE,
+	.front = {}, // defaults
+	.back = {}, // defaults
+	.minDepthBounds = 0.0f,
+	.maxDepthBounds = 1.0f,
+	};
+
+	static inline const VkPipelineDepthStencilStateCreateInfo DepthTestNoWrite = {
+	.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+	.depthTestEnable = VK_TRUE,
+	.depthWriteEnable = VK_FALSE,
+	.depthCompareOp = VK_COMPARE_OP_LESS
+	};
+
+	static inline const VkPipelineDepthStencilStateCreateInfo DepthNone = {
+	.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+	.depthTestEnable = VK_FALSE,
+	.depthWriteEnable = VK_FALSE,
+	.depthCompareOp = VK_COMPARE_OP_ALWAYS,
+	.depthBoundsTestEnable = VK_FALSE,
+	.stencilTestEnable = VK_FALSE,
+	};
+};
+
+class VkRasterStates
+{
+	static inline const VkPipelineRasterizationStateCreateInfo RasterDefault = {
+	.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+	.depthClampEnable = VK_FALSE,
+	.rasterizerDiscardEnable = VK_FALSE,
+	.polygonMode = VK_POLYGON_MODE_FILL,
+	.cullMode = VK_CULL_MODE_BACK_BIT,
+	.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
+	.depthBiasEnable = VK_FALSE,
+	.depthBiasConstantFactor = 0.0f,
+	.depthBiasClamp = 0.0f,
+	.depthBiasSlopeFactor = 0.0f,
+	.lineWidth = 1.0f,
+	};
+
+	static inline const VkPipelineRasterizationStateCreateInfo RasterWireframe = {
+	.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+	.polygonMode = VK_POLYGON_MODE_LINE,
+	.cullMode = VK_CULL_MODE_NONE,
+	.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
+	.lineWidth = 1.0f
+	};
+
+	static inline const VkPipelineRasterizationStateCreateInfo Raster_NoCull = {
+	.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+	.polygonMode = VK_POLYGON_MODE_FILL,
+	.cullMode = VK_CULL_MODE_NONE,
+	.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
+	.lineWidth = 1.0f
+	};
+};
+
+class VkMultiSamplingStates
+{
+	static inline const VkPipelineMultisampleStateCreateInfo MSAA_1x = {
+	.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+	.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT
+	};
+
+	static inline const VkPipelineMultisampleStateCreateInfo MSAA_4x = {
+	.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+	.rasterizationSamples = VK_SAMPLE_COUNT_4_BIT
+	};
 };
 
 class VulkanContext : public GraphicContext
@@ -148,8 +316,9 @@ public:
 	VkQueue m_graphicsQueue = nullptr;
 	uint32_t m_graphicsQueueFamilyIndex = static_cast<uint32_t>(-1);
 
-	std::unordered_map<std::string, PipelineResources> m_namedPipelines;
+	std::unordered_map<std::string, PipelineDesc> m_namedPipelines;
 
+	BlendMode currentBlendMode = BlendMode::Opaque;
 
 	uint32_t renderPassIndex = 0;
 	bool isClean = true;
@@ -630,6 +799,7 @@ public:
 		LOG(LogType::Success, "Done.");
 		return VK_SUCCESS;
 	}
+
 
 	inline VkResult createGraphicsPipeline(PsoDesc& pso, size_t index = static_cast<size_t>(-1)) {
 		LOGLINE(LogType::Info, LogMod::Vulkan, "Creating Pipeline... ");

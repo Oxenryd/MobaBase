@@ -56,6 +56,8 @@ enum class TypeBase : uint8_t
 	Texture2DArray,
 	RuntimeArray,
 	Sampler,
+	PushConstStruct,
+	PushConst,
 	Other
 };
 
@@ -162,6 +164,8 @@ using TypeBaseList = std::tuple<
 	Texture2D*,
 	void,
 	void,
+	void,
+	void,
 	void
 >;
 
@@ -262,6 +266,8 @@ inline static constexpr const char* TypeBaseToString(TypeBase base) {
 		case TypeBase::Other:			return "Other";
 		case TypeBase::RuntimeArray:	return "RuntimeArray";
 		case TypeBase::Sampler:			return "Sampler";
+		case TypeBase::PushConstStruct:	return "PushConstStruct";
+		case TypeBase::PushConst:		return "PushConst";
 		default:						return "Invalid";
 	}
 }
@@ -309,6 +315,8 @@ inline constexpr TypeBase stringToTypeBase(const std::string& s) {
 	if (s == "Other")			return TypeBase::Other;
 	if (s == "RuntimeArray")	return TypeBase::RuntimeArray;
 	if (s == "Sampler")			return TypeBase::Sampler;
+	if (s == "PushConst")		return TypeBase::PushConst;
+	if (s == "PushConstStruct") return TypeBase::PushConstStruct;
 	throw std::invalid_argument("Invalid TypeBase: " + s);
 }
 

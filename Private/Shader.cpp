@@ -18,7 +18,8 @@ ErrorCode Shader::reflect() {
         auto result = reflectShader(bytecode);
         parameters = std::get<0>(result);
         pushConstants = std::get<1>(result);
-        iaInput = std::get<2>(result);
+        input = std::get<2>(result);
+        output = std::get<3>(result);
     } catch (std::exception& e) {
         return ErrorCode::SHADER_REFLECTION_ERROR;
     }
@@ -26,7 +27,7 @@ ErrorCode Shader::reflect() {
 }
 
 std::tuple<
-    std::vector<ShaderBinding>, std::vector<ShaderPushConstant>, ShaderInput
+    std::vector<ShaderBinding>, std::vector<ShaderPushConstant>, ShaderIO, ShaderIO
 > Shader::reflectShader(const std::vector<uint32_t>& spirv)
 {
     SpvReflectShaderModule module;
@@ -50,17 +51,41 @@ std::tuple<
     spvReflectEnumerateInputVariables(&module, &count, nullptr);
     std::vector<SpvReflectInterfaceVariable*> inputVars(count);
     spvReflectEnumerateInputVariables(&module, &count, inputVars.data());
-    ShaderInput ia;
+    ShaderIO shaderInput;
     for (auto& var : inputVars) {
-        ShaderInput::Attribute attrib{};
+        ShaderIO::Attribute attrib{};
         attrib.location = var->location;
-        //attrib.spvTypeDesc = *var->type_description;
         attrib.type = parseReflectedTypeDesc(var->type_description, nullptr);
-        ia.attributes.push_back(attrib);
+
+        auto semNameIndex = ShaderManager::getInstance()->getParamNameIndex(var->semantic);
+        if (semNameIndex == SIZE_T_INVALID) {
+            attrib.semanticNameIndex = ShaderManager::getInstance()->registerParamName(var->semantic);
+        } else {
+            attrib.semanticNameIndex = semNameIndex;
+        }
+
+        shaderInput.attributes.push_back(attrib);
     }
+
     spvReflectEnumerateOutputVariables(&module, &count, nullptr);
     std::vector<SpvReflectInterfaceVariable*> outputVars(count);
     spvReflectEnumerateOutputVariables(&module, &count, outputVars.data());
+    ShaderIO shaderOutput;
+    for (auto& var : outputVars) {
+        ShaderIO::Attribute attrib{};
+        attrib.location = var->location;
+        attrib.type = parseReflectedTypeDesc(var->type_description, nullptr);
+
+        auto semNameIndex = ShaderManager::getInstance()->getParamNameIndex(var->semantic);
+        if (semNameIndex == SIZE_T_INVALID) {
+            attrib.semanticNameIndex = ShaderManager::getInstance()->registerParamName(var->semantic);
+        } else {
+            attrib.semanticNameIndex = semNameIndex;
+        }
+
+        shaderOutput.attributes.push_back(attrib);
+    }
+
 
 
     std::vector<ShaderBinding> params;
@@ -91,23 +116,53 @@ std::tuple<
         if (!pc) continue;
 
         ShaderPushConstant pcParam;
-        pcParam.name = pc->name;
-        pcParam.offset = pc->offset;
-        pcParam.size = pc->size;
-        pcParam.stageFlags = stage;
-        pcParam.spvTypeDesc = pc->type_description ? *pc->type_description : SpvReflectTypeDescription{};
-
-        for (uint32_t i = 0; i < pc->member_count; ++i) {
-            pcParam.members.push_back(
-                parseMember(pc->members[i], 0, 0xFFFFFFFF, stage, VK_DESCRIPTOR_TYPE_MAX_ENUM)
-            );
+        auto nameIndex = ShaderManager::getInstance()->getParamNameIndex(pc->name);
+        if (nameIndex == SIZE_T_INVALID) {
+            pcParam.base.nameIndex = ShaderManager::getInstance()->registerParamName(pc->name);
+        } else {
+            pcParam.base.nameIndex = nameIndex;
         }
 
-        consts.push_back(pcParam);
+        if (pc->member_count == 0) { // single variable
+
+            pcParam.base.size = pc->padded_size;
+            pcParam.base.offset = pc->offset;
+            pcParam.base.type = TypeBase::PushConst;
+            ShaderPushConstant::Attribute attrib{};
+            attrib.offset = pc->offset;
+            attrib.size = pc->padded_size;
+            attrib.type = parseReflectedTypeDesc(pc->type_description, nullptr);
+            attrib.nameIndex = pcParam.base.nameIndex;
+            pcParam.members.push_back(attrib);
+            consts.push_back(pcParam);
+        } else {
+            pcParam.base.offset = pc->offset;
+            pcParam.base.size = pc->size;
+            pcParam.stageFlags = stage;
+            pcParam.base.type = TypeBase::PushConstStruct;
+
+            for (uint32_t i = 0; i < pc->member_count; ++i) {
+                auto& member = pc->members[i];
+                ShaderPushConstant::Attribute attrib{};
+                attrib.offset = member.offset;
+                attrib.size = member.padded_size;
+                attrib.type = parseReflectedTypeDesc(member.type_description, nullptr);
+
+                auto nameIndex = ShaderManager::getInstance()->getParamNameIndex(member.name);
+                if (nameIndex == SIZE_T_INVALID) {
+                    attrib.nameIndex = ShaderManager::getInstance()->registerParamName(member.name);
+                } else {
+                    attrib.nameIndex = nameIndex;
+                }
+                pcParam.members.push_back(attrib);
+            }
+
+            consts.push_back(pcParam);
+        }
     }
 
     spvReflectDestroyShaderModule(&module);
-    return std::make_tuple( params, consts, ia );
+    return std::make_tuple( params, consts, shaderInput, shaderOutput );
 }
 
 
@@ -141,4 +196,14 @@ ShaderBinding Shader::parseMember(
     }
     
     return param;
+}
+
+
+std::string& ShaderIO::Attribute::semantic() const {
+    return ShaderManager::getInstance()->getParamName(semanticNameIndex);
+}
+
+
+std::string& ShaderPushConstant::Attribute::name() const {
+    return ShaderManager::getInstance()->getParamName(nameIndex);
 }

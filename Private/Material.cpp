@@ -41,16 +41,13 @@ void Material::addShaderParams(
 {
 	for (ShaderBinding& param : s) {
 		MatParam matParam;
-		//matParam.parentName = parentName;
-		//matParam.name = param.name;
 		matParam.type = Shader::parseReflectedTypeDesc(&param.spvTypeDesc, &param.descriptorType);
 		matParam.stage = stage;
+		matParam.descriptorType = param.descriptorType;
 		matParam.count = param.count;
 		matParam.bindingIndex = param.binding;
 		matParam.setIndex = param.set;
-		//matParam.descriptorType = param.descriptorType;
 		matParam.offset = param.offset;
-		//matParam.value.asPtr = nullptr;
 
 		std::string name;
 		auto nameIndex = ShaderManager::getInstance()->getParamNameIndex(param.name);
@@ -76,7 +73,6 @@ void Material::addShaderParams(
 
 		addShaderParams(matParam.members, param.members, stage, name);
 		
-		//paramsMap.insert({ matParam.name, params.size()});
 		params.push_back(matParam);
 	}
 }
@@ -87,45 +83,49 @@ void Material::initFromShaders(const std::string& newName, Shader& vertex, Shade
 
 	paramsMap.clear();
 
-	// Merge descriptors from both shaders
-	//void* addShaderParams = [](std::vector<MatParam> params, const std::vector<ShaderParameter>& s, MatParamStage stage) {
-	//	for (const auto& param : s) {
-	//		MatParam matParam;
-	//		matParam.state.type = Shader::parseReflectedTypeDesc(&param.spvTypeDesc);
-	//		matParam.state.stage = static_cast<uint32_t>(stage);
-	//		matParam.state.count = param.count;
-	//		matParam.bindingIndex = param.binding;
-	//		matParam.descriptorType = param.descriptorType;
-	//		matParam.offset = param.offset;
-	//		matParam.value.asPtr = nullptr;
-	//		addShaderParams(param.members, stage);
-	//		params.push_back(std::move(matParam));
-	//	}
-	//};
-
-	//std::map<std::string, size_t> vsParamsMap;
-	std::vector<MatParam> vsParams;
-	//std::map<std::string, size_t> psParamsMap;
-	std::vector<MatParam> psParams;
+	std::vector<MatParam> vsParams;	
 	addShaderParams(vsParams, vertex.parameters, MatParamStage::Vertex, "");
+	for (auto& pConst : vertex.pushConstants) {
+		MatParam pconstParam{};
+		pconstParam.parentNameIndex = UINT32_INVALID;
+		pconstParam.type = pConst.base.type;
+		pconstParam.stage = MatParamStage::Vertex;
+		pconstParam.offset = pConst.base.offset;
+		pconstParam.nameIndex = pConst.base.nameIndex;
+		for (auto& member : pConst.members) {
+			MatParam pconstParamMember{};
+			pconstParamMember.parentNameIndex = pconstParam.nameIndex;
+			pconstParamMember.type = member.type;
+			pconstParamMember.stage = MatParamStage::Vertex;
+			pconstParamMember.offset = member.offset;
+			pconstParamMember.nameIndex = member.nameIndex;
+			pconstParam.members.push_back(pconstParamMember);
+		}
+		vsParams.push_back(pconstParam);
+	}
+
+	std::vector<MatParam> psParams;
 	addShaderParams(psParams, fragment.parameters, MatParamStage::Fragment, "");
+	for (auto& pConst : fragment.pushConstants) {
+		MatParam pconstParam{};
+		pconstParam.parentNameIndex = UINT32_INVALID;
+		pconstParam.type = pConst.base.type;
+		pconstParam.stage = MatParamStage::Fragment;
+		pconstParam.offset = pConst.base.offset;
+		pconstParam.nameIndex = pConst.base.nameIndex;
+		for (auto& member : pConst.members) {
+			MatParam pconstParamMember{};
+			pconstParamMember.parentNameIndex = pconstParam.nameIndex;
+			pconstParamMember.type = member.type;
+			pconstParamMember.stage = MatParamStage::Fragment;
+			pconstParamMember.offset = member.offset;
+			pconstParamMember.nameIndex = member.nameIndex;
+			pconstParam.members.push_back(pconstParamMember);
+		}
+		psParams.push_back(pconstParam);
+	}
 
-	//for (auto& vsMatParam : vsParamsMap) {
-	//	auto it = psParamsMap.find(vsMatParam.first);
-	//	if (it != psParamsMap.end()) {
-	//		if (it->second.parentName == vsMatParam.second.parentName) {
-	//			vsMatParam.second.stage = MatParamStage::Both;
-	//			it->second.state.stage = static_cast<uint32_t>(MatParamStage::Both);
-	//			psParamsMap.erase(it->first);
-	//		}
-	//	}
-	//}
-	//for (auto& vsMatParam : vsParamsMap) 
-	//	paramsMap.insert({vsMatParam.first, vsMatParam.second});
-	//for (auto& psMatParam : psParamsMap)
-	//	paramsMap.insert({ psMatParam.first, psMatParam.second });
 
-	
 	std::vector<MatParam> fromPs;
 	for (auto& psParam : psParams) {
 
@@ -145,6 +145,10 @@ void Material::initFromShaders(const std::string& newName, Shader& vertex, Shade
 		params.push_back(vsParam);
 	for (auto& psParam : fromPs)
 		params.push_back(psParam);
+
+	for (size_t i = 0; i < params.size(); ++i ) {
+		paramsMap.insert({ params[i].name(), i });
+	}
 
 	ShaderManager::getInstance()->registerMaterial(newName, *this);
 }
@@ -166,7 +170,29 @@ bool Material::operator==(const Material& other) {
 
 void Material::debugPrintMaterialInfo() {
 	size_t depth = 0;
-	std::cout << "Material Info * - " << name() << ":\n";
+	std::cout << "Material Info * - " << name() << ":\nVS Input:";
+	auto& vsAttribs = ShaderManager::getInstance()->getShader(vShaderName)->input.attributes;
+	for (auto& attrib : vsAttribs) {
+		std::cout << "\n\t" << std::format("[{}] ", attrib.location == 255 ? "" : std::to_string(attrib.location)) <<
+			TypeBaseToString(attrib.type) << " : " << attrib.semantic();
+	}
+	std::cout << "\n\nPS Input:";
+	auto& attribs = ShaderManager::getInstance()->getShader(pShaderName)->input.attributes;
+	for (auto& attrib : attribs) {
+		std::cout << "\n\t" << std::format("[{}] ", attrib.location == 255 ? "" : std::to_string(attrib.location)) <<
+			TypeBaseToString(attrib.type) << " : " << attrib.semantic();
+	}
+	std::cout << "\n\nPS Output:";
+	auto& outAttribs = ShaderManager::getInstance()->getShader(pShaderName)->output.attributes;
+	for (auto& attrib : outAttribs) {
+		std::cout << "\n\t" << std::format("[{}] ", attrib.location == 255 ? "" : std::to_string(attrib.location)) <<
+			TypeBaseToString(attrib.type) << " : " << attrib.semantic();
+	}
+
+
+	std::cout << "\n\n * Parameters:\n";
+
+
 	debugPrintParameters(++depth, params);
 }
 
@@ -190,6 +216,7 @@ void Material::debugPrintParameters(size_t& depth, std::vector<MatParam>& params
 		}
 
 		std::string binding = depth == 1 ? std::format("[{}, {}]", param.bindingIndex, param.setIndex) : "";
+		binding = param.type == TypeBase::PushConstStruct ? "" : binding;
 		std::cout << shaders << binding << pad << TypeBaseToString(param.type) << " " << param.name() << "\n";
 		debugPrintParameters(++depth, param.members);
 	}

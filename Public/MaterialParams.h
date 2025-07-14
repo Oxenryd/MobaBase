@@ -50,6 +50,10 @@ struct alignas(8) MatParam
 	TypeBase type;
 	uint32_t offset;
 
+#ifdef USE_VULKAN
+	VkDescriptorType descriptorType;
+#endif
+
 	friend bool operator==(const MatParam& lhs, const MatParam& rhs) {
 		return lhs.sharesData(rhs, true);
 	}

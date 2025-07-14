@@ -19,14 +19,15 @@
 
 
 
-struct ShaderInput
+struct ShaderIO
 {
     struct Attribute
     {
+        uint32_t semanticNameIndex;
         uint16_t offset;
         uint8_t location;
         TypeBase type;
-        //SpvReflectTypeDescription spvTypeDesc;
+        std::string& semantic() const;
     };
     std::vector<Attribute> attributes;
 };
@@ -46,18 +47,23 @@ struct ShaderBinding
 
 struct ShaderPushConstant
 {
-    std::string name;
-    SpvReflectTypeDescription spvTypeDesc;
-    uint32_t offset;
-    uint32_t size;
-    std::vector<ShaderBinding> members;
+    struct Attribute
+    {
+        uint32_t nameIndex;
+        uint16_t offset = UINT16_INVALID;
+        uint16_t size;
+        TypeBase type;
+        std::string& name() const;
+    };
+    Attribute base;
     VkShaderStageFlags stageFlags;
+    std::vector<Attribute> members;
 
     VkPushConstantRange toVkRange() const {
         return VkPushConstantRange{
             .stageFlags = stageFlags,
-            .offset = offset,
-            .size = size
+            .offset = base.offset,
+            .size = base.size
         };
     }
 };
@@ -83,7 +89,8 @@ public:
     std::filesystem::path sourcePath;
     std::filesystem::file_time_type lastSourceChangedTime;
     std::vector<uint32_t> bytecode;
-    ShaderInput iaInput;
+    ShaderIO input;
+    ShaderIO output;
     std::vector<ShaderBinding> parameters;
     std::vector<ShaderPushConstant> pushConstants;
 
@@ -94,7 +101,7 @@ public:
     ErrorCode reflect();
 
     static std::tuple<
-        std::vector<ShaderBinding>, std::vector<ShaderPushConstant>, ShaderInput
+        std::vector<ShaderBinding>, std::vector<ShaderPushConstant>, ShaderIO, ShaderIO
     > reflectShader(const std::vector<uint32_t>& spirv);
 
     //static std::vector<uint32_t> toUint32Vector(const std::vector<char>& charVec);
@@ -338,6 +345,28 @@ public:
         }
         return TypeBase::None;
     }
+
+    inline static VkDescriptorType parseMatParamToVkDescriptorType(const MatParam& param) {
+
+        switch (param.type) {
+
+            case TypeBase::Struct:
+            case TypeBase::StructBuffer: 
+                return VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+
+            case TypeBase::Texture2D:
+            case TypeBase::Texture2DArray:
+                return VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+
+            default:
+                return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        }
+
+        throw std::invalid_argument("MatParam param does not match any Vulkan Descriptor type.");
+    }
+
+
+
 
     static ShaderBinding parseMember(const SpvReflectBlockVariable& member,
                                        uint32_t set, uint32_t binding,

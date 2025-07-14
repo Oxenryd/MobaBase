@@ -101,6 +101,7 @@ add_executable (MobaBase
 	"Public/MaterialParams.h"
 	"Public/TypeReflection.hpp"
 	"Public/GlobalMacros.h"
+	"Public/MaterialStates.h"
 	
 	"Private/Engine.cpp"
 	"Private/Timer.cpp"
@@ -111,7 +112,7 @@ add_executable (MobaBase
 	"Private/Shader.cpp"
     "Private/Material.cpp"
 	"Private/MaterialParams.cpp"
- )
+  )
 
 
 
