@@ -11,10 +11,9 @@
 #include "Bits.hpp"
 #include "MaterialParams.h"
 
-#ifdef USE_VULKAN
-    #ifndef VULKAN_CORE_H_
-        #include <vulkan/vulkan_core.h>
-    #endif
+#ifndef VULKAN_CORE_H_
+    #include <vulkan/vulkan_core.h>
+#endif
 #include <spirv_reflect.h>
 
 
@@ -68,8 +67,6 @@ struct ShaderPushConstant
     }
 };
 
-#endif // USE_VULKAN
-
 class ShaderManager;
 class Shader
 {
@@ -105,7 +102,6 @@ public:
     > reflectShader(const std::vector<uint32_t>& spirv);
 
 
-#ifdef USE_VULKAN
     inline static VkDescriptorType mapReflectToVkDescriptorType(
         SpvReflectDescriptorType reflectType) {
         switch (reflectType) {
@@ -369,9 +365,6 @@ public:
                                        uint32_t set, uint32_t binding,
                                        VkShaderStageFlags stageFlags,
                                        VkDescriptorType descriptorType);
-
-
-#endif // USE_VULKAN
 
 
 };

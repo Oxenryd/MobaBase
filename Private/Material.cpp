@@ -159,6 +159,11 @@ void Material::initFromShaders(const std::string& newName, Shader& vertex, Shade
 
 	for (size_t i = 0; i < params.size(); ++i ) {
 		paramsMap.insert({ params[i].name(), i });
+		if (params[i].type == TypeBase::PushConstStruct) {
+			pushShaderFlags = MatParamStageToVkShaderStageFlagBits(params[i].stage);
+			pushConstantOffset = params[i].offset;
+			pushConstantSize = params[i].size;
+		}
 	}
 
 	ShaderManager::getInstance()->registerMaterial(newName, *this);

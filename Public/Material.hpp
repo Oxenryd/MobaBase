@@ -12,9 +12,11 @@
 
 #include "Texture.hpp"
 #include "MaterialStates.h"
+#include "ArenaAllocator.hpp"
 
 class Shader;
 class ShaderManager;
+class VulkanContext;
 struct ShaderBinding;
 struct PsoDesc;
 
@@ -45,6 +47,7 @@ private:
 	}
 
 public:
+	Arena* matArena = nullptr;
 	size_t arrayIndex = SIZE_T_INVALID;
 	std::map<std::string, size_t> paramsMap;
 	std::vector<MatParam> params;
@@ -61,6 +64,10 @@ public:
 	uint32_t pipelineId = UINT32_INVALID;
 	VkPipeline pipeline = nullptr;
 	VkPipelineLayout pipelineLayout = nullptr;
+	std::vector<VkDescriptorSet> sets;
+	uint32_t pushConstantOffset = 0;
+	uint32_t pushConstantSize = 0;
+	VkShaderStageFlags pushShaderFlags{};
 
 	Material() {
 		blendModes.push_back(BlendMode::Premultiplied);
@@ -92,6 +99,19 @@ public:
 
 	void debugPrintMaterialInfo();
 	void debugPrintParameters(size_t& depth, std::vector<MatParam>& params);
+};
+
+
+class MaterialInstance
+{
+private:
+	Arena* m_matArena;
+	uint32_t m_instanceIndex;
+
+public:
+	MaterialInstance(){}
+	Material* base;
+	void* const pushData() { return nullptr; }
 };
 
 #endif

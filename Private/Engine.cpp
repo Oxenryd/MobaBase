@@ -2,10 +2,6 @@
 #include "ShaderManager.h"
 #include <immintrin.h>
 
-#ifdef USE_VULKAN
-	#include "VulkanContext.hpp"
-#endif
-
 Engine::Engine(HeapArena& heap) :
 	m_targetUpdateDeltaTime{ FPS_400 },
 	m_updateDeltaTime{ 0.0 },
@@ -66,10 +62,10 @@ inline double Engine::_tickDt() {
 void Engine::_initShaderManager() {
 	LOGLINE_IND(LogType::Info, LogMod::Rendering, "Setting up ShaderManager... ", 1);
 #ifdef BUILD_WIN
-	#ifdef USE_VULKAN
-		DxcWin32VulkanShaderCompiler* w32VkCompiler = m_baseArena.construct<DxcWin32VulkanShaderCompiler>();
-		m_shaderMan = m_baseArena.construct<ShaderManager>(ShaderManager{ w32VkCompiler });
-	#endif
+
+	DxcWin32VulkanShaderCompiler* w32VkCompiler = m_baseArena.construct<DxcWin32VulkanShaderCompiler>();
+	m_shaderMan = m_baseArena.construct<ShaderManager>(ShaderManager{ w32VkCompiler });
+
 #endif
 
 #ifdef SHADER_HOTRELOAD
@@ -86,7 +82,7 @@ void Engine::_initShaderManager() {
 		LOGLINE_IND(LogType::Success, LogMod::Rendering, "ShaderManager initialized.", -1);
 }
 
-void Engine::start(GraphicContext* graphicContext, InputManager* inputPtr) {
+void Engine::start(VulkanContext* graphicContext, InputManager* inputPtr) {
 
 	if (m_status != EngineStatus::Stopped) {
 		LOGLINE(LogType::Warning, LogMod::Engine, "Tried to start while not stopped. Ignoring.");
@@ -178,11 +174,10 @@ inline void Engine::_run() {
 
 		
 
-#ifdef USE_VULKAN
 
 		VulkanContext::RenderContext drawCtx{};	
 		drawCtx.frameCount = m_totalFrames;
-#endif
+
 
 		m_options.graphicContext->draw(static_cast<void*>(&drawCtx));
 		m_framesSinceLastFpsRead++;

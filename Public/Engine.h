@@ -9,9 +9,9 @@
 	#endif
 #endif
 
-#ifdef USE_VULKAN
-	#include "VulkanContext.hpp"
-#endif
+
+#include "VulkanContext.hpp"
+
 
 #include <cstdint>
 #include <type_traits>
@@ -40,7 +40,7 @@ constexpr static const double	MAX_DELTA_TIME = 0.25;
 class ShaderManager;
 struct EngineSettings
 {
-	GraphicContext* graphicContext = nullptr;
+	VulkanContext* graphicContext = nullptr;
 	InputManager* inputManager = nullptr;
 	double deltaTimeJitterThreshold = DEFAULT_DELTATIME_JITTER_SETTING;
 };
@@ -115,7 +115,7 @@ public:
 	inline const double& deltaTime() { return m_updateDeltaTime; }
 	inline void setTargetUpdateDeltaTime(const double targetDt) { m_targetUpdateDeltaTime = targetDt; }
 	ShaderManager* getShaderManager() { return m_shaderMan; }
-	void start(GraphicContext* graphicContext, InputManager* inputPtr);
+	void start(VulkanContext* graphicContext, InputManager* inputPtr);
 	void stop();
 	inline const EngineStatus& getStatus() const { return m_status; }
 	inline SceneBase* const getScene(const size_t index) { return m_scenes[index]; }

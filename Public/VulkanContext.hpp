@@ -17,6 +17,7 @@
 #include <vulkan/vulkan_win32.h>
 #include <vulkan/vulkan.hpp>
 
+#include <thread>
 #include <vector>
 #include <array>
 #include <unordered_map>
@@ -24,7 +25,7 @@
 #include "WindowSurface.h"
 #include "Log.hpp"
 
-#include "GraphicContext.h"
+//#include "GraphicContext.h"
 #include "Material.hpp"
 #include "IShaderProvider.h"
 
@@ -275,9 +276,29 @@ static inline VkPipelineMultisampleStateCreateInfo GetMultisamplingPreset(MultiS
 	}
 }
 
-class VulkanContext : public GraphicContext
+enum class DrawType : uint8_t
+{
+	Mesh,
+	SkinnedMesh,
+	Billboard,
+	Sprite,
+	UI,
+	Custom
+};
+
+struct DrawCommand
+{
+	MaterialInstance* material;
+	void* drawContextPtr;
+	uint16_t priority;
+	DrawType type;
+};
+
+
+class VulkanContext
 {
 public:
+	std::vector<DrawCommand> drawCommands;
 	struct RenderContext
 	{
 		float clearColor[4] = {0.0f, 0.12f, 0.55f, 1.0f};
@@ -300,6 +321,9 @@ public:
 	};
 
 private:
+	bool m_pendingExit = false;
+	std::thread m_renderThread;
+
 	struct QueueFamilyIndices
 	{
 		std::optional<uint32_t> graphicsFamily;
@@ -370,7 +394,7 @@ private:
 #endif
 
 public:
-	
+	WindowSurface* const windowSurface;
 	VkInstance m_vkInstance = nullptr;
 	VkSurfaceKHR m_vkSurface = nullptr;
 	VkPhysicalDevice m_phyDevice = nullptr;
@@ -400,30 +424,24 @@ public:
 	VkExtent2D swapchainExtent;
 	VkDebugUtilsMessengerEXT debugMessenger = VK_NULL_HANDLE;
 
-	
-	//VkDescriptorSetLayout bindlessTextureSetLayout;
-	//VkPipelineLayout spritePipelineLayout;
-	//VkRenderPass spriteRenderPass;
-	//VkPipeline spritePipeline;
-
 	VkDescriptorPool descriptorPool = nullptr;
-	
-	std::unordered_map<size_t, size_t> matIndexPipelineIndexMap;
-	//std::vector<VkPipelineLayout> pipelineLayouts;
-	std::vector<VkRenderPass> rendPasses;
-	//std::vector<VkPipeline> pipelines;
-	std::vector<VkFramebuffer> swapChainFramebuffers;
 	VkCommandPool commandPool = nullptr;
+	
+	std::vector<VkRenderPass> rendPasses;
+	std::vector<VkFramebuffer> swapChainFramebuffers;	
 	std::array<FrameSync, VULKAN_MAX_FRAMES_IN_FLIGHT> frameSync;
 	std::vector<VkSemaphore> imageRenderDone;
 
-	virtual ~VulkanContext() {
+	void setPendingExit() { m_pendingExit = true; }
+	const bool& isPendingExit() const { return m_pendingExit; }
+
+	~VulkanContext() {
 		if (!isClean)
 			cleanUp();
 	}
 	VulkanContext() = delete;
 	inline VulkanContext(WindowSurface* const wndSurface) :
-		GraphicContext(wndSurface),
+		windowSurface{ wndSurface },
 		commandPool{nullptr},
 		m_phyDevice{nullptr},
 		frameSync{},
@@ -1296,7 +1314,48 @@ public:
 		return VK_SUCCESS;
 	}
 
-	inline void draw(void* rendCtx) override {
+
+
+	inline void bindMaterialParameters(
+		VkCommandBuffer cmd,
+		Material* material,
+		std::vector<VkDescriptorSet>& descriptorSetsBySetIndex, // Assumed to be pre-filled
+		const void* pushConstData = nullptr,
+		uint32_t pushConstSize = 0) {
+		assert(material && material->pipelineLayout);
+
+		// Bind descriptor sets (grouped by set index)
+		if (!descriptorSetsBySetIndex.empty()) {
+			vkCmdBindDescriptorSets(
+				cmd,
+				VK_PIPELINE_BIND_POINT_GRAPHICS,
+				material->pipelineLayout,
+				0, // First set
+				static_cast<uint32_t>(descriptorSetsBySetIndex.size()),
+				descriptorSetsBySetIndex.data(),
+				0, nullptr // Dynamic offsets (if used)
+			);
+		}
+
+		// Push constants (if any)
+		for (const MatParam& param : material->params) {
+			if (param.type == TypeBase::PushConst || param.type == TypeBase::PushConstStruct) {
+				if (pushConstData && pushConstSize > 0) {
+					vkCmdPushConstants(
+						cmd,
+						material->pipelineLayout,
+						MatParamStageToVkShaderStageFlagBits(param.stage),
+						param.offset,
+						static_cast<uint32_t>(param.size),
+						static_cast<const uint8_t*>(pushConstData) + param.offset
+					);
+				}
+			}
+		}
+	}
+
+
+	inline void draw(void* rendCtx) {
 
 		if (isPendingExit()) {
 			vkDeviceWaitIdle(m_vkDevice);
@@ -1367,11 +1426,63 @@ public:
 		scissor.extent = swapchainExtent;
 		vkCmdSetScissor(frame.cmdBuffer, 0, 1, &scissor);
 
+
+		// Sort the draw commands
+		std::sort(drawCommands.begin(), drawCommands.end(), [](const DrawCommand& a, const DrawCommand& b) {
+			return std::tie(a.priority, a.material->base->pipelineId) <
+				std::tie(b.priority, b.material->base->pipelineId);
+				  });
+
+		VkPipeline lastPipeline = VK_NULL_HANDLE;
+		Material* lastMaterial = nullptr;
+
+		// Check the draw commands and issue binds and draw calls
+		for (const auto& cmd : drawCommands) {
+			Material* matBase = cmd.material->base;
+
+			// Bind pipeline if changed
+			if (matBase->pipeline != lastPipeline) {
+				vkCmdBindPipeline(frame.cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, matBase->pipeline);
+				lastPipeline = matBase->pipeline;
+
+				// Bind descriptor sets
+				vkCmdBindDescriptorSets(
+					frame.cmdBuffer,
+					VK_PIPELINE_BIND_POINT_GRAPHICS,
+					matBase->pipelineLayout,
+					0, // firstSet
+					matBase->sets.size(),
+					matBase->sets.data(),
+					0, nullptr);
+
+				// Optional: Bind push constants
+				if (cmd.material->base->pushConstantSize > 0) {
+					vkCmdPushConstants(
+						frame.cmdBuffer,
+						matBase->pipelineLayout,
+						matBase->pushShaderFlags,
+						0,
+						matBase->pushConstantSize,
+						cmd.material->pushData());
+				}
+			}
+
+			// Issue draw command — use data from drawContextPtr or dispatch system based on DrawType
+			switch (cmd.type) {
+				case DrawType::Billboard:
+					// e.g. vkCmdDraw or vkCmdDrawIndexed based on the context
+					vkCmdDraw(frame.cmdBuffer, 3, 1, 0, 0);
+					break;
+
+					// Add other draw types here (Mesh, UI, etc.)
+			}
+		}
+
 		// Bind Pipeline
-		vkCmdBindPipeline(frame.cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines[ctx->pipelineIndex]);
+		//vkCmdBindPipeline(frame.cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines[ctx->pipelineIndex]);
 
 		// Draw
-		vkCmdDraw(frame.cmdBuffer, 3, 1, 0, 0);
+		//vkCmdDraw(frame.cmdBuffer, 3, 1, 0, 0);
 
 		// End Render Pass
 		vkCmdEndRenderPass(frame.cmdBuffer);
@@ -1421,7 +1532,7 @@ public:
 		currentFrame = (currentFrame + 1) % VULKAN_MAX_FRAMES_IN_FLIGHT;
 	}
 
-	inline void notifyViewResized(void* ctx, uint16_t width, uint16_t height) override {
+	inline void notifyViewResized(void* ctx, uint16_t width, uint16_t height) {
 		pendingResize = true;
 	}
 };

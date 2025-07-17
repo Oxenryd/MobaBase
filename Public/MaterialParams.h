@@ -17,6 +17,7 @@ using json = nlohmann::json;
 
 enum class MatParamStage : uint8_t
 {
+	None,
 	Vertex,
 	Fragment,
 	Both
@@ -37,6 +38,8 @@ inline static VkShaderStageFlagBits MatParamStageToVkShaderStageFlagBits(MatPara
 			return VK_SHADER_STAGE_FRAGMENT_BIT;
 		case MatParamStage::Both:
 			return (VkShaderStageFlagBits)(VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
+
+		default: return (VkShaderStageFlagBits)0;
 	}
 }
 
@@ -72,11 +75,7 @@ struct alignas(8) MatParam
 	TypeBase type;
 	MatParamArrayType arrayType = MatParamArrayType::None;
 	uint32_t offset;
-	
-
-#ifdef USE_VULKAN
 	VkDescriptorType descriptorType;
-#endif
 
 	friend bool operator==(const MatParam& lhs, const MatParam& rhs) {
 		return lhs.sharesData(rhs, true);
