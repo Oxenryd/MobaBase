@@ -109,7 +109,7 @@ Material* ShaderManager::getMaterial(const size_t& index) {
 }
 
 std::string& ShaderManager::getMaterialName(const Material& mat) {
-	return m_mat_IndexNameMap[mat.m_arrayIndex];
+	return m_mat_IndexNameMap[mat.arrayIndex];
 }
 
 //std::string& ShaderManager::getMaterialName(const size_t matIndex) {
@@ -181,7 +181,7 @@ ErrorCode ShaderManager::registerMaterial(const std::string& name, Material& mat
 
 	m_mat_NameIndexMap.insert({ name, m_materials.size() });
 	m_mat_IndexNameMap.insert({ m_materials.size() , name});
-	material.m_arrayIndex = m_materials.size();
+	material.arrayIndex = m_materials.size();
 	m_materials.push_back(material);
 
 	return ErrorCode::OK;
@@ -209,7 +209,7 @@ ErrorCode DxcWin32VulkanShaderCompiler::compile(Shader& shader) {
 	cmd << " -spirv -fspv-target-env=vulkan1.3";
 	cmd << " -T " << target;
 	cmd << " -E main";
-	cmd << " -O0"; // debug
+	//cmd << " -O0"; // debug
 	cmd << " -Zi";
 	cmd << " -I " << shaderDir.string();
 	cmd << " -Fo " << outPath.string();

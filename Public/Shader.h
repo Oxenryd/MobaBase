@@ -104,9 +104,6 @@ public:
         std::string, std::vector<ShaderBinding>, std::vector<ShaderPushConstant>, ShaderIO, ShaderIO
     > reflectShader(const std::vector<uint32_t>& spirv);
 
-    //static std::vector<uint32_t> toUint32Vector(const std::vector<char>& charVec);
-    //inline static std::pair<std::vector<ShaderParameter>, std::vector<ShaderPushConstant>> reflectShader(
-    //    const std::vector<char>& spirv) { return reflectShader(toUint32Vector(spirv)); }
 
 #ifdef USE_VULKAN
     inline static VkDescriptorType mapReflectToVkDescriptorType(

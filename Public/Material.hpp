@@ -10,12 +10,6 @@
 #include "ErrorCodes.hpp"
 #include "MaterialParams.h"
 
-//#ifdef USE_VULKAN
-//	#ifndef VULKAN_CORE_H_
-//		#include <vulkan/vulkan_core.h>
-//	#endif
-//#endif
-
 #include "Texture.hpp"
 #include "MaterialStates.h"
 
@@ -28,7 +22,8 @@ class Material
 {
 private:
 	friend ShaderManager;
-	size_t m_arrayIndex;
+	friend VulkanContext;
+	
 	//void fromJson(const json& j);
 	void addShaderParams(
 		std::vector<MatParam>& params,
@@ -43,7 +38,14 @@ private:
 		}
 	}
 
+	void init(VkPipeline& pipeline, VkPipelineLayout& layout, uint32_t id) {
+		this->pipeline = pipeline;
+		this->pipelineLayout = layout;
+		pipelineId = id;
+	}
+
 public:
+	size_t arrayIndex = SIZE_T_INVALID;
 	std::map<std::string, size_t> paramsMap;
 	std::vector<MatParam> params;
 	std::string vShaderName;
@@ -56,6 +58,9 @@ public:
 	DepthMode depthMode = DepthMode::None;
 	RasterMode rasterMode = RasterMode::RasterDefault;
 	MultiSamplingMode msaaMode = MultiSamplingMode::MSAA_None;
+	uint32_t pipelineId = UINT32_INVALID;
+	VkPipeline pipeline = nullptr;
+	VkPipelineLayout pipelineLayout = nullptr;
 
 	Material() {
 		blendModes.push_back(BlendMode::Premultiplied);
@@ -70,6 +75,12 @@ public:
 
 	std::string& name();
 	std::string& name() const;
+	bool isInitialized() const {
+		return
+			arrayIndex != SIZE_T_INVALID &&
+			pipelineId != UINT32_INVALID &&
+			pipeline && pipelineLayout;
+	}
 
 	//json toJson();
 	

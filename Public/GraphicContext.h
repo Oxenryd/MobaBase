@@ -22,6 +22,7 @@ struct DrawCommand
 {
 	Material* material;
 	void* drawContextPtr;
+	uint16_t priority;
 	DrawType type;
 };
 

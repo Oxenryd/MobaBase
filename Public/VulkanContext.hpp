@@ -383,6 +383,7 @@ public:
 	BlendMode currentBlendMode = BlendMode::Opaque;
 
 	uint32_t renderPassIndex = 0;
+	uint32_t pipelineId = 0;
 	bool isClean = true;
 	uint8_t currentFrame = 0;
 	bool pendingResize = false;
@@ -400,17 +401,17 @@ public:
 	VkDebugUtilsMessengerEXT debugMessenger = VK_NULL_HANDLE;
 
 	
-	VkDescriptorSetLayout bindlessTextureSetLayout;
-	VkPipelineLayout spritePipelineLayout;
-	VkRenderPass spriteRenderPass;
-	VkPipeline spritePipeline;
+	//VkDescriptorSetLayout bindlessTextureSetLayout;
+	//VkPipelineLayout spritePipelineLayout;
+	//VkRenderPass spriteRenderPass;
+	//VkPipeline spritePipeline;
 
-	VkDescriptorPool descriptorPool;
+	VkDescriptorPool descriptorPool = nullptr;
 	
 	std::unordered_map<size_t, size_t> matIndexPipelineIndexMap;
-	std::vector<VkPipelineLayout> pipelineLayouts;
+	//std::vector<VkPipelineLayout> pipelineLayouts;
 	std::vector<VkRenderPass> rendPasses;
-	std::vector<VkPipeline> pipelines;
+	//std::vector<VkPipeline> pipelines;
 	std::vector<VkFramebuffer> swapChainFramebuffers;
 	VkCommandPool commandPool = nullptr;
 	std::array<FrameSync, VULKAN_MAX_FRAMES_IN_FLIGHT> frameSync;
@@ -438,9 +439,9 @@ public:
 		presentMode{},
 		renderPassIndex{}
 	{
-		pipelineLayouts.reserve(2048);
+		//pipelineLayouts.reserve(2048);
 		rendPasses.reserve(2048);
-		pipelines.reserve(2048);
+		//pipelines.reserve(2048);
 	}
 
 	inline VkResult initVulkan(const VkPresentModeKHR mode, bool prioIGpu = false) {
@@ -854,9 +855,9 @@ public:
 	}
 
 
-	inline VkResult createPipelineFromMaterial(IShaderProvider* const provider, const Material& material)
+	inline VkResult createPipelineFromMaterial(IShaderProvider* const provider, Material& material)
 	{
-		LOGLINE(LogType::Info, LogMod::Vulkan, std::string{ "Creating Pipeline for " + material.name()});
+		LOGLINE(LogType::Info, LogMod::Vulkan, std::string{ "Creating Pipeline for " + material.name() + "... "});
 		VkResult vkResult{};
 
 		// Dynamic State
@@ -1083,6 +1084,9 @@ public:
 		Vk_CHECK(vkResult, vkCreateGraphicsPipelines(m_vkDevice, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &graphicsPipeline));
 
 
+		// Make Material ready
+		material.init(graphicsPipeline, pipelineLayout, pipelineId++);
+
 		LOG(LogType::Success, "Done.");
 		return VK_SUCCESS;
 	}
@@ -1246,13 +1250,13 @@ public:
 
 		vkDeviceWaitIdle(m_vkDevice);
 
-		for (auto& pipeline : pipelines)
-			vkDestroyPipeline(m_vkDevice, pipeline, nullptr);
-		pipelines.clear();
+		//for (auto& pipeline : pipelines)
+		//	vkDestroyPipeline(m_vkDevice, pipeline, nullptr);
+		//pipelines.clear();
 
-		for (auto& layout : pipelineLayouts)
-			vkDestroyPipelineLayout(m_vkDevice, layout, nullptr);
-		pipelineLayouts.clear();
+		//for (auto& layout : pipelineLayouts)
+		//	vkDestroyPipelineLayout(m_vkDevice, layout, nullptr);
+		//pipelineLayouts.clear();
 
 		for (auto& pass : rendPasses)
 			vkDestroyRenderPass(m_vkDevice, pass, nullptr);
@@ -1270,7 +1274,7 @@ public:
 
 		vkDestroyInstance(m_vkInstance, nullptr);
 
-		vkDestroyDescriptorSetLayout(m_vkDevice, bindlessTextureSetLayout, nullptr);
+		//vkDestroyDescriptorSetLayout(m_vkDevice, bindlessTextureSetLayout, nullptr);
 
 		isClean = true;
 
