@@ -77,6 +77,7 @@ private:
     friend ShaderManager;
     size_t m_arrayIndex;
 public:
+    std::string entryPoint;
     enum class Type : uint8_t
     {
         Invalid,
@@ -84,7 +85,6 @@ public:
         Fragment,
         Compute
     };
-
     Type type;
     std::filesystem::path sourcePath;
     std::filesystem::file_time_type lastSourceChangedTime;
@@ -101,7 +101,7 @@ public:
     ErrorCode reflect();
 
     static std::tuple<
-        std::vector<ShaderBinding>, std::vector<ShaderPushConstant>, ShaderIO, ShaderIO
+        std::string, std::vector<ShaderBinding>, std::vector<ShaderPushConstant>, ShaderIO, ShaderIO
     > reflectShader(const std::vector<uint32_t>& spirv);
 
     //static std::vector<uint32_t> toUint32Vector(const std::vector<char>& charVec);

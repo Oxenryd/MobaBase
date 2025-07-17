@@ -51,9 +51,10 @@ struct SpritebatchVSOutput
     [[vk::location(2)]] uint instanceId : TEXCOORD1;
 };
 
-[[vk::binding(0, 0)]] Texture2D atlas[] : register(t0);
-[[vk::binding(1, 0)]] StructuredBuffer<SpriteInstance> instances : register(t1);
-[[vk::binding(0, 0)]] SamplerState smp : register(s0);
+
+[[vk::binding(1, 0)]] StructuredBuffer<SpriteInstance> instances : register(t0);
+[[vk::binding(2, 0)]] SamplerState smp : register(s0);
+[[vk::binding(3, 0)]] Texture2D atlas[] : register(t1);
 
 
 

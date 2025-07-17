@@ -40,11 +40,20 @@ void Material::addShaderParams(
 	const std::string& parentName)
 {
 	for (ShaderBinding& param : s) {
-		MatParam matParam;
+		MatParam matParam{};
 		matParam.type = Shader::parseReflectedTypeDesc(&param.spvTypeDesc, &param.descriptorType);
 		matParam.stage = stage;
 		matParam.descriptorType = param.descriptorType;
-		matParam.count = param.count;
+		if (param.spvTypeDesc.op == SpvOpTypeRuntimeArray) {
+			if (param.count == 0) {
+				matParam.arrayType = MatParamArrayType::Dynamic;
+				matParam.count = MAX_RUNTIMEARRAY_INSTANCES;
+			} else {
+				matParam.arrayType = MatParamArrayType::Static;
+				matParam.count = param.count;
+			}
+		} else
+			matParam.count = param.count;
 		matParam.bindingIndex = param.binding;
 		matParam.setIndex = param.set;
 		matParam.offset = param.offset;
@@ -91,6 +100,7 @@ void Material::initFromShaders(const std::string& newName, Shader& vertex, Shade
 		pconstParam.type = pConst.base.type;
 		pconstParam.stage = MatParamStage::Vertex;
 		pconstParam.offset = pConst.base.offset;
+		pconstParam.size = pConst.base.size;
 		pconstParam.nameIndex = pConst.base.nameIndex;
 		for (auto& member : pConst.members) {
 			MatParam pconstParamMember{};
@@ -112,6 +122,7 @@ void Material::initFromShaders(const std::string& newName, Shader& vertex, Shade
 		pconstParam.type = pConst.base.type;
 		pconstParam.stage = MatParamStage::Fragment;
 		pconstParam.offset = pConst.base.offset;
+		pconstParam.size = pConst.base.size;
 		pconstParam.nameIndex = pConst.base.nameIndex;
 		for (auto& member : pConst.members) {
 			MatParam pconstParamMember{};
@@ -170,19 +181,24 @@ bool Material::operator==(const Material& other) {
 
 void Material::debugPrintMaterialInfo() {
 	size_t depth = 0;
-	std::cout << "Material Info * - " << name() << ":\nVS Input:";
+	auto* vs = ShaderManager::getInstance()->getShader(vShaderName);
+	auto* ps = ShaderManager::getInstance()->getShader(pShaderName);
+
+
+	std::cout << "* Material Info - " << name();
+	std::cout << std::format("\n\nVertex Shader - {}, Entry: {}\n  Input:", vs->name(), vs->entryPoint);
 	auto& vsAttribs = ShaderManager::getInstance()->getShader(vShaderName)->input.attributes;
 	for (auto& attrib : vsAttribs) {
 		std::cout << "\n\t" << std::format("[{}] ", attrib.location == 255 ? "" : std::to_string(attrib.location)) <<
 			TypeBaseToString(attrib.type) << " : " << attrib.semantic();
 	}
-	std::cout << "\n\nPS Input:";
+	std::cout << std::format("\n\nPixel Shader - {}, Entry: {}\n  Input:", ps->name(), ps->entryPoint); //"\n\nPS Input:";
 	auto& attribs = ShaderManager::getInstance()->getShader(pShaderName)->input.attributes;
 	for (auto& attrib : attribs) {
 		std::cout << "\n\t" << std::format("[{}] ", attrib.location == 255 ? "" : std::to_string(attrib.location)) <<
 			TypeBaseToString(attrib.type) << " : " << attrib.semantic();
 	}
-	std::cout << "\n\nPS Output:";
+	std::cout << "\n  Output:";
 	auto& outAttribs = ShaderManager::getInstance()->getShader(pShaderName)->output.attributes;
 	for (auto& attrib : outAttribs) {
 		std::cout << "\n\t" << std::format("[{}] ", attrib.location == 255 ? "" : std::to_string(attrib.location)) <<
@@ -214,10 +230,14 @@ void Material::debugPrintParameters(size_t& depth, std::vector<MatParam>& params
 					shaders = "VS  \t"; break;
 			}
 		}
-
+		std::string arrayType = param.arrayType == MatParamArrayType::Dynamic 
+			? " (dynamic)" 
+			: (param.arrayType == MatParamArrayType::Static && !(param.type == TypeBase::Struct || param.type == TypeBase::PushConstStruct))
+				? std::format("[{}]", param.count)
+				: "";
 		std::string binding = depth == 1 ? std::format("[{}, {}]", param.bindingIndex, param.setIndex) : "";
 		binding = param.type == TypeBase::PushConstStruct ? "" : binding;
-		std::cout << shaders << binding << pad << TypeBaseToString(param.type) << " " << param.name() << "\n";
+		std::cout << shaders << binding << pad << TypeBaseToString(param.type) << " " << param.name() << arrayType << "\n";
 		debugPrintParameters(++depth, param.members);
 	}
 	depth--;
@@ -225,5 +245,8 @@ void Material::debugPrintParameters(size_t& depth, std::vector<MatParam>& params
 
 
 std::string& Material::name() {
+	return ShaderManager::getInstance()->getMaterialName(*this);
+}
+std::string& Material::name() const {
 	return ShaderManager::getInstance()->getMaterialName(*this);
 }

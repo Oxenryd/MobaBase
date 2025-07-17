@@ -28,7 +28,7 @@ enum class RasterMode : uint8_t
 	Custom
 };
 
-enum class MultiSampling : uint8_t
+enum class MultiSamplingMode : uint8_t
 {
 	MSAA_None,
 	MSAA_4x

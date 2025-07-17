@@ -48,18 +48,28 @@ public:
 	std::vector<MatParam> params;
 	std::string vShaderName;
 	std::string pShaderName;
-	BlendMode blendMode = BlendMode::Premultiplied;
+	std::vector<void*> blendModeCustomPtrs;
+	std::vector<BlendMode> blendModes;
+	void* depthModeCustomPtr = nullptr;
+	void* rasterModeCustomPtr = nullptr;
+	void* msaaModeCustomPtr = nullptr;
 	DepthMode depthMode = DepthMode::None;
 	RasterMode rasterMode = RasterMode::RasterDefault;
-	MultiSampling msaaMode = MultiSampling::MSAA_None;
+	MultiSamplingMode msaaMode = MultiSamplingMode::MSAA_None;
 
-	Material() = default;
+	Material() {
+		blendModes.push_back(BlendMode::Premultiplied);
+		blendModeCustomPtrs.push_back(nullptr);
+	};
 	//Material(const json& j) { fromJson(j); }
 	Material(const std::string& name, Shader& vertex, Shader& fragment) { 
+		blendModes.push_back(BlendMode::Premultiplied);
+		blendModeCustomPtrs.push_back(nullptr);
 		initFromShaders(name, vertex, fragment);
 	}
 
 	std::string& name();
+	std::string& name() const;
 
 	//json toJson();
 	

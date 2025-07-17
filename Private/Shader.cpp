@@ -16,10 +16,11 @@ const std::string& Shader::name() {
 ErrorCode Shader::reflect() {
     try {
         auto result = reflectShader(bytecode);
-        parameters = std::get<0>(result);
-        pushConstants = std::get<1>(result);
-        input = std::get<2>(result);
-        output = std::get<3>(result);
+        entryPoint = std::get<0>(result);
+        parameters = std::get<1>(result);
+        pushConstants = std::get<2>(result);
+        input = std::get<3>(result);
+        output = std::get<4>(result);
     } catch (std::exception& e) {
         return ErrorCode::SHADER_REFLECTION_ERROR;
     }
@@ -27,7 +28,7 @@ ErrorCode Shader::reflect() {
 }
 
 std::tuple<
-    std::vector<ShaderBinding>, std::vector<ShaderPushConstant>, ShaderIO, ShaderIO
+    std::string, std::vector<ShaderBinding>, std::vector<ShaderPushConstant>, ShaderIO, ShaderIO
 > Shader::reflectShader(const std::vector<uint32_t>& spirv)
 {
     SpvReflectShaderModule module;
@@ -57,12 +58,19 @@ std::tuple<
         attrib.location = var->location;
         attrib.type = parseReflectedTypeDesc(var->type_description, nullptr);
 
-        auto semNameIndex = ShaderManager::getInstance()->getParamNameIndex(var->semantic);
-        if (semNameIndex == SIZE_T_INVALID) {
-            attrib.semanticNameIndex = ShaderManager::getInstance()->registerParamName(var->semantic);
-        } else {
-            attrib.semanticNameIndex = semNameIndex;
+        if (var->name) {
+            std::string s{ var->name };
+            size_t lastDot = s.rfind('.');
+            std::string lastWord = (lastDot == std::string::npos) ? s : s.substr(lastDot + 1);
+
+            auto semNameIndex = ShaderManager::getInstance()->getParamNameIndex(lastWord);
+            if (semNameIndex == SIZE_T_INVALID) {
+                attrib.semanticNameIndex = ShaderManager::getInstance()->registerParamName(lastWord);
+            } else {
+                attrib.semanticNameIndex = semNameIndex;
+            }
         }
+
 
         shaderInput.attributes.push_back(attrib);
     }
@@ -76,11 +84,17 @@ std::tuple<
         attrib.location = var->location;
         attrib.type = parseReflectedTypeDesc(var->type_description, nullptr);
 
-        auto semNameIndex = ShaderManager::getInstance()->getParamNameIndex(var->semantic);
-        if (semNameIndex == SIZE_T_INVALID) {
-            attrib.semanticNameIndex = ShaderManager::getInstance()->registerParamName(var->semantic);
-        } else {
-            attrib.semanticNameIndex = semNameIndex;
+        if (var->name) {
+            std::string s{ var->name };
+            size_t lastDot = s.rfind('.');
+            std::string lastWord = (lastDot == std::string::npos) ? s : s.substr(lastDot + 1);
+
+            auto semNameIndex = ShaderManager::getInstance()->getParamNameIndex(lastWord);
+            if (semNameIndex == SIZE_T_INVALID) {
+                attrib.semanticNameIndex = ShaderManager::getInstance()->registerParamName(lastWord);
+            } else {
+                attrib.semanticNameIndex = semNameIndex;
+            }
         }
 
         shaderOutput.attributes.push_back(attrib);
@@ -160,9 +174,9 @@ std::tuple<
             consts.push_back(pcParam);
         }
     }
-
+    std::string entry = module.entry_point_name;
     spvReflectDestroyShaderModule(&module);
-    return std::make_tuple( params, consts, shaderInput, shaderOutput );
+    return std::make_tuple(entry, params, consts, shaderInput, shaderOutput );
 }
 
 

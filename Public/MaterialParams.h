@@ -22,6 +22,24 @@ enum class MatParamStage : uint8_t
 	Both
 };
 
+enum class MatParamArrayType : uint8_t
+{
+	None,
+	Static,
+	Dynamic
+};
+
+inline static VkShaderStageFlagBits MatParamStageToVkShaderStageFlagBits(MatParamStage stage) {
+	switch (stage) {
+		case MatParamStage::Vertex:
+			return VK_SHADER_STAGE_VERTEX_BIT;
+		case MatParamStage::Fragment:
+			return VK_SHADER_STAGE_FRAGMENT_BIT;
+		case MatParamStage::Both:
+			return (VkShaderStageFlagBits)(VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
+	}
+}
+
 inline static constexpr const char* MatParamStageToString(MatParamStage stage) {
 	switch (stage) {
 		case MatParamStage::Vertex:   return "Vertex";
@@ -43,12 +61,18 @@ struct alignas(8) MatParam
 	uint32_t nameIndex;
 	uint32_t parentNameIndex;
 	std::vector<MatParam> members;
-	size_t count;
+	union
+	{
+		size_t count;
+		size_t size;
+	};
 	MatParamStage stage;
 	uint8_t bindingIndex;
 	uint8_t setIndex;
 	TypeBase type;
+	MatParamArrayType arrayType = MatParamArrayType::None;
 	uint32_t offset;
+	
 
 #ifdef USE_VULKAN
 	VkDescriptorType descriptorType;
@@ -101,6 +125,10 @@ struct alignas(8) MatParam
 	std::string& name() const;
 	std::string& parentName();
 	std::string& parentName() const;
+
+	bool isArray() const {
+		return count > 0;
+	}
 };
 
 

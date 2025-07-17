@@ -1,8 +1,29 @@
 #ifndef GRAPHICCONTEXT_H
 #define GRAPHICCONTEXT_H
 
+#include <cstdint>
 #include <vector>
 #include <thread>
+
+
+class Material;
+
+enum class DrawType : uint8_t
+{
+	Mesh,
+	SkinnedMesh,
+	Billboard,
+	Sprite,
+	UI,
+	Custom
+};
+
+struct DrawCommand
+{
+	Material* material;
+	void* drawContextPtr;
+	DrawType type;
+};
 
 class GraphicContext
 {

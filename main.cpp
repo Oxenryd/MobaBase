@@ -136,9 +136,10 @@ int __stdcall main(HINSTANCE hInstance, HINSTANCE instance, LPSTR str, int nCmdS
 							});
 
 	// Start Engine
-	PsoDesc basePso{};
-	EC = PsoDesc::createFromMaterial(*engine->getShaderManager() ,spriteMat, basePso);
-	vkCtx->createGraphicsPipeline(basePso);
+	//PsoDesc basePso{};
+	//EC = PsoDesc::createFromMaterial(*engine->getShaderManager() ,spriteMat, basePso);
+	//vkCtx->createGraphicsPipeline(basePso);
+	vkCtx->createPipelineFromMaterial(engine->getShaderManager(), spriteMat);
 	engine->createNewScene<GameScene>(nullptr);
 	engine->setTargetUpdateDeltaTime(0.0);
 	engine->start(vkCtx, inputMan);
