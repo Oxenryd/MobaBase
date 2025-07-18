@@ -5,7 +5,7 @@
 
 
 SpritebatchVSOutput main(SpritebatchVSInput vin)
-{
+{	
 	SpriteInstance inst = instances[vin.instanceId];
 
 	float2 scaled = (QUAD2D[vin.vertexId].xy - inst.origin) * inst.size;
@@ -23,6 +23,8 @@ SpritebatchVSOutput main(SpritebatchVSInput vin)
 	SpritebatchVSOutput vout;
 	vout.position = clipPos;
 
+    vout.position += retainGlobals();
+	
 	float2 uv = QUAD2D[vin.vertexId].zw;
     uint2 texSize;
     atlas[inst.texIndex].GetDimensions(texSize.x, texSize.y);

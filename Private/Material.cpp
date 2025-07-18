@@ -41,7 +41,7 @@ void Material::addShaderParams(
 {
 	for (ShaderBinding& param : s) {
 		MatParam matParam{};
-		matParam.type = Shader::parseReflectedTypeDesc(&param.spvTypeDesc, &param.descriptorType);
+		matParam.var.setType(Shader::parseReflectedTypeDesc(&param.spvTypeDesc, &param.descriptorType));
 		matParam.stage = stage;
 		matParam.descriptorType = param.descriptorType;
 		if (param.spvTypeDesc.op == SpvOpTypeRuntimeArray) {
@@ -97,7 +97,7 @@ void Material::initFromShaders(const std::string& newName, Shader& vertex, Shade
 	for (auto& pConst : vertex.pushConstants) {
 		MatParam pconstParam{};
 		pconstParam.parentNameIndex = UINT32_INVALID;
-		pconstParam.type = pConst.base.type;
+		pconstParam.var.setType(pConst.base.type);
 		pconstParam.stage = MatParamStage::Vertex;
 		pconstParam.offset = pConst.base.offset;
 		pconstParam.size = pConst.base.size;
@@ -105,7 +105,7 @@ void Material::initFromShaders(const std::string& newName, Shader& vertex, Shade
 		for (auto& member : pConst.members) {
 			MatParam pconstParamMember{};
 			pconstParamMember.parentNameIndex = pconstParam.nameIndex;
-			pconstParamMember.type = member.type;
+			pconstParamMember.var.setType(member.type);
 			pconstParamMember.stage = MatParamStage::Vertex;
 			pconstParamMember.offset = member.offset;
 			pconstParamMember.nameIndex = member.nameIndex;
@@ -119,7 +119,7 @@ void Material::initFromShaders(const std::string& newName, Shader& vertex, Shade
 	for (auto& pConst : fragment.pushConstants) {
 		MatParam pconstParam{};
 		pconstParam.parentNameIndex = UINT32_INVALID;
-		pconstParam.type = pConst.base.type;
+		pconstParam.var.setType(pConst.base.type);
 		pconstParam.stage = MatParamStage::Fragment;
 		pconstParam.offset = pConst.base.offset;
 		pconstParam.size = pConst.base.size;
@@ -127,7 +127,7 @@ void Material::initFromShaders(const std::string& newName, Shader& vertex, Shade
 		for (auto& member : pConst.members) {
 			MatParam pconstParamMember{};
 			pconstParamMember.parentNameIndex = pconstParam.nameIndex;
-			pconstParamMember.type = member.type;
+			pconstParamMember.var.setType(member.type);
 			pconstParamMember.stage = MatParamStage::Fragment;
 			pconstParamMember.offset = member.offset;
 			pconstParamMember.nameIndex = member.nameIndex;
@@ -158,27 +158,30 @@ void Material::initFromShaders(const std::string& newName, Shader& vertex, Shade
 		params.push_back(psParam);
 
 	for (size_t i = 0; i < params.size(); ++i ) {
-		paramsMap.insert({ params[i].name(), i });
-		if (params[i].type == TypeBase::PushConstStruct) {
-			pushShaderFlags = MatParamStageToVkShaderStageFlagBits(params[i].stage);
-			pushConstantOffset = params[i].offset;
-			pushConstantSize = params[i].size;
-		} else if (params[i].type == TypeBase::Sampler) {
-			samplerStates.push_back(SamplerState{});
-		}
+		auto& param = params[i];
+		paramsMap.insert({ param.name(), i });
 
-
-		switch (params[i].type)
+		switch (param.var.type())
 		{
-			case
+			case TypeBase::PushConstStruct:
+			{
+				pushShaderFlags = MatParamStageToVkShaderStageFlagBits(param.stage);
+				pushConstantOffset = param.offset;
+				pushConstantSize = param.size;
+			} break;
+
+			case TypeBase::Sampler:
+			{
+				samplerStates.push_back(SamplerState{});
+			} break;
+
+			case TypeBase::CBuffer:
+			{
+				if (param.setIndex >= VULKAN_GLOBAL_DESCRIPTOR_SETS) {
+
+				}
+			} break;
 		}
-
-		// Skip global sets buffer setup
-		if (params[i].setIndex < VULKAN_GLOBAL_DESCRIPTOR_SETS)
-			continue;
-
-		
-
 	}
 
 	ShaderManager::getInstance()->registerMaterial(newName, *this);
@@ -245,19 +248,19 @@ void Material::debugPrintParameters(size_t& depth, std::vector<MatParam>& params
 				case MatParamStage::Both:
 					shaders = "VS,PS\t"; break;
 				case MatParamStage::Fragment:
-					shaders = "PS  \t"; break;
+					shaders = "   PS\t"; break;
 				case MatParamStage::Vertex:
 					shaders = "VS  \t"; break;
 			}
 		}
 		std::string arrayType = param.arrayType == MatParamArrayType::Dynamic 
-			? " (dynamic)" 
-			: (param.arrayType == MatParamArrayType::Static && !(param.type == TypeBase::Struct || param.type == TypeBase::PushConstStruct))
+			? " (bindless)" 
+			: (param.arrayType == MatParamArrayType::Static && !(param.var.type() == TypeBase::Struct || param.var.type() == TypeBase::PushConstStruct))
 				? std::format("[{}]", param.count)
 				: "";
 		std::string binding = depth == 1 ? std::format("[{}, {}]", param.bindingIndex, param.setIndex) : "";
-		binding = param.type == TypeBase::PushConstStruct ? "" : binding;
-		std::cout << shaders << binding << pad << TypeBaseToString(param.type) << " " << param.name() << arrayType << "\n";
+		binding = param.var.type() == TypeBase::PushConstStruct ? "" : binding;
+		std::cout << shaders << binding << pad << TypeBaseToString(param.var.type()) << " " << param.name() << arrayType << "\n";
 		debugPrintParameters(++depth, param.members);
 	}
 	depth--;

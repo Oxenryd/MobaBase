@@ -1128,7 +1128,7 @@ public:
 		};
 		std::unordered_map<uint32_t, SetLayoutInfo> bindingsPerSet;
 		for (const auto& param : material.params) {
-			if (param.type == TypeBase::PushConst || param.type == TypeBase::PushConstStruct)
+			if (param.var.type() == TypeBase::PushConst || param.var.type() == TypeBase::PushConstStruct)
 				continue;
 
 			auto& setInfo = bindingsPerSet[param.setIndex];
@@ -1167,7 +1167,7 @@ public:
 		// Push Constants
 		std::vector<VkPushConstantRange> pushConstantRanges;
 		for (const auto& param : material.params) {
-			if (param.type != TypeBase::PushConstStruct)
+			if (param.var.type() != TypeBase::PushConstStruct)
 				continue;
 
 			VkPushConstantRange range{};
@@ -1527,7 +1527,7 @@ public:
 
 		// Push constants (if any)
 		for (const MatParam& param : material->params) {
-			if (param.type == TypeBase::PushConst || param.type == TypeBase::PushConstStruct) {
+			if (param.var.type() == TypeBase::PushConst || param.var.type() == TypeBase::PushConstStruct) {
 				if (pushConstData && pushConstSize > 0) {
 					vkCmdPushConstants(
 						cmd,

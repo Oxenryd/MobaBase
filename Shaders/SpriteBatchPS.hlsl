@@ -3,10 +3,10 @@
 #pragma ShaderType:Fragment
 #pragma Name:SpriteBatchPS
 
+
 float4 main(SpritebatchVSOutput pin) : SV_Target
-{
-    SpriteInstance inst = instances[pin.instanceId];
-    
+{    
+    SpriteInstance inst = instances[pin.instanceId];    
     float4 col = atlas[inst.texIndex].Sample(spriteSmp, pin.uv + pushData.uvOffset);
 
     if (col.a < 0.01)
@@ -14,5 +14,6 @@ float4 main(SpritebatchVSOutput pin) : SV_Target
 
     col += pushData.color;
     
-    return col;
+    
+    return col + retainGlobals();
 }

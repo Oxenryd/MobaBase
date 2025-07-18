@@ -86,8 +86,8 @@ public:
 	uint32_t pushConstantSize = 0;
 	VkShaderStageFlags pushShaderFlags{};
 	std::vector<SamplerState> samplerStates;
-	std::vector<VarTypeStructDefinition> bufferDefinitions;
-	std::vector<VarTypeStructDefinition> pushConstantDefinition;
+	//std::vector<VarTypeStructDefinition> bufferDefinitions;
+	//std::vector<VarTypeStructDefinition> pushConstantDefinition;
 	std::vector<MaterialInstance> instances;
 
 	Material()

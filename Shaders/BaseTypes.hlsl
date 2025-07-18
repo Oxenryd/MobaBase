@@ -33,7 +33,21 @@ cbuffer GlobalData : register(b0)
     float4 cameraPosition;
     float time;
 };
-[[vk::binding(0, 1)]] SamplerState smp : register(s0);
+[[vk::binding(1, 0)]] SamplerState smp : register(s0, space0);
+[[vk::binding(2, 0)]] Texture2D textures[] : register(t0, space0);
+
+float4 retainGlobals()
+{
+    float dummy = time * time;
+    if (dummy == -9999.0f)
+    {
+        float4 dummy2 = dummy.xxxx + textures[0].SampleLevel(smp, float2(0, 0), 0.0);
+        return dummy2;
+    }
+        
+    return float4(0,0,0,0);
+}
+
 
 // Srites
 struct SpritebatchVSInput
@@ -49,9 +63,14 @@ struct SpritebatchVSOutput
     [[vk::location(2)]] uint instanceId : TEXCOORD1;
 };
 
-[[vk::binding(0, 2)]] StructuredBuffer<SpriteInstance> instances : register(t0);
-[[vk::binding(1, 2)]] SamplerState spriteSmp : register(s1);
-[[vk::binding(2, 2)]] Texture2D atlas[] : register(t1);
+[[vk::binding(0, 2)]] StructuredBuffer<SpriteInstance> instances : register(t0, space2);
+[[vk::binding(1, 2)]] SamplerState spriteSmp : register(s0, space2);
+[[vk::binding(2, 2)]] Texture2D atlas[] : register(t1, space2);
+
+
+
+
+
 
 
 

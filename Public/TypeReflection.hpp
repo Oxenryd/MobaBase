@@ -622,69 +622,69 @@ public:
 
 
 
-enum class VarTypeResourceType
-{
-	ConstantBuffer,
-
-};
-
-struct VarTypeStructDefinition
-{
-	struct Member
-	{
-		MatVar var;
-		uint32_t nameIndex;		
-		uint8_t globalSetVar = 0;		
-		uint8_t alignment;
-		uint32_t count;		
-		uint32_t offset;
-	};
-
-	std::vector<Member> members;
-
-	void finalizeLayout() {
-		size_t offset = 0;
-		for (auto& m : members) {
-			size_t naturalAlign = std::max(alignOfTypeVar(m.var.type()), static_cast<size_t>(m.alignment));
-			offset = (offset + naturalAlign - 1) & ~(naturalAlign - 1); // align up
-			m.offset = offset;
-			offset += sizeOfTypeVar(m.var.type()) * m.count;
-		}
-	}
-
-	uint32_t sizeBytes() const {
-		if (members.empty()) return 0;
-		auto& last = members.back();
-		return static_cast<uint32_t>(last.offset + sizeOfTypeVar(last.var.type()) * last.count);
-	}
-};
-
-
-struct VarTypeStruct
-{
-private:
-	void* _ptr = nullptr;
-	VarTypeStructDefinition* const _definition;
-
-public:
-	VarTypeStruct() = delete;
-	VarTypeStruct(VarTypeStructDefinition* const def, Arena& arena) :
-		_definition{def}
-	{
-		
-	}
-
-	void* data() { return _ptr; }
-	size_t sizeInBytes() const { return static_cast<size_t>(_definition->sizeBytes()); }
-	size_t members() const { return _definition->members.size(); }
-	VarType getField(size_t index) const {
-		auto& m = _definition->members[index];
-		return VarType{
-			static_cast<uint8_t*>(_ptr) + m.offset,
-			m.var.type(),
-			m.count
-		};
-	}
-};
+//enum class VarTypeResourceType
+//{
+//	ConstantBuffer,
+//
+//};
+//
+//struct VarTypeStructDefinition
+//{
+//	struct Member
+//	{
+//		//MatVar var;
+//		uint32_t nameIndex;		
+//		uint8_t globalSetVar = 0;		
+//		uint8_t alignment;
+//		uint32_t count;		
+//		uint32_t offset;
+//	};
+//
+//	std::vector<Member> members;
+//
+//	void finalizeLayout() {
+//		size_t offset = 0;
+//		for (auto& m : members) {
+//			size_t naturalAlign = std::max(alignOfTypeVar(m.var.type()), static_cast<size_t>(m.alignment));
+//			offset = (offset + naturalAlign - 1) & ~(naturalAlign - 1); // align up
+//			m.offset = offset;
+//			offset += sizeOfTypeVar(m.var.type()) * m.count;
+//		}
+//	}
+//
+//	uint32_t sizeBytes() const {
+//		if (members.empty()) return 0;
+//		auto& last = members.back();
+//		return static_cast<uint32_t>(last.offset + sizeOfTypeVar(last.var.type()) * last.count);
+//	}
+//};
+//
+//
+//struct VarTypeStruct
+//{
+//private:
+//	void* _ptr = nullptr;
+//	VarTypeStructDefinition* const _definition;
+//
+//public:
+//	VarTypeStruct() = delete;
+//	VarTypeStruct(VarTypeStructDefinition* const def, Arena& arena) :
+//		_definition{def}
+//	{
+//		
+//	}
+//
+//	void* data() { return _ptr; }
+//	size_t sizeInBytes() const { return static_cast<size_t>(_definition->sizeBytes()); }
+//	size_t members() const { return _definition->members.size(); }
+//	VarType getField(size_t index) const {
+//		auto& m = _definition->members[index];
+//		return VarType{
+//			static_cast<uint8_t*>(_ptr) + m.offset,
+//			m.var.type(),
+//			m.count
+//		};
+//	}
+//};
 
 #endif

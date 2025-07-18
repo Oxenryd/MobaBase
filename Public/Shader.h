@@ -341,7 +341,7 @@ public:
 
     inline static VkDescriptorType parseMatParamToVkDescriptorType(const MatParam& param) {
 
-        switch (param.type) {
+        switch (param.var.type()) {
 
             case TypeBase::Struct:
             case TypeBase::StructBuffer: 

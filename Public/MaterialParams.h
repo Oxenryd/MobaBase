@@ -63,10 +63,9 @@ inline constexpr MatParamStage MatParamStageFromString(const std::string& s) {
 
 struct MatVar
 {
-private:
-
 	union
 	{
+
 		uint64_t _raw;
 		struct
 		{
@@ -113,8 +112,11 @@ public:
 
 
 	void* data() { return reinterpret_cast<void*>(_ptr); }
+	void* data() const { return reinterpret_cast<void*>(_ptr); }
 	TypeBase type() { return static_cast<TypeBase>(_type); }
 	TypeBase type() const { return static_cast<TypeBase>(_type); }
+
+	void setType(TypeBase type) { _type = static_cast<uint64_t>(type); }
 
 	template <typename T>
 	T& get() { return *reinterpret_cast<T*>(_ptr); }
@@ -139,7 +141,7 @@ struct alignas(8) MatParam
 	MatParamStage stage;
 	uint8_t bindingIndex;
 	uint8_t setIndex;
-	TypeBase type;
+	MatVar var;
 	MatParamArrayType arrayType = MatParamArrayType::None;
 	uint32_t offset;
 	VkDescriptorType descriptorType;
@@ -161,7 +163,7 @@ struct alignas(8) MatParam
 		if (rhs.parentNameIndex != parentNameIndex) return false;
 		if (rhs.bindingIndex != bindingIndex) return false;
 		if (rhs.setIndex != setIndex) return false;
-		if (rhs.type != type) return false;
+		if (rhs.var != var) return false;
 		if (rhs.offset != offset) return false;
 		if (rhs.count != count) return false;
 		if (rhs.members.size() != members.size()) return false;
