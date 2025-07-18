@@ -39,7 +39,7 @@ struct GlobalData
 	alignas (16) float time;
 };
 
-struct SpriteInstance
+struct alignas (16) SpriteInstance
 {
 	float position[2];
 	float size[2];
@@ -49,7 +49,6 @@ struct SpriteInstance
 	uint32_t texRect[4];
 	uint32_t texIndex;
 	uint32_t _pad;
-	uint64_t _pad2;
 };
 
 #endif

@@ -59,6 +59,73 @@ inline constexpr MatParamStage MatParamStageFromString(const std::string& s) {
 	throw std::invalid_argument("Invalid MatParamStage: " + s);
 }
 
+
+
+struct MatVar
+{
+private:
+
+	union
+	{
+		uint64_t _raw;
+		struct
+		{
+			uint64_t _type : 7;
+			uint64_t _ptr : 57;
+		};
+	};
+public:
+	MatVar() :
+		_raw{ 0 } {}
+	explicit MatVar(const MatVar& other) :
+		_raw{ other._raw } {}
+	explicit MatVar(const void* ptr, TypeBase type = TypeBase::Other) {
+		uint64_t p = reinterpret_cast<uint64_t>(ptr);
+		assert((p >> 57) == 0 && "MatVar: Pointer exceeds 57 bits!");
+		_ptr = p;
+		_type = static_cast<uint64_t>(type);
+	}
+	MatVar& operator=(const MatVar& rhs) {
+		if (&rhs == this)
+			return *this;
+
+		_raw = rhs._raw;
+		return *this;
+	}
+	template <typename T, typename = std::enable_if_t<!std::is_same_v<std::decay_t<T>, MatVar>>>
+	MatVar& operator=(const T& rhs) {
+		assert(_ptr != 0 && "MatVar: Assigning to nullptr!");
+		assert(_type == TypeBaseFromT<T>() && "MatVar: Wrong input type!");
+
+		*reinterpret_cast<T*>(_ptr) = rhs;
+	}
+
+	friend bool operator==(const MatVar& lhs, const MatVar& rhs) {
+		return lhs._raw == rhs._raw;
+	}
+	friend bool operator!=(const MatVar& lhs, const MatVar& rhs) {
+		return !(lhs == rhs);
+	}
+	template <typename T, typename = std::enable_if_t<!std::is_same_v<std::decay_t<T>, MatVar>>>
+	friend bool operator==(const MatVar& lhs, const T& rhs) {
+		return lhs.get<T>() == rhs;
+	}
+
+
+	void* data() { return reinterpret_cast<void*>(_ptr); }
+	TypeBase type() { return static_cast<TypeBase>(_type); }
+	TypeBase type() const { return static_cast<TypeBase>(_type); }
+
+	template <typename T>
+	T& get() { return *reinterpret_cast<T*>(_ptr); }
+	template <typename T>
+	T& get() const { return *reinterpret_cast<T*>(_ptr); }
+	template <typename T>
+	void set(const T& value) { get<T>() = value; }
+};
+
+
+
 struct alignas(8) MatParam
 {
 	uint32_t nameIndex;
@@ -103,22 +170,6 @@ struct alignas(8) MatParam
 		}
 		return true;
 	}
-
-	//bool operator==(const MatParam& rhs) {
-	//	if (rhs.nameIndex != nameIndex) return false;
-	//	if (rhs.parentNameIndex != parentNameIndex) return false;
-	//	if (rhs.stage != stage) return false;
-	//	if (rhs.bindingIndex != bindingIndex) return false;
-	//	if (rhs.setIndex != setIndex) return false;
-	//	if (rhs.type != type) return false;
-	//	if (rhs.offset != offset) return false;
-	//	if (rhs.count != count) return false;
-	//	if (rhs.members != members) return false;
-	//	return true;
-	//}
-	//bool operator!=(const MatParam& rhs) {
-	//	return !(*this == rhs);
-	//}
 
 	std::string& name();
 	std::string& name() const;

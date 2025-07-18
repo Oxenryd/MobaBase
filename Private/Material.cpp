@@ -163,7 +163,22 @@ void Material::initFromShaders(const std::string& newName, Shader& vertex, Shade
 			pushShaderFlags = MatParamStageToVkShaderStageFlagBits(params[i].stage);
 			pushConstantOffset = params[i].offset;
 			pushConstantSize = params[i].size;
+		} else if (params[i].type == TypeBase::Sampler) {
+			samplerStates.push_back(SamplerState{});
 		}
+
+
+		switch (params[i].type)
+		{
+			case
+		}
+
+		// Skip global sets buffer setup
+		if (params[i].setIndex < VULKAN_GLOBAL_DESCRIPTOR_SETS)
+			continue;
+
+		
+
 	}
 
 	ShaderManager::getInstance()->registerMaterial(newName, *this);

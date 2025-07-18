@@ -15,10 +15,12 @@
     #include "GlobalMacros.h"
 #endif
 
-
+#include "Delegate.hpp"
 #include "ArenaAllocator.hpp"
 #include "Log.hpp"
 
+using MemoryAddressDelta = int64_t;
+using NewHeapBaseAddress = size_t;
 
 #ifndef HEAP_ARENA_MAX_PAGES
     #define HEAP_ARENA_MAX_PAGES 2048
@@ -120,6 +122,23 @@ public:
             }
         }
         return false;
+    }
+
+    void resize(size_t newSizeBytes) {
+        if (newSizeBytes <= m_size)
+            return;
+
+        auto* temp = new uint8_t[newSizeBytes];       
+        std::memcpy(temp, m_memory, m_size);
+
+        MemoryAddressDelta delta = reinterpret_cast<size_t>(temp) - reinterpret_cast<size_t>(m_memory);
+        reallocated.notify(delta);
+        delete m_memory;
+        m_size = newSizeBytes;
+        if (m_pagesPtr.back().isFree()) {
+            m_pagesPtr.back().size = m_size - m_pagesPtr.back().offset;
+        }
+        m_memory = temp;
     }
 
     template<typename T, typename... Args>
@@ -262,6 +281,7 @@ public:
 private:
     std::vector<ArenaPage> m_pagesPtr;
     std::vector<std::vector<DestructorEntry>> m_destructorsPtr;
+    Event<MemoryAddressDelta> reallocated;
     uint8_t* m_memory = nullptr;
     size_t m_size;
     size_t m_lastStart;

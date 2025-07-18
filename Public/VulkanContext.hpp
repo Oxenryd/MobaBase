@@ -25,7 +25,6 @@
 #include "WindowSurface.h"
 #include "Log.hpp"
 
-//#include "GraphicContext.h"
 #include "Material.hpp"
 #include "IShaderProvider.h"
 
@@ -79,6 +78,118 @@ constexpr VkFormat GetVkFormat(TypeBase type) {
 	}
 }
 
+//struct DescriptorSetKey
+//{
+//	std::vector<VkDescriptorType> types;         // One per binding
+//	std::vector<uint32_t> bindings;              // Binding indices
+//	std::vector<uint64_t> resourceHashes;        // Hashes of buffers/samplers/images
+//	std::vector<VkDescriptorBufferInfo> buffers; // Actual buffers (if any)
+//	std::vector<VkDescriptorImageInfo> images;   // Actual textures/samplers (if any)
+//	VkShaderStageFlags stageFlags;
+//	uint32_t setIndex;
+//
+//	bool operator==(const DescriptorSetKey& other) const { 
+//		return 
+//			(types == other.types) &&
+//			(bindings == other.bindings) &&
+//			(resourceHashes == other.resourceHashes);
+//	}
+//};
+//
+//struct DescriptorSetKeyHash
+//{
+//private:
+//	inline void hash_combine(size_t& seed, uint64_t val) const {
+//		seed ^= std::hash<uint64_t>{}(val)+0x9e3779b9 + (seed << 6) + (seed >> 2);
+//	}
+//public:
+//	size_t operator()(const DescriptorSetKey& key) const { 
+//		size_t seed = 0;
+//		for (auto& type : key.types)
+//			hash_combine(seed, static_cast<uint64_t>(type));
+//		for (auto& binding : key.bindings)
+//			hash_combine(seed, static_cast<uint64_t>(binding));
+//		for (auto& handle: key.resourceHashes)
+//			hash_combine(seed, handle);
+//
+//		return seed;
+//	}
+//};
+
+struct DescriptorSetKey
+{
+	uint32_t setIndex;
+	std::vector<uint32_t> bindings;
+	std::vector<VkDescriptorType> types;
+	std::vector<size_t> resourceHashes; // hashes of GPU resources or handles
+	bool operator==(const DescriptorSetKey& other) const = default;
+};
+
+struct DescriptorSetKeyHash
+{
+	size_t operator()(const DescriptorSetKey& key) const {
+		size_t h = 0;
+		for (auto b : key.bindings)       h ^= std::hash<uint32_t>{}(b)+0x9e3779b9 + (h << 6) + (h >> 2);
+		for (auto t : key.types)          h ^= std::hash<uint32_t>{}(t)+0x9e3779b9 + (h << 6) + (h >> 2);
+		for (auto r : key.resourceHashes) h ^= std::hash<size_t>{}(r)+0x9e3779b9 + (h << 6) + (h >> 2);
+		return h;
+	}
+};
+
+
+
+class SamplerStatesPresets
+{
+public:
+	static inline VkSamplerCreateInfo point = {
+		.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+		.magFilter = VK_FILTER_NEAREST,
+		.minFilter = VK_FILTER_NEAREST,
+		.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST,
+		.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+		.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+		.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+		.mipLodBias = 0.0f,
+		.anisotropyEnable = VK_FALSE,				
+		.minLod = 0.0f,
+		.maxLod = 0.0f,
+		.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK,
+		.unnormalizedCoordinates = VK_FALSE
+	};
+
+	static inline VkSamplerCreateInfo linear = {
+	.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+	.magFilter = VK_FILTER_LINEAR,
+	.minFilter = VK_FILTER_LINEAR,
+	.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
+	.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+	.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+	.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+	.mipLodBias = 0.0f,
+	.anisotropyEnable = VK_FALSE,
+	.minLod = 0.0f,
+	.maxLod = VK_LOD_CLAMP_NONE,
+	.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK,
+	.unnormalizedCoordinates = VK_FALSE
+	};
+
+	static inline VkSamplerCreateInfo aniso = {
+		.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+		.magFilter = VK_FILTER_LINEAR,
+		.minFilter = VK_FILTER_LINEAR,
+		.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
+		.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+		.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+		.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+		.mipLodBias = 0.0f,
+		.anisotropyEnable = VK_TRUE,
+		.maxAnisotropy = 8.0f,
+		.minLod = 0.0f,
+		.maxLod = VK_LOD_CLAMP_NONE,
+		.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK,
+		.unnormalizedCoordinates = VK_FALSE
+	};
+};
 
 class VkBlendModes
 {
@@ -402,7 +513,9 @@ public:
 	VkQueue m_graphicsQueue = nullptr;
 	uint32_t m_graphicsQueueFamilyIndex = static_cast<uint32_t>(-1);
 
-	//std::unordered_map<std::string, PipelineDesc> m_namedPipelines;
+	std::unordered_map<SamplerState, VkSampler, SamplerStateHash> baseSamplers;
+	std::unordered_map<DescriptorSetKey, VkDescriptorSet, DescriptorSetKeyHash> descriptorSetCache;
+	std::unordered_map<uint32_t, VkDescriptorSetLayout> descriptorSetLayouts;
 
 	BlendMode currentBlendMode = BlendMode::Opaque;
 
@@ -481,6 +594,7 @@ public:
 		Vk_CHECK(vk, createCommandPool());
 		Vk_CHECK(vk, createCommandBuffer());
 		Vk_CHECK(vk, createSyncObjects());
+		Vk_CHECK(vk, createSamplerPresets());
 
 		isClean = false;
 
@@ -1199,6 +1313,80 @@ public:
 		return VK_SUCCESS;
 	}
 
+	inline VkResult createSamplerPresets() {
+		VkResult vkResult;
+
+		LOGLINE(LogType::Info, LogMod::Vulkan, "Creating Sampler presets... ");
+
+		VkSampler sampler;
+
+		// point
+		VkSamplerCreateInfo point_repeat = SamplerStatesPresets::point;
+		VkSamplerCreateInfo point_mirrorRepeat = point_repeat;
+		point_mirrorRepeat.addressModeU = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
+		point_mirrorRepeat.addressModeV = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
+		point_mirrorRepeat.addressModeW = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
+		VkSamplerCreateInfo point_clampEdge = point_repeat;
+		point_clampEdge.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+		point_clampEdge.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+		point_clampEdge.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+		VkSamplerCreateInfo point_clampBorder = point_repeat;
+		point_clampBorder.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+		point_clampBorder.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+		point_clampBorder.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+		//VkSamplerCreateInfo point_mirrorClampEdge = point_repeat;
+		//point_mirrorClampEdge.addressModeU = VK_SAMPLER_ADDRESS_MODE_MIRROR_CLAMP_TO_EDGE;
+		//point_mirrorClampEdge.addressModeV = VK_SAMPLER_ADDRESS_MODE_MIRROR_CLAMP_TO_EDGE;
+		//point_mirrorClampEdge.addressModeW = VK_SAMPLER_ADDRESS_MODE_MIRROR_CLAMP_TO_EDGE;
+
+		Vk_CHECK(vkResult, vkCreateSampler(m_vkDevice, &point_repeat, nullptr, &sampler));
+		baseSamplers.insert( { {SamplerMode::Point, SamplerAddressMode::Repeat}, sampler } );
+		Vk_CHECK(vkResult, vkCreateSampler(m_vkDevice, &point_mirrorRepeat, nullptr, &sampler));
+		baseSamplers.insert({ {SamplerMode::Point, SamplerAddressMode::MirroredRepeat}, sampler });
+		Vk_CHECK(vkResult, vkCreateSampler(m_vkDevice, &point_clampEdge, nullptr, &sampler));
+		baseSamplers.insert({ {SamplerMode::Point, SamplerAddressMode::ClampEdge}, sampler });
+		Vk_CHECK(vkResult, vkCreateSampler(m_vkDevice, &point_clampBorder, nullptr, &sampler));
+		baseSamplers.insert({ {SamplerMode::Point, SamplerAddressMode::ClampBorder}, sampler });
+		//Vk_CHECK(vkResult, vkCreateSampler(m_vkDevice, &point_mirrorClampEdge, nullptr, &sampler));
+		//baseSamplers.insert({ {SamplerMode::Point, SamplerAddressMode::MirroredClampEdge}, sampler });
+
+		
+		// Linear
+		VkSamplerCreateInfo linear_repeat = SamplerStatesPresets::linear;
+		VkSamplerCreateInfo linear_mirrorRepeat = linear_repeat;
+		linear_mirrorRepeat.addressModeU = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
+		linear_mirrorRepeat.addressModeV = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
+		linear_mirrorRepeat.addressModeW = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
+		VkSamplerCreateInfo linear_clampEdge = linear_repeat;
+		linear_clampEdge.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+		linear_clampEdge.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+		linear_clampEdge.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+		VkSamplerCreateInfo linear_clampBorder = linear_repeat;
+		linear_clampBorder.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+		linear_clampBorder.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+		linear_clampBorder.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+		//VkSamplerCreateInfo linear_mirrorClampEdge = linear_repeat;
+		//linear_mirrorClampEdge.addressModeU = VK_SAMPLER_ADDRESS_MODE_MIRROR_CLAMP_TO_EDGE;
+		//linear_mirrorClampEdge.addressModeV = VK_SAMPLER_ADDRESS_MODE_MIRROR_CLAMP_TO_EDGE;
+		//linear_mirrorClampEdge.addressModeW = VK_SAMPLER_ADDRESS_MODE_MIRROR_CLAMP_TO_EDGE;
+
+		Vk_CHECK(vkResult, vkCreateSampler(m_vkDevice, &linear_repeat, nullptr, &sampler));
+		baseSamplers.insert({ {SamplerMode::Linear, SamplerAddressMode::Repeat}, sampler });
+		Vk_CHECK(vkResult, vkCreateSampler(m_vkDevice, &linear_mirrorRepeat, nullptr, &sampler));
+		baseSamplers.insert({ {SamplerMode::Linear, SamplerAddressMode::MirroredRepeat}, sampler });
+		Vk_CHECK(vkResult, vkCreateSampler(m_vkDevice, &linear_clampEdge, nullptr, &sampler));
+		baseSamplers.insert({ {SamplerMode::Linear, SamplerAddressMode::ClampEdge}, sampler });
+		Vk_CHECK(vkResult, vkCreateSampler(m_vkDevice, &linear_clampBorder, nullptr, &sampler));
+		baseSamplers.insert({ {SamplerMode::Linear, SamplerAddressMode::ClampBorder}, sampler });
+		//Vk_CHECK(vkResult, vkCreateSampler(m_vkDevice, &linear_mirrorClampEdge, nullptr, &sampler));
+		//baseSamplers.insert({ {SamplerMode::Linear, SamplerAddressMode::MirroredClampEdge}, sampler });
+
+		LOG(LogType::Success, "Done.");
+		return VK_SUCCESS;
+	}
+
+
+
 	inline VkResult recreateSwapchain() {
 		VkResult vkResult{};
 
@@ -1463,7 +1651,7 @@ public:
 						matBase->pushShaderFlags,
 						0,
 						matBase->pushConstantSize,
-						cmd.material->pushData());
+						cmd.material->pushDataPtr());
 				}
 			}
 
@@ -1535,6 +1723,127 @@ public:
 	inline void notifyViewResized(void* ctx, uint16_t width, uint16_t height) {
 		pendingResize = true;
 	}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+	VkDescriptorSet allocateAndWriteDescriptorSet(VkDescriptorSetLayout layout, const DescriptorSetKey& key) {
+		// --- [1] Build descriptor set layout from types + bindings ---
+		//std::vector<VkDescriptorSetLayoutBinding> layoutBindings;
+		//for (size_t i = 0; i < key.bindings.size(); ++i) {
+		//	VkDescriptorSetLayoutBinding b{};
+		//	b.binding = key.bindings[i];
+		//	b.descriptorType = key.types[i];
+		//	b.descriptorCount = 1;
+		//	b.stageFlags = key.stageFlags;
+		//	b.pImmutableSamplers = nullptr;
+		//	layoutBindings.push_back(b);
+		//}
+
+		//VkDescriptorSetLayoutCreateInfo layoutInfo{};
+		//layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+		//layoutInfo.bindingCount = static_cast<uint32_t>(layoutBindings.size());
+		//layoutInfo.pBindings = layoutBindings.data();
+
+		//VkDescriptorSetLayout layout;
+		//Vk_CHECK(vkCreateDescriptorSetLayout(m_vkDevice, &layoutInfo, nullptr, &layout));
+		//m_setLayouts.push_back(layout); // optional: track for destruction later
+
+		// --- [2] Allocate descriptor set ---
+		VkDescriptorSetAllocateInfo allocInfo{};
+		allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+		allocInfo.descriptorPool = descriptorPool;
+		allocInfo.descriptorSetCount = 1;
+		allocInfo.pSetLayouts = &layout;
+
+		VkDescriptorSet descriptorSet;
+		vkAllocateDescriptorSets(m_vkDevice, &allocInfo, &descriptorSet);
+
+		// --- [3] Write descriptors ---
+		std::vector<VkWriteDescriptorSet> writes;
+		for (size_t i = 0; i < key.bindings.size(); ++i) {
+			VkWriteDescriptorSet write{};
+			write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+			write.dstSet = descriptorSet;
+			write.dstBinding = key.bindings[i];
+			write.dstArrayElement = 0;
+			write.descriptorCount = 1;
+			write.descriptorType = key.types[i];
+
+			//if (key.types[i] == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER ||
+			//	key.types[i] == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER) {
+			//	write.pBufferInfo = &key.buffers[i];
+			//} else if (key.types[i] == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER ||
+			//		  key.types[i] == VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE ||
+			//		  key.types[i] == VK_DESCRIPTOR_TYPE_SAMPLER) {
+			//	write.pImageInfo = &key.images[i];
+			//}
+
+			writes.push_back(write);
+		}
+
+		vkUpdateDescriptorSets(m_vkDevice, static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);
+		return descriptorSet;
+	}
+
+
+
+
+	//VkDescriptorSet getOrCreateDescriptorSet(const DescriptorSetKey& key) {
+	//	auto it = descriptorCache.find(key);
+	//	if (it != descriptorCache.end())
+	//		return it->second;
+
+	//	// Otherwise, create and cache
+	//	VkDescriptorSet set = allocateAndWriteDescriptorSet(key);
+	//	descriptorCache.emplace(key, set);
+	//	return set;
+	//}
+
+
+
+	//VkDescriptorSet getOrCreateDescriptorSet(const Material& material, const MaterialInstance& instance, uint32_t setIndex) {
+	//	DescriptorSetKey key;
+	//	key.setIndex = setIndex;
+
+	//	for (const auto& param : material.params) {
+	//		if (param.setIndex != setIndex) continue;
+
+	//		key.bindings.push_back(param.bindingIndex);
+	//		key.types.push_back(param.descriptorType);
+	//		key.resourceHashes.push_back(instance.getBindingHash(param)); // You define how you hash buffer/image/sampler
+	//	}
+
+	//	// Check cache
+	//	auto it = descriptorSetCache.find(key);
+	//	if (it != descriptorSetCache.end())
+	//		return it->second;
+
+	//	// Else allocate and write descriptor set
+	//	VkDescriptorSetLayout layout = descriptorSetLayouts[setIndex]; // already created during pipeline creation
+	//	VkDescriptorSet set = allocateAndWriteDescriptorSet(material, instance, key, layout);
+	//	descriptorSetCache[key] = set;
+	//	return set;
+	//}
+
+
+
+
+
+
+
+
 };
 #pragma warning(pop)
 #endif

@@ -212,6 +212,16 @@ inline static constexpr TypeBase TypeBaseFromT() {
 	return TypeBase::None;
 }
 
+
+template <typename T>
+inline static T readValueAs(void* ptr) {
+	return *static_cast<T*>(ptr);
+}
+template <typename T>
+inline static T& readRefAs(void* ptr) {
+	return *static_cast<T*>(ptr);
+}
+
 template <typename T>
 inline static constexpr std::pair<size_t, size_t> allocSizeAlignment() {
 
@@ -609,15 +619,25 @@ public:
 
 
 
+
+
+
+enum class VarTypeResourceType
+{
+	ConstantBuffer,
+
+};
+
 struct VarTypeStructDefinition
 {
 	struct Member
 	{
-		std::string name;
-		TypeBase type;
-		size_t count;
-		size_t alignment;
-		size_t offset;
+		MatVar var;
+		uint32_t nameIndex;		
+		uint8_t globalSetVar = 0;		
+		uint8_t alignment;
+		uint32_t count;		
+		uint32_t offset;
 	};
 
 	std::vector<Member> members;
@@ -625,17 +645,17 @@ struct VarTypeStructDefinition
 	void finalizeLayout() {
 		size_t offset = 0;
 		for (auto& m : members) {
-			size_t naturalAlign = std::max(alignOfTypeVar(m.type), m.alignment);
+			size_t naturalAlign = std::max(alignOfTypeVar(m.var.type()), static_cast<size_t>(m.alignment));
 			offset = (offset + naturalAlign - 1) & ~(naturalAlign - 1); // align up
 			m.offset = offset;
-			offset += sizeOfTypeVar(m.type) * m.count;
+			offset += sizeOfTypeVar(m.var.type()) * m.count;
 		}
 	}
 
 	uint32_t sizeBytes() const {
 		if (members.empty()) return 0;
 		auto& last = members.back();
-		return static_cast<uint32_t>(last.offset + sizeOfTypeVar(last.type) * last.count);
+		return static_cast<uint32_t>(last.offset + sizeOfTypeVar(last.var.type()) * last.count);
 	}
 };
 
@@ -661,7 +681,7 @@ public:
 		auto& m = _definition->members[index];
 		return VarType{
 			static_cast<uint8_t*>(_ptr) + m.offset,
-			m.type,
+			m.var.type(),
 			m.count
 		};
 	}

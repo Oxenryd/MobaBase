@@ -23,9 +23,6 @@ struct SpriteInstance
 };
 
 
-#define USE_VULKAN
-
-#ifdef USE_VULKAN
 
 // Globals
 [[vk::binding(0, 0)]]
@@ -36,8 +33,9 @@ cbuffer GlobalData : register(b0)
     float4 cameraPosition;
     float time;
 };
+[[vk::binding(0, 1)]] SamplerState smp : register(s0);
 
-// Sprite batching
+// Srites
 struct SpritebatchVSInput
 {
     [[vk::location(0)]] uint vertexId : SV_VertexID;
@@ -51,10 +49,9 @@ struct SpritebatchVSOutput
     [[vk::location(2)]] uint instanceId : TEXCOORD1;
 };
 
-
-[[vk::binding(1, 0)]] StructuredBuffer<SpriteInstance> instances : register(t0);
-[[vk::binding(2, 0)]] SamplerState smp : register(s0);
-[[vk::binding(3, 0)]] Texture2D atlas[] : register(t1);
+[[vk::binding(0, 2)]] StructuredBuffer<SpriteInstance> instances : register(t0);
+[[vk::binding(1, 2)]] SamplerState spriteSmp : register(s1);
+[[vk::binding(2, 2)]] Texture2D atlas[] : register(t1);
 
 
 
@@ -103,6 +100,5 @@ PushData pushData;
 //StructuredBuffer<float4x4> BoneMatrices;
 
 
-#endif
 
 #endif // BASE_TYPES_INCLUDED

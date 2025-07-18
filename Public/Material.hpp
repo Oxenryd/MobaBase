@@ -10,9 +10,27 @@
 #include "ErrorCodes.hpp"
 #include "MaterialParams.h"
 
+
 #include "Texture.hpp"
 #include "MaterialStates.h"
 #include "ArenaAllocator.hpp"
+
+
+class Material;
+class MaterialInstance
+{
+private:
+	uint32_t m_instanceIndex;
+
+public:
+	MaterialInstance(Material* const base, size_t index) :
+		base{ base },
+		m_instanceIndex{static_cast<uint32_t>(index)}
+	{}
+	Material* const base;
+	void* const pushDataPtr() { return nullptr; }
+};
+
 
 class Shader;
 class ShaderManager;
@@ -47,7 +65,6 @@ private:
 	}
 
 public:
-	Arena* matArena = nullptr;
 	size_t arrayIndex = SIZE_T_INVALID;
 	std::map<std::string, size_t> paramsMap;
 	std::vector<MatParam> params;
@@ -68,13 +85,19 @@ public:
 	uint32_t pushConstantOffset = 0;
 	uint32_t pushConstantSize = 0;
 	VkShaderStageFlags pushShaderFlags{};
+	std::vector<SamplerState> samplerStates;
+	std::vector<VarTypeStructDefinition> bufferDefinitions;
+	std::vector<VarTypeStructDefinition> pushConstantDefinition;
+	std::vector<MaterialInstance> instances;
 
-	Material() {
+	Material()
+	{
 		blendModes.push_back(BlendMode::Premultiplied);
 		blendModeCustomPtrs.push_back(nullptr);
 	};
 	//Material(const json& j) { fromJson(j); }
-	Material(const std::string& name, Shader& vertex, Shader& fragment) { 
+	Material(const std::string& name, Shader& vertex, Shader& fragment)
+	{
 		blendModes.push_back(BlendMode::Premultiplied);
 		blendModeCustomPtrs.push_back(nullptr);
 		initFromShaders(name, vertex, fragment);
@@ -91,6 +114,12 @@ public:
 
 	//json toJson();
 	
+	MaterialInstance& createInstance() {
+		instances.emplace_back(MaterialInstance{ this, instances.size()});
+		
+
+		return instances.back();
+	}
 
 	void initFromShaders(const std::string& newName, Shader& vertex, Shader& fragment);
 
@@ -102,16 +131,6 @@ public:
 };
 
 
-class MaterialInstance
-{
-private:
-	Arena* m_matArena;
-	uint32_t m_instanceIndex;
 
-public:
-	MaterialInstance(){}
-	Material* base;
-	void* const pushData() { return nullptr; }
-};
 
 #endif
