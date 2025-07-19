@@ -88,7 +88,7 @@ public:
 		return SIZE_T_INVALID;
 	}
 	std::string& getParamName(size_t index) { return m_paramNames[index]; }
-	std::string& getParamName(size_t index) const { return const_cast<std::string&>(m_paramNames[index]); }
+	const std::string& getParamName(size_t index) const override { return const_cast<std::string&>(m_paramNames[index]); }
 	size_t registerParamName(const std::string& name) {
 		auto index = m_paramNames.size();
 		m_param_NameIndexMap.insert({name, index});

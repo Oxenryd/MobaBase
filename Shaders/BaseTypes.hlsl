@@ -26,7 +26,7 @@ struct SpriteInstance
 
 // Globals
 [[vk::binding(0, 0)]]
-cbuffer GlobalData : register(b0)
+cbuffer globalData : register(b0)
 {
     float4x4 view;
     float4x4 proj;
@@ -36,7 +36,7 @@ cbuffer GlobalData : register(b0)
 [[vk::binding(1, 0)]] SamplerState smp : register(s0, space0);
 [[vk::binding(2, 0)]] Texture2D textures[] : register(t0, space0);
 
-float4 retainGlobals()
+float4 RetainGlobals()
 {
     float dummy = time * time;
     if (dummy == -9999.0f)
@@ -63,9 +63,9 @@ struct SpritebatchVSOutput
     [[vk::location(2)]] uint instanceId : TEXCOORD1;
 };
 
-[[vk::binding(0, 2)]] StructuredBuffer<SpriteInstance> instances : register(t0, space2);
+[[vk::binding(0, 2)]] StructuredBuffer<SpriteInstance> spriteInstances : register(t0, space2);
 [[vk::binding(1, 2)]] SamplerState spriteSmp : register(s0, space2);
-[[vk::binding(2, 2)]] Texture2D atlas[] : register(t1, space2);
+[[vk::binding(2, 2)]] Texture2D spriteAtlas[] : register(t1, space2);
 
 
 

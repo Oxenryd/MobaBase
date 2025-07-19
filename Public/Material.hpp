@@ -16,6 +16,56 @@
 #include "ArenaAllocator.hpp"
 
 
+struct DescriptorSetLayoutKey
+{
+	uint32_t setIndex;
+	std::vector<uint32_t> bindings;
+	std::vector<VkShaderStageFlags> stageFlags;
+	std::vector<uint32_t> counts;
+	std::vector<VkDescriptorType> types;
+	std::vector<uint32_t> nameIndices;
+	bool operator==(const DescriptorSetLayoutKey& other) const = default;
+
+
+	void sortByBinding() {
+		const size_t count = bindings.size();
+		std::vector<size_t> indices(count);
+		std::iota(indices.begin(), indices.end(), 0);
+
+		std::sort(indices.begin(), indices.end(), [&](size_t a, size_t b) {
+			return bindings[a] < bindings[b];
+				  });
+
+		auto reorder = [&](auto& vec) {
+			using T = typename std::decay_t<decltype(vec)>::value_type;
+			std::vector<T> sorted;
+			sorted.reserve(count);
+			for (auto i : indices)
+				sorted.push_back(std::move(vec[i]));
+			vec = std::move(sorted);
+		};
+
+		reorder(bindings);
+		reorder(types);
+		reorder(nameIndices);
+		reorder(counts);
+		reorder(stageFlags);
+	}
+};
+
+struct DescriptorSetLayoutKeyHash
+{
+	size_t operator()(const DescriptorSetLayoutKey& key) const {
+		size_t h = key.setIndex;
+		for (auto b : key.bindings)       h ^= std::hash<uint32_t>{}(b)+0x9e3779b9 + (h << 6) + (h >> 2);
+		for (auto t : key.types)          h ^= std::hash<uint32_t>{}(t)+0x9e3779b9 + (h << 6) + (h >> 2);
+		for (auto n : key.nameIndices)	  h ^= std::hash<uint32_t>{}(n)+0x9e3779b9 + (h << 6) + (h >> 2);
+		for (auto s : key.stageFlags)	  h ^= std::hash<uint32_t>{}(s)+0x9e3779b9 + (h << 6) + (h >> 2);
+		for (auto c : key.counts)		  h ^= std::hash<uint32_t>{}(c)+0x9e3779b9 + (h << 6) + (h >> 2);
+		return h;
+	}
+};
+
 class Material;
 class MaterialInstance
 {
@@ -88,6 +138,7 @@ public:
 	std::vector<SamplerState> samplerStates;
 	//std::vector<VarTypeStructDefinition> bufferDefinitions;
 	//std::vector<VarTypeStructDefinition> pushConstantDefinition;
+	std::unordered_map<uint32_t, DescriptorSetLayoutKey> descriptorSetKeys;
 	std::vector<MaterialInstance> instances;
 
 	Material()

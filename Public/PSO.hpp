@@ -228,7 +228,7 @@ public:
 
 		BufferBindingDesc instanceBuffDesc{};
 		instanceBuffDesc.binding = 1;
-		instanceBuffDesc.size = sizeof(SpriteInstance) * MAX_RUNTIMEARRAY_INSTANCES;
+		instanceBuffDesc.size = sizeof(SpriteInstance) * VULKAN_MAX_RUNTIMEARRAY_INSTANCES;
 		instanceBuffDesc.type = VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 		instanceBuffDesc.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
 		pso.bufferBindingDescs.push_back(instanceBuffDesc);

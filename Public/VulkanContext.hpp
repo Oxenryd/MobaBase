@@ -27,6 +27,8 @@
 
 #include "Material.hpp"
 #include "IShaderProvider.h"
+#include "HlslTypes.h"
+#include <variant>
 
 #define Vk_FAILED(ec) ((ec) != VK_SUCCESS)
 #define Vk_CHECK(ecVar, expr) (ecVar) = (expr); if (Vk_FAILED(ecVar)) return (ecVar);
@@ -78,64 +80,38 @@ constexpr VkFormat GetVkFormat(TypeBase type) {
 	}
 }
 
-//struct DescriptorSetKey
-//{
-//	std::vector<VkDescriptorType> types;         // One per binding
-//	std::vector<uint32_t> bindings;              // Binding indices
-//	std::vector<uint64_t> resourceHashes;        // Hashes of buffers/samplers/images
-//	std::vector<VkDescriptorBufferInfo> buffers; // Actual buffers (if any)
-//	std::vector<VkDescriptorImageInfo> images;   // Actual textures/samplers (if any)
-//	VkShaderStageFlags stageFlags;
-//	uint32_t setIndex;
-//
-//	bool operator==(const DescriptorSetKey& other) const { 
-//		return 
-//			(types == other.types) &&
-//			(bindings == other.bindings) &&
-//			(resourceHashes == other.resourceHashes);
-//	}
-//};
-//
-//struct DescriptorSetKeyHash
-//{
-//private:
-//	inline void hash_combine(size_t& seed, uint64_t val) const {
-//		seed ^= std::hash<uint64_t>{}(val)+0x9e3779b9 + (seed << 6) + (seed >> 2);
-//	}
-//public:
-//	size_t operator()(const DescriptorSetKey& key) const { 
-//		size_t seed = 0;
-//		for (auto& type : key.types)
-//			hash_combine(seed, static_cast<uint64_t>(type));
-//		for (auto& binding : key.bindings)
-//			hash_combine(seed, static_cast<uint64_t>(binding));
-//		for (auto& handle: key.resourceHashes)
-//			hash_combine(seed, handle);
-//
-//		return seed;
-//	}
-//};
-
-struct DescriptorSetKey
+struct ResourceBinding
 {
-	uint32_t setIndex;
-	std::vector<uint32_t> bindings;
-	std::vector<VkDescriptorType> types;
-	std::vector<size_t> resourceHashes; // hashes of GPU resources or handles
-	bool operator==(const DescriptorSetKey& other) const = default;
-};
+	uint64_t handle;
+	uint32_t binding;
+	VkDescriptorType type;
+	void hash(size_t& seed) const { 
+		seed ^= std::hash<uint64_t>{}(handle)+0x9e3779b9 + (seed << 6) + (seed >> 2);
+		seed ^= std::hash<uint32_t>{}(binding) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+		seed ^= std::hash<uint32_t>{}(type)+0x9e3779b9 + (seed << 6) + (seed >> 2);
+	}
 
-struct DescriptorSetKeyHash
-{
-	size_t operator()(const DescriptorSetKey& key) const {
-		size_t h = 0;
-		for (auto b : key.bindings)       h ^= std::hash<uint32_t>{}(b)+0x9e3779b9 + (h << 6) + (h >> 2);
-		for (auto t : key.types)          h ^= std::hash<uint32_t>{}(t)+0x9e3779b9 + (h << 6) + (h >> 2);
-		for (auto r : key.resourceHashes) h ^= std::hash<size_t>{}(r)+0x9e3779b9 + (h << 6) + (h >> 2);
-		return h;
+	bool operator==(const ResourceBinding& rhs) const {
+		return handle == rhs.handle && binding == rhs.binding && type == rhs.type;
 	}
 };
 
+struct BoundDescriptorKey
+{
+	VkDescriptorSetLayout layout;
+	std::vector<ResourceBinding> bindings;
+
+	bool operator==(const BoundDescriptorKey&) const = default;
+};
+
+struct BoundDescriptorKeyHash
+{
+	size_t operator()(const BoundDescriptorKey& key) const {
+		size_t seed = reinterpret_cast<uint64_t>(key.layout);
+		for (auto b : key.bindings) b.hash(seed);
+		return seed;
+	}
+};
 
 
 class SamplerStatesPresets
@@ -514,8 +490,9 @@ public:
 	uint32_t m_graphicsQueueFamilyIndex = static_cast<uint32_t>(-1);
 
 	std::unordered_map<SamplerState, VkSampler, SamplerStateHash> baseSamplers;
-	std::unordered_map<DescriptorSetKey, VkDescriptorSet, DescriptorSetKeyHash> descriptorSetCache;
-	std::unordered_map<uint32_t, VkDescriptorSetLayout> descriptorSetLayouts;
+	std::unordered_map<DescriptorSetLayoutKey, VkDescriptorSetLayout, DescriptorSetLayoutKeyHash> descSetLayoutCache;
+	std::unordered_map<BoundDescriptorKey, VkDescriptorSet, BoundDescriptorKeyHash> descriptorSetCache;
+	//std::unordered_map<uint32_t, VkDescriptorSetLayout> descriptorSetLayouts;
 
 	BlendMode currentBlendMode = BlendMode::Opaque;
 
@@ -537,13 +514,23 @@ public:
 	VkExtent2D swapchainExtent;
 	VkDebugUtilsMessengerEXT debugMessenger = VK_NULL_HANDLE;
 
-	VkDescriptorPool descriptorPool = nullptr;
+	std::vector<VkDescriptorPool> descPools;
+	VkDescriptorPool currentDescPool = nullptr;
+
 	VkCommandPool commandPool = nullptr;
 	
 	std::vector<VkRenderPass> rendPasses;
 	std::vector<VkFramebuffer> swapChainFramebuffers;	
 	std::array<FrameSync, VULKAN_MAX_FRAMES_IN_FLIGHT> frameSync;
 	std::vector<VkSemaphore> imageRenderDone;
+
+
+	// Global Material Buffers
+	GlobalData matData_globalData;
+	VkBuffer matBuf_globalData;
+	VkDeviceMemory matDevMem_globalData;
+	std::vector<SpriteInstance> matBuf_spriteInstances;
+
 
 	void setPendingExit() { m_pendingExit = true; }
 	const bool& isPendingExit() const { return m_pendingExit; }
@@ -595,6 +582,8 @@ public:
 		Vk_CHECK(vk, createCommandBuffer());
 		Vk_CHECK(vk, createSyncObjects());
 		Vk_CHECK(vk, createSamplerPresets());
+		Vk_CHECK(vk, createDescriptorPool());
+		Vk_CHECK(vk, createGlobalBuffers());
 
 		isClean = false;
 
@@ -606,6 +595,61 @@ public:
 	//	Vk_CHECK(vk, createGraphicsPipeline(pso));
 	//	return VK_SUCCESS;
 	//}
+
+	inline VkResult createGlobalBuffers() {
+		VkResult vkResult;
+		LOGLINE(LogType::Info, LogMod::Vulkan, "Creating and binding global buffers... ");
+
+		VkBufferCreateInfo bufferInfo{};
+		bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+		bufferInfo.size = sizeof(GlobalData);
+		bufferInfo.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+		bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+		Vk_CHECK(vkResult, vkCreateBuffer(m_vkDevice, &bufferInfo, nullptr, &matBuf_globalData));
+
+		VkMemoryRequirements memRequirements;
+		vkGetBufferMemoryRequirements(m_vkDevice, matBuf_globalData, &memRequirements);
+
+		VkMemoryAllocateInfo allocInfo{};
+		allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+		allocInfo.allocationSize = memRequirements.size;
+		allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits,
+												   VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+												   m_phyDevice);
+
+		Vk_CHECK(vkResult, vkAllocateMemory(m_vkDevice, &allocInfo, nullptr, &matDevMem_globalData));
+
+		Vk_CHECK(vkResult, vkBindBufferMemory(m_vkDevice, matBuf_globalData, matDevMem_globalData, 0));
+
+		LOG(LogType::Success, "Done.");
+		return VK_SUCCESS;
+	}
+
+
+	inline VkResult createDescriptorPool() {
+		VkResult vkResult;
+		LOGLINE(LogType::Info, LogMod::Vulkan, "Creating Descriptor pool... ");
+
+		std::vector<VkDescriptorPoolSize> poolSizes = {
+			{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,     100 },
+			{ VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,     VULKAN_MAX_RUNTIMEARRAY_INSTANCES },
+			{ VK_DESCRIPTOR_TYPE_SAMPLER,            200 },
+			{ VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,      4096 },
+		};
+
+		VkDescriptorPoolCreateInfo poolInfo{};
+		poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+		poolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
+		poolInfo.maxSets = 256;
+		poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
+		poolInfo.pPoolSizes = poolSizes.data();
+
+		Vk_CHECK(vkResult, vkCreateDescriptorPool(m_vkDevice, &poolInfo, nullptr, &currentDescPool));
+		descPools.push_back(currentDescPool);
+
+		LOG(LogType::Success, "Done.");
+		return VK_SUCCESS;
+	}
 
 	inline VkResult createInstance() {
 		VkResult vkResult;
@@ -1120,49 +1164,141 @@ public:
 
 		// Layout
 		// Descriptor sets
-		struct SetLayoutInfo
-		{
-			std::vector<VkDescriptorSetLayoutBinding> bindings;
-			std::vector<VkDescriptorBindingFlags> bindingFlags;
-			VkDescriptorSetLayoutBindingFlagsCreateInfo bindingFlagsInfo;
-		};
-		std::unordered_map<uint32_t, SetLayoutInfo> bindingsPerSet;
-		for (const auto& param : material.params) {
-			if (param.var.type() == TypeBase::PushConst || param.var.type() == TypeBase::PushConstStruct)
-				continue;
+		//struct SetLayoutInfo
+		//{
+		//	std::vector<VkDescriptorSetLayoutBinding> bindings;
+		//	std::vector<VkDescriptorBindingFlags> bindingFlags;
+		//	VkDescriptorSetLayoutBindingFlagsCreateInfo bindingFlagsInfo;
+		//};
+		//std::unordered_map<uint32_t, SetLayoutInfo> bindingsPerSet;
 
-			auto& setInfo = bindingsPerSet[param.setIndex];
-
-			VkDescriptorBindingFlags flags = param.arrayType != MatParamArrayType::Dynamic
-				? 0
-				: (VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT | VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT);
-			setInfo.bindingFlags.push_back(flags);
-
-			VkDescriptorSetLayoutBinding binding{};
-			binding.binding = param.bindingIndex;
-			binding.descriptorType = param.descriptorType;
-			binding.descriptorCount = static_cast<uint32_t>(param.count);
-			binding.stageFlags = MatParamStageToVkShaderStageFlagBits(param.stage);
-			binding.pImmutableSamplers = nullptr;
-
-			setInfo.bindings.push_back(binding);
-		}
-		std::vector<VkDescriptorSetLayout> setLayouts;
-		for (auto& [set, info] : bindingsPerSet) {
-			info.bindingFlagsInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO;
-			info.bindingFlagsInfo.bindingCount = static_cast<uint32_t>(info.bindingFlags.size());
-			info.bindingFlagsInfo.pBindingFlags = info.bindingFlags.data();
-
-			VkDescriptorSetLayoutCreateInfo layoutInfo{};
-			layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-			layoutInfo.bindingCount = static_cast<uint32_t>(info.bindings.size());
-			layoutInfo.pBindings = info.bindings.data();
-			layoutInfo.pNext = &info.bindingFlagsInfo;
+		
+		// Layout & Descriptor sets
+		std::vector<VkDescriptorSetLayout> layouts;
+		for (auto& [set, key] : material.descriptorSetKeys) {
 
 			VkDescriptorSetLayout layout;
-			Vk_CHECK(vkResult, vkCreateDescriptorSetLayout(m_vkDevice, &layoutInfo, nullptr, &layout));
-			setLayouts.push_back(layout);
+			auto layoutIt = descSetLayoutCache.find(key);
+			if (layoutIt == descSetLayoutCache.end()) {
+
+				// not found, create the descriptor set
+				std::unordered_map<uint32_t, std::vector<VkDescriptorSetLayoutBinding>> setBindings;
+				for (size_t i = 0; i < key.bindings.size(); ++i) {
+					VkDescriptorSetLayoutBinding binding{};
+					binding.binding = key.bindings[i];
+					binding.descriptorType = key.types[i];
+					binding.descriptorCount = key.counts[i];
+					binding.stageFlags = key.stageFlags[i];
+					binding.pImmutableSamplers = nullptr;
+					setBindings[set].push_back(binding);
+				}	
+		
+				VkDescriptorSetLayoutCreateInfo layoutInfo{};
+				layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+				layoutInfo.bindingCount = static_cast<uint32_t>(setBindings[set].size());
+				layoutInfo.pBindings = setBindings[set].data();
+
+				Vk_CHECK(vkResult, vkCreateDescriptorSetLayout(m_vkDevice, &layoutInfo, nullptr, &layout));
+				descSetLayoutCache.insert({ key, layout });
+			} else
+				layout = layoutIt->second;
+
+
+			std::vector<VkWriteDescriptorSet> pendingWrites;
+			VkDescriptorSet descriptorSet;
+			BoundDescriptorKey descSetKey{};
+			descSetKey.layout = layout;
+			for (size_t i = 0; i < key.bindings.size(); ++i) { // key.bindings are sorted
+				ResourceBinding rBind{};
+				rBind.binding = key.bindings[i];
+				rBind.type = key.types[i];
+
+				if (set == MAT_GLOBALDATA_SET && provider->getParamName(key.nameIndices[i]) == MAT_GLOBALDATA_NAME) {
+					rBind.handle = reinterpret_cast<uint64_t>(matBuf_globalData);
+					VkDescriptorBufferInfo bufferInfo{};
+					bufferInfo.buffer = matBuf_globalData;
+					bufferInfo.offset = 0;
+					bufferInfo.range = sizeof(GlobalData);
+
+					VkWriteDescriptorSet write{};
+					write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+					write.dstSet = nullptr;
+					write.dstBinding = key.bindings[i];
+					write.dstArrayElement = 0;
+					write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+					write.descriptorCount = 1;
+					write.pBufferInfo = &bufferInfo;
+
+					pendingWrites.push_back(write);
+				}
+				// else if (paramName == ...
+				descSetKey.bindings.push_back(rBind);
+			}
+			auto descSetIt = descriptorSetCache.find(descSetKey);
+			if (descSetIt == descriptorSetCache.end()) {
+
+				// allocate and update descriptor set
+				VkDescriptorSetAllocateInfo allocInfo{};
+				allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+				allocInfo.descriptorPool = currentDescPool;
+				allocInfo.descriptorSetCount = 1;
+				allocInfo.pSetLayouts = &layout;
+				Vk_CHECK(vkResult, vkAllocateDescriptorSets(m_vkDevice, &allocInfo, &descriptorSet));
+
+				
+				for (auto& write : pendingWrites) {
+					write.dstSet = descriptorSet;
+					vkUpdateDescriptorSets(m_vkDevice, 1, &write, 0, nullptr);
+				}
+
+				descriptorSetCache.insert({ descSetKey, descriptorSet });
+			} else
+				descriptorSet = descSetIt->second;
+
+			layouts.resize(std::max(layouts.size(), static_cast<size_t>(set + 1)));
+			layouts[set] = layout;
 		}
+
+
+
+
+		//for (const auto& param : material.params) {
+		//	if (param.var.type() == TypeBase::PushConst || param.var.type() == TypeBase::PushConstStruct)
+		//		continue;
+
+		//	auto& setInfo = bindingsPerSet[param.setIndex];
+
+		//	VkDescriptorBindingFlags flags = param.arrayType != MatParamArrayType::Dynamic
+		//		? 0
+		//		: (VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT | VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT);
+		//	setInfo.bindingFlags.push_back(flags);
+
+		//	VkDescriptorSetLayoutBinding binding{};
+		//	binding.binding = param.bindingIndex;
+		//	binding.descriptorType = param.descriptorType;
+		//	binding.descriptorCount = static_cast<uint32_t>(param.count);
+		//	binding.stageFlags = MatParamStageToVkShaderStageFlagBits(param.stage);
+		//	binding.pImmutableSamplers = nullptr;
+
+		//	setInfo.bindings.push_back(binding);
+		//}
+		//std::vector<VkDescriptorSetLayout> setLayouts;
+		//for (auto& [set, info] : bindingsPerSet) {
+		//	info.bindingFlagsInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO;
+		//	info.bindingFlagsInfo.bindingCount = static_cast<uint32_t>(info.bindingFlags.size());
+		//	info.bindingFlagsInfo.pBindingFlags = info.bindingFlags.data();
+
+		//	VkDescriptorSetLayoutCreateInfo layoutInfo{};
+		//	layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+		//	layoutInfo.bindingCount = static_cast<uint32_t>(info.bindings.size());
+		//	layoutInfo.pBindings = info.bindings.data();
+		//	layoutInfo.pNext = &info.bindingFlagsInfo;
+
+		//	VkDescriptorSetLayout layout;
+		//	Vk_CHECK(vkResult, vkCreateDescriptorSetLayout(m_vkDevice, &layoutInfo, nullptr, &layout));
+		//	setLayouts.push_back(layout);
+		//}
+
 
 		// Push Constants
 		std::vector<VkPushConstantRange> pushConstantRanges;
@@ -1177,11 +1313,10 @@ public:
 			pushConstantRanges.push_back(range);
 		}
 
-
 		VkPipelineLayoutCreateInfo layoutInfo{};
 		layoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-		layoutInfo.setLayoutCount = static_cast<uint32_t>(setLayouts.size());
-		layoutInfo.pSetLayouts = setLayouts.data();
+		layoutInfo.setLayoutCount = static_cast<uint32_t>(layouts.size());
+		layoutInfo.pSetLayouts = layouts.data();
 		layoutInfo.pushConstantRangeCount = static_cast<uint32_t>(pushConstantRanges.size());
 		layoutInfo.pPushConstantRanges = pushConstantRanges.data();
 
@@ -1724,122 +1859,19 @@ public:
 		pendingResize = true;
 	}
 
+	uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties, VkPhysicalDevice physicalDevice) {
+		VkPhysicalDeviceMemoryProperties memProperties;
+		vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memProperties);
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-	VkDescriptorSet allocateAndWriteDescriptorSet(VkDescriptorSetLayout layout, const DescriptorSetKey& key) {
-		// --- [1] Build descriptor set layout from types + bindings ---
-		//std::vector<VkDescriptorSetLayoutBinding> layoutBindings;
-		//for (size_t i = 0; i < key.bindings.size(); ++i) {
-		//	VkDescriptorSetLayoutBinding b{};
-		//	b.binding = key.bindings[i];
-		//	b.descriptorType = key.types[i];
-		//	b.descriptorCount = 1;
-		//	b.stageFlags = key.stageFlags;
-		//	b.pImmutableSamplers = nullptr;
-		//	layoutBindings.push_back(b);
-		//}
-
-		//VkDescriptorSetLayoutCreateInfo layoutInfo{};
-		//layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-		//layoutInfo.bindingCount = static_cast<uint32_t>(layoutBindings.size());
-		//layoutInfo.pBindings = layoutBindings.data();
-
-		//VkDescriptorSetLayout layout;
-		//Vk_CHECK(vkCreateDescriptorSetLayout(m_vkDevice, &layoutInfo, nullptr, &layout));
-		//m_setLayouts.push_back(layout); // optional: track for destruction later
-
-		// --- [2] Allocate descriptor set ---
-		VkDescriptorSetAllocateInfo allocInfo{};
-		allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-		allocInfo.descriptorPool = descriptorPool;
-		allocInfo.descriptorSetCount = 1;
-		allocInfo.pSetLayouts = &layout;
-
-		VkDescriptorSet descriptorSet;
-		vkAllocateDescriptorSets(m_vkDevice, &allocInfo, &descriptorSet);
-
-		// --- [3] Write descriptors ---
-		std::vector<VkWriteDescriptorSet> writes;
-		for (size_t i = 0; i < key.bindings.size(); ++i) {
-			VkWriteDescriptorSet write{};
-			write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-			write.dstSet = descriptorSet;
-			write.dstBinding = key.bindings[i];
-			write.dstArrayElement = 0;
-			write.descriptorCount = 1;
-			write.descriptorType = key.types[i];
-
-			//if (key.types[i] == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER ||
-			//	key.types[i] == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER) {
-			//	write.pBufferInfo = &key.buffers[i];
-			//} else if (key.types[i] == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER ||
-			//		  key.types[i] == VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE ||
-			//		  key.types[i] == VK_DESCRIPTOR_TYPE_SAMPLER) {
-			//	write.pImageInfo = &key.images[i];
-			//}
-
-			writes.push_back(write);
+		for (uint32_t i = 0; i < memProperties.memoryTypeCount; i++) {
+			if ((typeFilter & (1 << i)) &&
+				(memProperties.memoryTypes[i].propertyFlags & properties) == properties) {
+				return i;
+			}
 		}
 
-		vkUpdateDescriptorSets(m_vkDevice, static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);
-		return descriptorSet;
+		throw std::runtime_error("Failed to find suitable memory type!");
 	}
-
-
-
-
-	//VkDescriptorSet getOrCreateDescriptorSet(const DescriptorSetKey& key) {
-	//	auto it = descriptorCache.find(key);
-	//	if (it != descriptorCache.end())
-	//		return it->second;
-
-	//	// Otherwise, create and cache
-	//	VkDescriptorSet set = allocateAndWriteDescriptorSet(key);
-	//	descriptorCache.emplace(key, set);
-	//	return set;
-	//}
-
-
-
-	//VkDescriptorSet getOrCreateDescriptorSet(const Material& material, const MaterialInstance& instance, uint32_t setIndex) {
-	//	DescriptorSetKey key;
-	//	key.setIndex = setIndex;
-
-	//	for (const auto& param : material.params) {
-	//		if (param.setIndex != setIndex) continue;
-
-	//		key.bindings.push_back(param.bindingIndex);
-	//		key.types.push_back(param.descriptorType);
-	//		key.resourceHashes.push_back(instance.getBindingHash(param)); // You define how you hash buffer/image/sampler
-	//	}
-
-	//	// Check cache
-	//	auto it = descriptorSetCache.find(key);
-	//	if (it != descriptorSetCache.end())
-	//		return it->second;
-
-	//	// Else allocate and write descriptor set
-	//	VkDescriptorSetLayout layout = descriptorSetLayouts[setIndex]; // already created during pipeline creation
-	//	VkDescriptorSet set = allocateAndWriteDescriptorSet(material, instance, key, layout);
-	//	descriptorSetCache[key] = set;
-	//	return set;
-	//}
-
-
-
-
 
 
 

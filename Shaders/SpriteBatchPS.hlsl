@@ -6,8 +6,8 @@
 
 float4 main(SpritebatchVSOutput pin) : SV_Target
 {    
-    SpriteInstance inst = instances[pin.instanceId];    
-    float4 col = atlas[inst.texIndex].Sample(spriteSmp, pin.uv + pushData.uvOffset);
+    SpriteInstance inst = spriteInstances[pin.instanceId];    
+    float4 col = spriteAtlas[inst.texIndex].Sample(spriteSmp, pin.uv + pushData.uvOffset);
 
     if (col.a < 0.01)
         discard;
@@ -15,5 +15,5 @@ float4 main(SpritebatchVSOutput pin) : SV_Target
     col += pushData.color;
     
     
-    return col + retainGlobals();
+    return col + RetainGlobals();
 }

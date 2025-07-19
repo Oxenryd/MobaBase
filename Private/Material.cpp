@@ -47,7 +47,10 @@ void Material::addShaderParams(
 		if (param.spvTypeDesc.op == SpvOpTypeRuntimeArray) {
 			if (param.count == 0) {
 				matParam.arrayType = MatParamArrayType::Dynamic;
-				matParam.count = MAX_RUNTIMEARRAY_INSTANCES;
+				if (matParam.var.type() == TypeBase::Texture2DArray)
+					matParam.count = 4096;
+				else
+					matParam.count = VULKAN_MAX_RUNTIMEARRAY_INSTANCES;
 			} else {
 				matParam.arrayType = MatParamArrayType::Static;
 				matParam.count = param.count;
@@ -157,9 +160,23 @@ void Material::initFromShaders(const std::string& newName, Shader& vertex, Shade
 	for (auto& psParam : fromPs)
 		params.push_back(psParam);
 
+	descriptorSetKeys.clear();
 	for (size_t i = 0; i < params.size(); ++i ) {
 		auto& param = params[i];
 		paramsMap.insert({ param.name(), i });
+
+		// Skip push constants
+		if (param.var.type() != TypeBase::PushConstStruct) {
+			auto& descSetKey = descriptorSetKeys[param.setIndex];
+			descSetKey.setIndex = param.setIndex;
+			descSetKey.bindings.push_back(param.bindingIndex);
+			descSetKey.types.push_back(param.descriptorType);
+			descSetKey.nameIndices.push_back(param.nameIndex);
+			descSetKey.counts.push_back(param.count);
+			descSetKey.stageFlags.push_back(MatParamStageToVkShaderStageFlagBits(param.stage));
+		}
+
+
 
 		switch (param.var.type())
 		{
@@ -168,6 +185,12 @@ void Material::initFromShaders(const std::string& newName, Shader& vertex, Shade
 				pushShaderFlags = MatParamStageToVkShaderStageFlagBits(param.stage);
 				pushConstantOffset = param.offset;
 				pushConstantSize = param.size;
+
+				// TODO: Define/Alloc/create material buffers for pushconstant
+				if (param.setIndex >= VULKAN_GLOBAL_DESCRIPTOR_SETS) {
+
+				}
+				
 			} break;
 
 			case TypeBase::Sampler:
@@ -184,6 +207,9 @@ void Material::initFromShaders(const std::string& newName, Shader& vertex, Shade
 		}
 	}
 
+	for (auto& [set, key] : descriptorSetKeys) {
+		key.sortByBinding();
+	}
 	ShaderManager::getInstance()->registerMaterial(newName, *this);
 }
 
