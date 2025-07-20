@@ -81,7 +81,6 @@ public:
 	void* const pushDataPtr() { return nullptr; }
 };
 
-
 class Shader;
 class ShaderManager;
 class VulkanContext;
@@ -135,11 +134,10 @@ public:
 	uint32_t pushConstantOffset = 0;
 	uint32_t pushConstantSize = 0;
 	VkShaderStageFlags pushShaderFlags{};
-	std::vector<SamplerState> samplerStates;
-	//std::vector<VarTypeStructDefinition> bufferDefinitions;
-	//std::vector<VarTypeStructDefinition> pushConstantDefinition;
+	std::unordered_map<VkBindPair, SamplerState, VkBindPairHash> samplerStates;
 	std::unordered_map<uint32_t, DescriptorSetLayoutKey> descriptorSetKeys;
 	std::vector<MaterialInstance> instances;
+	std::vector<MaterialBuffer> buffers;
 
 	Material()
 	{
@@ -166,8 +164,12 @@ public:
 	//json toJson();
 	
 	MaterialInstance& createInstance() {
-		instances.emplace_back(MaterialInstance{ this, instances.size()});
-		
+		auto index = instances.size();
+		instances.emplace_back(MaterialInstance{ this, index });
+		for (auto& buffer : buffers) {
+			uint32_t pushedIndex = buffer.push_new();
+			assert(pushedIndex == index && "createInstance(): index mismatch between instance index and buffer index.");
+		}
 
 		return instances.back();
 	}

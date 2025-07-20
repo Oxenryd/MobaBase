@@ -214,11 +214,11 @@ inline static constexpr TypeBase TypeBaseFromT() {
 
 
 template <typename T>
-inline static T readValueAs(void* ptr) {
+inline static T ReadValueAs(void* ptr) {
 	return *static_cast<T*>(ptr);
 }
 template <typename T>
-inline static T& readRefAs(void* ptr) {
+inline static T& ReadRefAs(void* ptr) {
 	return *static_cast<T*>(ptr);
 }
 
@@ -331,7 +331,7 @@ inline constexpr TypeBase stringToTypeBase(const std::string& s) {
 }
 
 
-inline static constexpr size_t sizeOfTypeVar(TypeBase type) {
+inline static constexpr size_t SizeOfTypeBase(TypeBase type) {
 	switch (type) {
 		case TypeBase::None:			return 0;
 		case TypeBase::Invalid:			return 0;
@@ -378,7 +378,7 @@ inline static constexpr size_t sizeOfTypeVar(TypeBase type) {
 	}
 }
 
-inline static constexpr size_t alignOfTypeVar(TypeBase type) {
+inline static constexpr size_t AlignOfTypeBase(TypeBase type) {
 	switch (type) {
 		case TypeBase::None:			return 0;
 		case TypeBase::Invalid:			return 0;
@@ -428,7 +428,7 @@ inline static constexpr size_t alignOfTypeVar(TypeBase type) {
 inline static std::pair<size_t, size_t> allocSizeAlignment(TypeBase type) {
 
 	if (type != TypeBase::Other) {
-		return { sizeOfTypeVar(type), alignOfTypeVar(type)};
+		return { SizeOfTypeBase(type), AlignOfTypeBase(type)};
 	}
 
 	return { sizeof(void*), alignof(void*) };
@@ -462,9 +462,9 @@ public:
 	VarType(TypeBase type, size_t count, Arena& arena, size_t alignPad) {
 		_type = static_cast<uint64_t>(type);
 		_count = count;
-		auto align = alignOfTypeVar(type);
+		auto align = AlignOfTypeBase(type);
 		_ptr = arena.allocate(
-			sizeOfTypeVar(type) * _count,
+			SizeOfTypeBase(type) * _count,
 			alignPad <= align ? align : alignPad);
 	}
 

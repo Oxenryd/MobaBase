@@ -1102,7 +1102,7 @@ public:
 			desc.binding = 0;
 			desc.format = GetVkFormat(attr.type);
 			desc.offset = attr.offset;
-			uint32_t end = attr.offset + sizeOfTypeVar(attr.type);
+			uint32_t end = attr.offset + SizeOfTypeBase(attr.type);
 			vsIaStride = std::max(vsIaStride, end);
 			attributeDescs.push_back(desc);
 		}
@@ -1162,17 +1162,6 @@ public:
 		colorBlending.attachmentCount = colorBlends.size();
 		colorBlending.pAttachments = colorBlends.data();
 
-		// Layout
-		// Descriptor sets
-		//struct SetLayoutInfo
-		//{
-		//	std::vector<VkDescriptorSetLayoutBinding> bindings;
-		//	std::vector<VkDescriptorBindingFlags> bindingFlags;
-		//	VkDescriptorSetLayoutBindingFlagsCreateInfo bindingFlagsInfo;
-		//};
-		//std::unordered_map<uint32_t, SetLayoutInfo> bindingsPerSet;
-
-		
 		// Layout & Descriptor sets
 		std::vector<VkDescriptorSetLayout> layouts;
 		for (auto& [set, key] : material.descriptorSetKeys) {
@@ -1259,51 +1248,10 @@ public:
 			layouts[set] = layout;
 		}
 
-
-
-
-		//for (const auto& param : material.params) {
-		//	if (param.var.type() == TypeBase::PushConst || param.var.type() == TypeBase::PushConstStruct)
-		//		continue;
-
-		//	auto& setInfo = bindingsPerSet[param.setIndex];
-
-		//	VkDescriptorBindingFlags flags = param.arrayType != MatParamArrayType::Dynamic
-		//		? 0
-		//		: (VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT | VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT);
-		//	setInfo.bindingFlags.push_back(flags);
-
-		//	VkDescriptorSetLayoutBinding binding{};
-		//	binding.binding = param.bindingIndex;
-		//	binding.descriptorType = param.descriptorType;
-		//	binding.descriptorCount = static_cast<uint32_t>(param.count);
-		//	binding.stageFlags = MatParamStageToVkShaderStageFlagBits(param.stage);
-		//	binding.pImmutableSamplers = nullptr;
-
-		//	setInfo.bindings.push_back(binding);
-		//}
-		//std::vector<VkDescriptorSetLayout> setLayouts;
-		//for (auto& [set, info] : bindingsPerSet) {
-		//	info.bindingFlagsInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO;
-		//	info.bindingFlagsInfo.bindingCount = static_cast<uint32_t>(info.bindingFlags.size());
-		//	info.bindingFlagsInfo.pBindingFlags = info.bindingFlags.data();
-
-		//	VkDescriptorSetLayoutCreateInfo layoutInfo{};
-		//	layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-		//	layoutInfo.bindingCount = static_cast<uint32_t>(info.bindings.size());
-		//	layoutInfo.pBindings = info.bindings.data();
-		//	layoutInfo.pNext = &info.bindingFlagsInfo;
-
-		//	VkDescriptorSetLayout layout;
-		//	Vk_CHECK(vkResult, vkCreateDescriptorSetLayout(m_vkDevice, &layoutInfo, nullptr, &layout));
-		//	setLayouts.push_back(layout);
-		//}
-
-
 		// Push Constants
 		std::vector<VkPushConstantRange> pushConstantRanges;
 		for (const auto& param : material.params) {
-			if (param.var.type() != TypeBase::PushConstStruct)
+			if (param.type != TypeBase::PushConstStruct)
 				continue;
 
 			VkPushConstantRange range{};
@@ -1349,7 +1297,6 @@ public:
 
 		VkPipeline graphicsPipeline;
 		Vk_CHECK(vkResult, vkCreateGraphicsPipelines(m_vkDevice, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &graphicsPipeline));
-
 
 		// Make Material ready
 		material.init(graphicsPipeline, pipelineLayout, pipelineId++);
@@ -1469,10 +1416,6 @@ public:
 		point_clampBorder.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
 		point_clampBorder.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
 		point_clampBorder.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
-		//VkSamplerCreateInfo point_mirrorClampEdge = point_repeat;
-		//point_mirrorClampEdge.addressModeU = VK_SAMPLER_ADDRESS_MODE_MIRROR_CLAMP_TO_EDGE;
-		//point_mirrorClampEdge.addressModeV = VK_SAMPLER_ADDRESS_MODE_MIRROR_CLAMP_TO_EDGE;
-		//point_mirrorClampEdge.addressModeW = VK_SAMPLER_ADDRESS_MODE_MIRROR_CLAMP_TO_EDGE;
 
 		Vk_CHECK(vkResult, vkCreateSampler(m_vkDevice, &point_repeat, nullptr, &sampler));
 		baseSamplers.insert( { {SamplerMode::Point, SamplerAddressMode::Repeat}, sampler } );
@@ -1482,9 +1425,6 @@ public:
 		baseSamplers.insert({ {SamplerMode::Point, SamplerAddressMode::ClampEdge}, sampler });
 		Vk_CHECK(vkResult, vkCreateSampler(m_vkDevice, &point_clampBorder, nullptr, &sampler));
 		baseSamplers.insert({ {SamplerMode::Point, SamplerAddressMode::ClampBorder}, sampler });
-		//Vk_CHECK(vkResult, vkCreateSampler(m_vkDevice, &point_mirrorClampEdge, nullptr, &sampler));
-		//baseSamplers.insert({ {SamplerMode::Point, SamplerAddressMode::MirroredClampEdge}, sampler });
-
 		
 		// Linear
 		VkSamplerCreateInfo linear_repeat = SamplerStatesPresets::linear;
@@ -1500,10 +1440,6 @@ public:
 		linear_clampBorder.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
 		linear_clampBorder.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
 		linear_clampBorder.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
-		//VkSamplerCreateInfo linear_mirrorClampEdge = linear_repeat;
-		//linear_mirrorClampEdge.addressModeU = VK_SAMPLER_ADDRESS_MODE_MIRROR_CLAMP_TO_EDGE;
-		//linear_mirrorClampEdge.addressModeV = VK_SAMPLER_ADDRESS_MODE_MIRROR_CLAMP_TO_EDGE;
-		//linear_mirrorClampEdge.addressModeW = VK_SAMPLER_ADDRESS_MODE_MIRROR_CLAMP_TO_EDGE;
 
 		Vk_CHECK(vkResult, vkCreateSampler(m_vkDevice, &linear_repeat, nullptr, &sampler));
 		baseSamplers.insert({ {SamplerMode::Linear, SamplerAddressMode::Repeat}, sampler });
@@ -1513,8 +1449,58 @@ public:
 		baseSamplers.insert({ {SamplerMode::Linear, SamplerAddressMode::ClampEdge}, sampler });
 		Vk_CHECK(vkResult, vkCreateSampler(m_vkDevice, &linear_clampBorder, nullptr, &sampler));
 		baseSamplers.insert({ {SamplerMode::Linear, SamplerAddressMode::ClampBorder}, sampler });
-		//Vk_CHECK(vkResult, vkCreateSampler(m_vkDevice, &linear_mirrorClampEdge, nullptr, &sampler));
-		//baseSamplers.insert({ {SamplerMode::Linear, SamplerAddressMode::MirroredClampEdge}, sampler });
+
+
+		// Anisotropic
+		VkSamplerCreateInfo aniso_repeat = SamplerStatesPresets::aniso;
+		aniso_repeat.maxAnisotropy = 4.0f;
+		VkSamplerCreateInfo aniso_mirrorRepeat = aniso_repeat;
+		aniso_mirrorRepeat.addressModeU = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
+		aniso_mirrorRepeat.addressModeV = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
+		aniso_mirrorRepeat.addressModeW = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
+		VkSamplerCreateInfo aniso_clampEdge = aniso_repeat;
+		aniso_clampEdge.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+		aniso_clampEdge.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+		aniso_clampEdge.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+		VkSamplerCreateInfo aniso_clampBorder = aniso_repeat;
+		aniso_clampBorder.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+		aniso_clampBorder.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+		aniso_clampBorder.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+
+		Vk_CHECK(vkResult, vkCreateSampler(m_vkDevice, &aniso_repeat, nullptr, &sampler));
+		baseSamplers.insert({ {SamplerMode::Aniso4X, SamplerAddressMode::Repeat}, sampler });
+		Vk_CHECK(vkResult, vkCreateSampler(m_vkDevice, &aniso_mirrorRepeat, nullptr, &sampler));
+		baseSamplers.insert({ {SamplerMode::Aniso4X, SamplerAddressMode::MirroredRepeat}, sampler });
+		Vk_CHECK(vkResult, vkCreateSampler(m_vkDevice, &aniso_clampEdge, nullptr, &sampler));
+		baseSamplers.insert({ {SamplerMode::Aniso4X, SamplerAddressMode::ClampEdge}, sampler });
+		Vk_CHECK(vkResult, vkCreateSampler(m_vkDevice, &aniso_clampBorder, nullptr, &sampler));
+		baseSamplers.insert({ {SamplerMode::Aniso4X, SamplerAddressMode::ClampBorder}, sampler });
+
+		aniso_repeat.maxAnisotropy = 8.0f;
+		aniso_mirrorRepeat.maxAnisotropy = 8.0f;
+		aniso_clampEdge.maxAnisotropy = 8.0f;
+		aniso_clampBorder.maxAnisotropy = 8.0f;
+		Vk_CHECK(vkResult, vkCreateSampler(m_vkDevice, &aniso_repeat, nullptr, &sampler));
+		baseSamplers.insert({ {SamplerMode::Aniso8X, SamplerAddressMode::Repeat}, sampler });
+		Vk_CHECK(vkResult, vkCreateSampler(m_vkDevice, &aniso_mirrorRepeat, nullptr, &sampler));
+		baseSamplers.insert({ {SamplerMode::Aniso8X, SamplerAddressMode::MirroredRepeat}, sampler });
+		Vk_CHECK(vkResult, vkCreateSampler(m_vkDevice, &aniso_clampEdge, nullptr, &sampler));
+		baseSamplers.insert({ {SamplerMode::Aniso8X, SamplerAddressMode::ClampEdge}, sampler });
+		Vk_CHECK(vkResult, vkCreateSampler(m_vkDevice, &aniso_clampBorder, nullptr, &sampler));
+		baseSamplers.insert({ {SamplerMode::Aniso8X, SamplerAddressMode::ClampBorder}, sampler });
+
+		aniso_repeat.maxAnisotropy = 16.0f;
+		aniso_mirrorRepeat.maxAnisotropy = 16.0f;
+		aniso_clampEdge.maxAnisotropy = 16.0f;
+		aniso_clampBorder.maxAnisotropy = 16.0f;
+		Vk_CHECK(vkResult, vkCreateSampler(m_vkDevice, &aniso_repeat, nullptr, &sampler));
+		baseSamplers.insert({ {SamplerMode::Aniso16X, SamplerAddressMode::Repeat}, sampler });
+		Vk_CHECK(vkResult, vkCreateSampler(m_vkDevice, &aniso_mirrorRepeat, nullptr, &sampler));
+		baseSamplers.insert({ {SamplerMode::Aniso16X, SamplerAddressMode::MirroredRepeat}, sampler });
+		Vk_CHECK(vkResult, vkCreateSampler(m_vkDevice, &aniso_clampEdge, nullptr, &sampler));
+		baseSamplers.insert({ {SamplerMode::Aniso16X, SamplerAddressMode::ClampEdge}, sampler });
+		Vk_CHECK(vkResult, vkCreateSampler(m_vkDevice, &aniso_clampBorder, nullptr, &sampler));
+		baseSamplers.insert({ {SamplerMode::Aniso16X, SamplerAddressMode::ClampBorder}, sampler });
 
 		LOG(LogType::Success, "Done.");
 		return VK_SUCCESS;
@@ -1662,7 +1648,7 @@ public:
 
 		// Push constants (if any)
 		for (const MatParam& param : material->params) {
-			if (param.var.type() == TypeBase::PushConst || param.var.type() == TypeBase::PushConstStruct) {
+			if (param.type == TypeBase::PushConst || param.type == TypeBase::PushConstStruct) {
 				if (pushConstData && pushConstSize > 0) {
 					vkCmdPushConstants(
 						cmd,

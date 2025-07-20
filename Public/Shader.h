@@ -341,8 +341,7 @@ public:
 
     inline static VkDescriptorType parseMatParamToVkDescriptorType(const MatParam& param) {
 
-        switch (param.var.type()) {
-
+        switch (param.type) {
             case TypeBase::Struct:
             case TypeBase::StructBuffer: 
                 return VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
@@ -350,6 +349,9 @@ public:
             case TypeBase::Texture2D:
             case TypeBase::Texture2DArray:
                 return VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+
+            case TypeBase::Sampler:
+                return VkDescriptorType::VK_DESCRIPTOR_TYPE_SAMPLER;
 
             default:
                 return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;

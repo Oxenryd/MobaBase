@@ -98,6 +98,8 @@ int __stdcall main(HINSTANCE hInstance, HINSTANCE instance, LPSTR str, int nCmdS
 	auto spriteMat = Material{"SpriteMaterialUnlit", *vs, *ps };
 
 
+	auto matInstance = spriteMat.createInstance();
+
 	std::cout << "\n";
 	spriteMat.debugPrintMaterialInfo();
 
