@@ -78,6 +78,16 @@ public:
 		m_instanceIndex{static_cast<uint32_t>(index)}
 	{}
 	Material* const base;
+	MaterialBuffer* getBuffer(const std::string& bufferName);
+	void setParameter(const std::string& bufferName, const std::string& paramName, void* value);
+	template <typename T>
+	T* getParameter(const std::string& bufferName, const std::string& paramName) {
+		auto buffer = getBuffer(bufferName);
+		if (buffer) {
+			return buffer->getParameter<T>(paramName, m_instanceIndex);
+		}
+		return nullptr;
+	}
 	void* const pushDataPtr() { return nullptr; }
 };
 
@@ -138,19 +148,18 @@ public:
 	std::unordered_map<uint32_t, DescriptorSetLayoutKey> descriptorSetKeys;
 	std::vector<MaterialInstance> instances;
 	std::vector<MaterialBuffer> buffers;
+	std::unordered_map<uint32_t, size_t> bufferNameIndexMap;
 
+	~Material() = default;
 	Material()
 	{
 		blendModes.push_back(BlendMode::Premultiplied);
 		blendModeCustomPtrs.push_back(nullptr);
 	};
 	//Material(const json& j) { fromJson(j); }
-	Material(const std::string& name, Shader& vertex, Shader& fragment)
-	{
-		blendModes.push_back(BlendMode::Premultiplied);
-		blendModeCustomPtrs.push_back(nullptr);
-		initFromShaders(name, vertex, fragment);
-	}
+	Material(const std::string& name, Shader& vertex, Shader& fragment) : 
+		Material{ initFromShaders(name, vertex, fragment) } {}
+
 
 	std::string& name();
 	std::string& name() const;
@@ -174,7 +183,10 @@ public:
 		return instances.back();
 	}
 
-	void initFromShaders(const std::string& newName, Shader& vertex, Shader& fragment);
+	MaterialBuffer* getBuffer(const std::string& bufferName);
+	
+
+	static Material& initFromShaders(const std::string& newName, Shader& vertex, Shader& fragment);
 
 	bool operator==(const Material& other);
 	bool operator!=(const Material& other) { return !(*this == other); }

@@ -22,7 +22,7 @@ MaterialBuffer::MaterialBuffer(const MatParam& structure) :
 	m_entrySize{ structure.paddedVarSize() },
 	m_memory{ nullptr },
 	m_bind{ structure.bindingIndex, structure.setIndex },
-	m_bufferType{ Uniform } {
+	m_bufferType{ MatBufferType::Uniform } {
 	assert(structure.members.size() > 0
 		   && "MaterialBuffer: must pass MatParam& structure with members.size() > 0");
 
@@ -38,10 +38,10 @@ MaterialBuffer::MaterialBuffer(const MatParam& structure) :
 	}
 	switch (structure.type) {
 		case TypeBase::CBuffer:
-			m_bufferType = Uniform; break;
+			m_bufferType = MatBufferType::Uniform; break;
 		case TypeBase::PushConstStruct:
-			m_bufferType = PushConstant; break;
+			m_bufferType = MatBufferType::PushConstant; break;
 		case TypeBase::Struct:
-			m_bufferType = SSBO; break;
+			m_bufferType = MatBufferType::SSBO; break;
 	}
 }

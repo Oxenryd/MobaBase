@@ -111,8 +111,7 @@ add_executable (MobaBase
     "Private/Scene.cpp"
 	"Private/Shader.cpp"
     "Private/Material.cpp"
-	"Private/MaterialParams.cpp"
-  )
+	"Private/MaterialParams.cpp")
 
 
 
@@ -147,13 +146,15 @@ target_compile_definitions(MobaBase PRIVATE
 	VULKAN_VALIDATION
 	VULKAN_MAX_FRAMES_IN_FLIGHT=3
 	VULKAN_MAX_RUNTIMEARRAY_INSTANCES=1048576
+	VULKAN_MAX_TEXTURE_SSBO=512
 	
 	# Built In Mat Properties
 	MAT_GLOBALDATA_NAME=\"globalData\"
 	MAT_GLOBALDATA_SET=0
-	MAT_TEXTURES=\"textures\"
-	#MAT_SPRITE_INSTANCES=\"spriteInstances\"
-	#MAT_SPRITE_ATLAS=\"spriteAtlas\"
+	MAT_TEXTURES_NAME=\"textures\"
+	MAT_TEXTURES_SET=0
+	MAT_BASE_MAT_INSTANCES_NAME=\"baseMatInstances\"
+	MAT_BASE_MAT_INSTANCES_SET=0;
 
 
 	# Directories

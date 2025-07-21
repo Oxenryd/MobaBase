@@ -215,22 +215,22 @@ struct VkBindPairHash
 	}
 };
 
+enum class MatBufferType : uint8_t
+{
+	Uniform,
+	SSBO,
+	PushConstant
+};
+
 class MaterialBuffer
 {
-public:
-	enum BufferType : uint8_t
-	{
-		Uniform,
-		SSBO,
-		PushConstant
-	};
 private:
 	uint8_t* m_memory;
 	uint32_t m_size;
 	uint32_t m_capacity;
 	uint32_t m_entrySize;
 	VkBindPair m_bind;
-	BufferType m_bufferType;
+	MatBufferType m_bufferType;
 	uint8_t m_bindless = 0;
 	std::vector<MatParam> m_structure;
 	std::unordered_map<std::string, size_t> m_nameIndexMap;
@@ -260,8 +260,13 @@ public:
 	MaterialBuffer(const MaterialBuffer& other) {
 		m_size = other.m_size;
 		m_entrySize = other.m_entrySize;
-		_resize(other.m_capacity);
-		std::memcpy(m_memory, other.m_memory, other.m_size * other.m_entrySize);
+		if (other.m_capacity > 0) {
+			_resize(other.m_capacity);
+			std::memcpy(m_memory, other.m_memory, other.m_size * other.m_entrySize);
+		} else {
+			m_memory = nullptr;
+			m_capacity = 0;
+		}
 		m_bind = other.m_bind;
 		m_bufferType = other.m_bufferType;
 		m_bindless = other.m_bindless;
@@ -309,7 +314,7 @@ public:
 	void* const data() const { return m_memory; }
 
 	template <typename T>
-	T* readParameter(const std::string& paramName, uint32_t instanceIndex = 0) {
+	T* getParameter(const std::string& paramName, uint32_t instanceIndex = 0) {
 		auto it = m_nameIndexMap.find(paramName);
 		if (it != m_nameIndexMap.end()) {
 			auto& param = m_structure[it->second];
@@ -319,7 +324,7 @@ public:
 		return nullptr;
 	}
 
-	void setParameter(const std::string& paramName, void* value, uint32_t instanceIndex = 0) {
+	bool setParameter(const std::string& paramName, void* value, uint32_t instanceIndex = 0) {
 		auto it = m_nameIndexMap.find(paramName);
 		if (it != m_nameIndexMap.end()) {
 			auto& param = m_structure[it->second];
@@ -392,11 +397,13 @@ public:
 				default:
 					LOGLINE(LogType::Error, LogMod::Memory,
 							std::format("MaterialBuffer: unsupported TypeBase '{}' in setParameter.", TypeBaseToString(param.type)));
+					return false;
 			}
+			return true;
 		}
-		else
-			LOGLINE(LogType::Warning, LogMod::Memory,
+		LOGLINE(LogType::Warning, LogMod::Memory,
 				std::format("MaterialBuffer: parameter '{}' not found. Set ignored.", paramName));
+		return false;
 	}
 };
 

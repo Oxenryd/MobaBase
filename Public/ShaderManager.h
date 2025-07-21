@@ -96,7 +96,7 @@ public:
 		return index;
 	}
 	std::vector<std::string>& paramNames() { return m_paramNames; }
-	ErrorCode registerMaterial(const std::string& name, Material& material);
+	Material* registerMaterial(const std::string& name, Material& material);
 
 	Event<void*> onShaderHotReloaded;
 

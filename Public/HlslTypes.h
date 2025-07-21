@@ -3,6 +3,7 @@
 
 #include <cstdint>
 #include <glm/glm.hpp>
+#include "GlobalMacros.h"
 
 struct VSInput
 {
@@ -49,6 +50,25 @@ struct alignas (16) SpriteInstance
 	uint32_t texRect[4];
 	uint32_t texIndex;
 	uint32_t _pad;
+};
+
+struct TexturePack
+{
+	uint32_t albedoId = UINT32_INVALID;
+	uint32_t normalId = UINT32_INVALID;
+	uint32_t specularId = UINT32_INVALID;
+	uint32_t roughnessId = UINT32_INVALID;
+};
+
+struct BaseMaterialInstance
+{
+	TexturePack textures;
+	glm::vec3	ia;
+	float		ka;
+	glm::vec3	id;
+	float		kd;
+	glm::vec3	is;
+	float		ks;
 };
 
 #endif

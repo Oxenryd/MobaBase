@@ -48,7 +48,7 @@ void Material::addShaderParams(
 			if (param.count == 0) {
 				matParam.arrayType = MatParamArrayType::Dynamic;
 				if (matParam.type == TypeBase::Texture2DArray)
-					matParam.count = 4096;
+					matParam.count = VULKAN_MAX_TEXTURE_SSBO;
 				else
 					matParam.count = VULKAN_MAX_RUNTIMEARRAY_INSTANCES;
 			} else {
@@ -89,14 +89,14 @@ void Material::addShaderParams(
 	}
 }
 
-void Material::initFromShaders(const std::string& newName, Shader& vertex, Shader& fragment) {
-	vShaderName = vertex.name();
-	pShaderName = fragment.name();
-
-	paramsMap.clear();
+Material& Material::initFromShaders(const std::string& newName, Shader& vertex, Shader& fragment) {
+	Material material{};
+	auto& this_ = *ShaderManager::getInstance()->registerMaterial(newName, material);
+	this_.vShaderName = vertex.name();
+	this_.pShaderName = fragment.name();
 
 	std::vector<MatParam> vsParams;	
-	addShaderParams(vsParams, vertex.parameters, MatParamStage::Vertex, "");
+	this_.addShaderParams(vsParams, vertex.parameters, MatParamStage::Vertex, "");
 	for (auto& pConst : vertex.pushConstants) {
 		MatParam pconstParam{};
 		pconstParam.parentNameIndex = UINT32_INVALID;
@@ -118,7 +118,7 @@ void Material::initFromShaders(const std::string& newName, Shader& vertex, Shade
 	}
 
 	std::vector<MatParam> psParams;
-	addShaderParams(psParams, fragment.parameters, MatParamStage::Fragment, "");
+	this_.addShaderParams(psParams, fragment.parameters, MatParamStage::Fragment, "");
 	for (auto& pConst : fragment.pushConstants) {
 		MatParam pconstParam{};
 		pconstParam.parentNameIndex = UINT32_INVALID;
@@ -146,7 +146,7 @@ void Material::initFromShaders(const std::string& newName, Shader& vertex, Shade
 		bool foundDuplicate = false;
 		for (auto& vsParam : vsParams) {
 			if (vsParam.sharesDataExceptStage(psParam)) {
-				setParamStageRecursive(vsParam, MatParamStage::Both);
+				this_.setParamStageRecursive(vsParam, MatParamStage::Both);
 				foundDuplicate = true;
 				break;
 			}
@@ -156,18 +156,18 @@ void Material::initFromShaders(const std::string& newName, Shader& vertex, Shade
 			fromPs.push_back(psParam);
 	}
 	for (auto& vsParam : vsParams)
-		params.push_back(vsParam);
+		this_.params.push_back(vsParam);
 	for (auto& psParam : fromPs)
-		params.push_back(psParam);
+		this_.params.push_back(psParam);
 
-	descriptorSetKeys.clear();
-	for (size_t i = 0; i < params.size(); ++i ) {
-		auto& param = params[i];
-		paramsMap.insert({ param.name(), i });
+	//descriptorSetKeys.clear();
+	for (size_t i = 0; i < this_.params.size(); ++i ) {
+		auto& param = this_.params[i];
+		this_.paramsMap.insert({ param.name(), i });
 
 		// Skip push constants
 		if (param.type != TypeBase::PushConstStruct) {
-			auto& descSetKey = descriptorSetKeys[param.setIndex];
+			auto& descSetKey = this_.descriptorSetKeys[param.setIndex];
 			descSetKey.setIndex = param.setIndex;
 			descSetKey.bindings.push_back(param.bindingIndex);
 			descSetKey.types.push_back(param.descriptorType);
@@ -180,31 +180,33 @@ void Material::initFromShaders(const std::string& newName, Shader& vertex, Shade
 		{
 			case TypeBase::PushConstStruct:
 			{
-				pushShaderFlags = MatParamStageToVkShaderStageFlagBits(param.stage);
-				pushConstantOffset = param.offset;
-				pushConstantSize = param.size;
+				this_.pushShaderFlags = MatParamStageToVkShaderStageFlagBits(param.stage);
+				this_.pushConstantOffset = param.offset;
+				this_.pushConstantSize = param.size;
 			} break;
 
 			case TypeBase::Sampler:
 			{
-				samplerStates.insert({ {param.bindingIndex, param.setIndex}, SamplerState{} });
+				this_.samplerStates.insert({ {param.bindingIndex, param.setIndex}, SamplerState{} });
 			} break;
 
 			case TypeBase::StructBuffer:
 			case TypeBase::CBuffer:
 			{
 				if (param.setIndex >= VULKAN_GLOBAL_DESCRIPTOR_SETS) {
-					buffers.emplace_back(MaterialBuffer{param.members[0]});
+					auto thisIndex = this_.buffers.size();
+					this_.buffers.emplace_back(MaterialBuffer{param.members[0]});
+					this_.bufferNameIndexMap.insert({param.nameIndex, thisIndex});
 				}
 			} break;
 
 		}
 	}
 
-	for (auto& [set, key] : descriptorSetKeys) {
+	for (auto& [set, key] : this_.descriptorSetKeys) {
 		key.sortByBinding();
 	}
-	ShaderManager::getInstance()->registerMaterial(newName, *this);
+	return this_;
 }
 
 bool Material::operator==(const Material& other) {
@@ -292,4 +294,39 @@ std::string& Material::name() {
 }
 std::string& Material::name() const {
 	return ShaderManager::getInstance()->getMaterialName(*this);
+}
+MaterialBuffer* Material::getBuffer(const std::string& bufferName) {
+	auto nameIndex = ShaderManager::getInstance()->getParamNameIndex(bufferName);
+	if (nameIndex != SIZE_T_INVALID) {
+		auto it = bufferNameIndexMap.find(nameIndex);
+		if (it != bufferNameIndexMap.end())
+			return &buffers[it->second];
+	}
+	return nullptr;
+}
+
+
+
+
+
+
+
+
+
+
+
+MaterialBuffer* MaterialInstance::getBuffer(const std::string& bufferName) {
+	return base->getBuffer(bufferName);
+}
+void MaterialInstance::setParameter(const std::string& bufferName, const std::string& paramName, void* value) {
+	auto buffer = base->getBuffer(bufferName);
+	if (buffer != nullptr) {
+		auto result = buffer->setParameter(paramName, value, m_instanceIndex);
+		if (!result)
+			LOGLINE(LogType::Warning, LogMod::Rendering,
+					std::format("setParameter: parameter '{}' not found.", paramName));
+	} else {
+		LOGLINE(LogType::Warning, LogMod::Rendering,
+				std::format("setParameter: buffer '{}' not found.", bufferName));
+	}
 }

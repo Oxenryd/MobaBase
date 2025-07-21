@@ -22,7 +22,24 @@ struct SpriteInstance
     uint texIndex;   
 };
 
+struct TexturePack
+{
+    uint albedoId;
+    uint normalId;
+    uint specularId;
+    uint roughnessId;
+};
 
+struct BaseMaterialInstance
+{
+    TexturePack textures;
+    float3  ia;
+    float   ka;
+    float3  id;
+    float   kd;
+    float3  is;
+    float   ks;
+};
 
 // Globals
 [[vk::binding(0, 0)]]
@@ -33,8 +50,10 @@ cbuffer globalData : register(b0)
     float4 cameraPosition;
     float time;
 };
+
 [[vk::binding(1, 0)]] SamplerState smp : register(s0, space0);
 [[vk::binding(2, 0)]] Texture2D textures[] : register(t0, space0);
+[[vk::binding(3, 0)]] StructuredBuffer<BaseMaterialInstance> baseMatInstances;
 
 float4 RetainGlobals()
 {
@@ -42,7 +61,8 @@ float4 RetainGlobals()
     if (dummy == -9999.0f)
     {
         float4 dummy2 = dummy.xxxx + textures[0].SampleLevel(smp, float2(0, 0), 0.0);
-        return dummy2;
+        float4 dummy3 = dummy2 + baseMatInstances[0].ia.xyzx;
+        return dummy3;
     }
         
     return float4(0,0,0,0);

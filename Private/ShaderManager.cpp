@@ -175,16 +175,18 @@ ErrorCode ShaderManager::registerShader(const std::string& name, Shader& shader)
 	return ErrorCode::OK;
 }
 
-ErrorCode ShaderManager::registerMaterial(const std::string& name, Material& material) {
-	if (m_mat_NameIndexMap.contains(name))
-		return ErrorCode::MATERIAL_NAME_ALREADY_EXISTS;
+Material* ShaderManager::registerMaterial(const std::string& name, Material& material) {
+	if (m_mat_NameIndexMap.contains(name)) {
+		LOGLINE(LogType::Warning, LogMod::Rendering, "registerMaterial: material already exists.");
+		return nullptr;
+	}
 
 	m_mat_NameIndexMap.insert({ name, m_materials.size() });
 	m_mat_IndexNameMap.insert({ m_materials.size() , name});
 	material.arrayIndex = m_materials.size();
 	m_materials.push_back(material);
 
-	return ErrorCode::OK;
+	return &m_materials.back();
 }
 
 ErrorCode DxcWin32VulkanShaderCompiler::compileShaders(ShaderManager*) {

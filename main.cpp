@@ -85,7 +85,15 @@ int __stdcall main(HINSTANCE hInstance, HINSTANCE instance, LPSTR str, int nCmdS
 	// Create Vulkan Context
 	LOGLINE(LogType::Info, LogMod::Vulkan, "Creating Vulkan context... ");
 	VulkanContext* vkCtx = mainArena.construct<VulkanContext>(wnd);
-	auto vk = vkCtx->initVulkan(VkPresentModeKHR::VK_PRESENT_MODE_MAILBOX_KHR, igpuPriority);
+
+	VkPresentModeKHR presentMode;
+#ifdef IGPU_PRIO
+	presentMode = VkPresentModeKHR::VK_PRESENT_MODE_FIFO_KHR;
+#else
+	presentMode = VkPresentModeKHR::VK_PRESENT_MODE_MAILBOX_KHR;
+#endif
+
+	auto vk = vkCtx->initVulkan(presentMode, igpuPriority);
 	if (vk != VK_SUCCESS) {
 		LOG(LogType::Error, "Failed. Code: " + std::to_string(static_cast<uint32_t>(vk)));
 		return (int)vk;
@@ -97,8 +105,12 @@ int __stdcall main(HINSTANCE hInstance, HINSTANCE instance, LPSTR str, int nCmdS
 	auto* ps = engine->getShaderManager()->getShader("SpriteBatchPS");
 	auto spriteMat = Material{"SpriteMaterialUnlit", *vs, *ps };
 
-
-	auto matInstance = spriteMat.createInstance();
+	// DEBUG! ////////////////////////////////////////////////////////////////////////////
+	auto& matInstance = spriteMat.createInstance();
+	glm::vec2 size = { 12.2f, 13.5f };
+	matInstance.setParameter("spriteInstances", "size", &size);
+	auto checkedSize = matInstance.getParameter<glm::vec2>("spriteInstances", "size");
+	//////////////////////////////////////////////////////////////////////////////////////
 
 	std::cout << "\n";
 	spriteMat.debugPrintMaterialInfo();
@@ -115,7 +127,7 @@ int __stdcall main(HINSTANCE hInstance, HINSTANCE instance, LPSTR str, int nCmdS
 							});
 	wnd->onClose.subscribe([engine, vkCtx]()
 						   {
-							   vkCtx->setPendingExit();
+							    vkCtx->setPendingExit();
 								engine->stop();
 						   });
 
