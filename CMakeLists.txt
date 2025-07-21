@@ -102,6 +102,7 @@ add_executable (MobaBase
 	"Public/TypeReflection.hpp"
 	"Public/GlobalMacros.h"
 	"Public/MaterialStates.h"
+	"Public/Transform.hpp"
 	
 	"Private/Engine.cpp"
 	"Private/Timer.cpp"

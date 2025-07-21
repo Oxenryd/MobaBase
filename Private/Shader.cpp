@@ -53,10 +53,24 @@ std::tuple<
     std::vector<SpvReflectInterfaceVariable*> inputVars(count);
     spvReflectEnumerateInputVariables(&module, &count, inputVars.data());
     ShaderIO shaderInput;
+    size_t iaOffset = 0;
     for (auto& var : inputVars) {
         ShaderIO::Attribute attrib{};
         attrib.location = var->location;
         attrib.type = parseReflectedTypeDesc(var->type_description, nullptr);
+        attrib.offset = static_cast<uint16_t>(iaOffset);
+
+        size_t paramSize = SizeOfTypeBase(attrib.type);
+        //size_t paramAlign = AlignOfTypeBase(attrib.type);      
+
+        size_t vkAlignment = 0;
+        size_t alignTest = 2;
+        size_t counter = 1;
+        do {
+            alignTest *= 2;
+            vkAlignment = alignTest;
+        } while (paramSize > vkAlignment);
+        iaOffset += vkAlignment;
 
         if (var->name) {
             std::string s{ var->name };
@@ -189,11 +203,21 @@ ShaderBinding Shader::parseMember(
 {
     ShaderBinding param;
     param.spvTypeDesc = member.type_description ? SpvReflectTypeDescription{ *member.type_description } : SpvReflectTypeDescription{};
-    param.name = member.name
-        ? member.name
-        : param.spvTypeDesc.op == SpvOpTypeRuntimeArray || param.spvTypeDesc.op == SpvOpTypeArray
-        ? param.spvTypeDesc.type_name
-        : "";
+    if (member.name != nullptr)
+        param.name = member.name;
+    else if (param.spvTypeDesc.op == SpvOpTypeRuntimeArray || param.spvTypeDesc.op == SpvOpTypeArray) {
+        if (param.spvTypeDesc.type_name != nullptr)
+            param.name = param.spvTypeDesc.type_name;
+        else param.name = "";
+    } else
+        param.name = "";
+    
+    //param.name = member.name != nullptr
+    //    ? member.name
+    //    : param.spvTypeDesc.op == SpvOpTypeRuntimeArray || param.spvTypeDesc.op == SpvOpTypeArray
+    //        ? (param.spvTypeDesc.type_name != nullptr 
+    //        ? param.spvTypeDesc.type_name
+    //        : "");
     
     param.set = set;
     param.binding = binding;

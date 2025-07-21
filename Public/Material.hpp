@@ -15,6 +15,16 @@
 #include "MaterialStates.h"
 #include "ArenaAllocator.hpp"
 
+class Material;
+
+using DrawIndex = uint32_t;
+using MaterialInstanceIndex = uint32_t;
+using InstanceIndices = uint32_t*;
+using InstanceCount = uint32_t;
+
+using MaterialCallbackSingleDraw = void(*)(Material&, DrawIndex, MaterialInstanceIndex);
+using MaterialCallbackInstancedDraw = void(*)(Material&, InstanceIndices, InstanceCount);
+using MaterialCallback = void(*)(Material&, MaterialInstanceIndex);
 
 struct DescriptorSetLayoutKey
 {
@@ -66,7 +76,30 @@ struct DescriptorSetLayoutKeyHash
 	}
 };
 
-class Material;
+struct PipelineLayoutKey
+{
+	std::vector<VkDescriptorSetLayout> setLayouts;
+	std::vector<VkPushConstantRange> pushConstants;
+
+	bool operator==(const PipelineLayoutKey& other) const = default;
+};
+
+struct PipelineLayoutKeyHash
+{
+	size_t operator()(const PipelineLayoutKey& key) const {
+		size_t seed = key.setLayouts.size();
+		for (auto layout : key.setLayouts)
+			seed ^= std::hash<uint64_t>{}(reinterpret_cast<uint64_t>(layout)) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+		for (auto& pc : key.pushConstants) {
+			seed ^= std::hash<uint32_t>{}(pc.offset);
+			seed ^= std::hash<uint32_t>{}(pc.size);
+			seed ^= std::hash<uint32_t>{}(pc.stageFlags);
+		}
+		return seed;
+	}
+};
+
+
 class MaterialInstance
 {
 private:
@@ -149,6 +182,10 @@ public:
 	std::vector<MaterialInstance> instances;
 	std::vector<MaterialBuffer> buffers;
 	std::unordered_map<uint32_t, size_t> bufferNameIndexMap;
+	MaterialCallbackSingleDraw preDraw = nullptr;
+	MaterialCallbackInstancedDraw preDrawInstanced = nullptr;
+	MaterialCallback preBind = nullptr;
+	MaterialCallback postDraw = nullptr;
 
 	~Material() = default;
 	Material()

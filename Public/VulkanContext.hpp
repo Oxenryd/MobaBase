@@ -80,6 +80,7 @@ constexpr VkFormat GetVkFormat(TypeBase type) {
 	}
 }
 
+
 struct ResourceBinding
 {
 	uint64_t handle;
@@ -533,10 +534,17 @@ public:
 	std::vector<VkSemaphore> imageRenderDone;
 
 	// Global Material Buffers
+	std::vector<BaseVSIn> vertices;
+	std::array<VkVertexInputAttributeDescription, 5> vertexAttributes{};
+	VkBuffer vertexBuffer;
+	VkDeviceMemory vertexMemory;
+
 	GlobalData matData_globalData;
 	VkBuffer matBuf_globalData;
 	VkDeviceMemory matDevMem_globalData;
+
 	std::vector<VkTextureResource> textures;
+
 	std::vector<BaseMaterialInstance> matData_baseMatInstances;
 	VkBuffer matBuf_baseMatInstances;
 	VkDeviceMemory matDevMem_baseMatInstances;
@@ -593,6 +601,7 @@ public:
 		Vk_CHECK(vk, createSyncObjects());
 		Vk_CHECK(vk, createSamplerPresets());
 		Vk_CHECK(vk, createDescriptorPool());
+		Vk_CHECK(vk, setupVertexBuffer());
 		Vk_CHECK(vk, createGlobalBuffers());
 
 		isClean = false;
@@ -605,6 +614,52 @@ public:
 	//	Vk_CHECK(vk, createGraphicsPipeline(pso));
 	//	return VK_SUCCESS;
 	//}
+
+	inline VkResult setupVertexBuffer() {
+		VkResult vkResult;
+
+		vertexAttributes[0] = {
+			.location = 0,
+			.binding = 0,
+			.format = VK_FORMAT_R32G32B32A32_SFLOAT,
+			.offset = offsetof(BaseVSIn, pos)
+		};
+
+		vertexAttributes[1] = {
+			.location = 1,
+			.binding = 0,
+			.format = VK_FORMAT_R32G32B32_SFLOAT,
+			.offset = offsetof(BaseVSIn, normal)
+		};
+
+		vertexAttributes[2] = {
+			.location = 2,
+			.binding = 0,
+			.format = VK_FORMAT_R32G32B32_SFLOAT,
+			.offset = offsetof(BaseVSIn, tangent)
+		};
+
+		vertexAttributes[3] = {
+			.location = 3,
+			.binding = 0,
+			.format = VK_FORMAT_R32G32B32_SFLOAT,
+			.offset = offsetof(BaseVSIn, binormal)
+		};
+
+		vertexAttributes[4] = {
+			.location = 4,
+			.binding = 0,
+			.format = VK_FORMAT_R32G32_SFLOAT,
+			.offset = offsetof(BaseVSIn, texCoord)
+		};
+
+		VkVertexInputBindingDescription binding{};
+		binding.binding = 0;
+		binding.stride = sizeof(BaseVSIn);
+		binding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+
+		return VK_SUCCESS;
+	}
 
 	inline VkResult createGlobalBuffers() {
 		VkResult vkResult;

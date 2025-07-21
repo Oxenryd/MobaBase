@@ -100,10 +100,14 @@ int __stdcall main(HINSTANCE hInstance, HINSTANCE instance, LPSTR str, int nCmdS
 	}
 	LOGLINE(LogType::Success, LogMod::Vulkan, "Vulkan init Complete.\n");
 	
-	// Create Base Material
-	auto* vs = engine->getShaderManager()->getShader("SpriteBatchVS");
-	auto* ps = engine->getShaderManager()->getShader("SpriteBatchPS");
-	auto spriteMat = Material{"SpriteMaterialUnlit", *vs, *ps };
+	// Create Base Materials
+	auto* baseVs = engine->getShaderManager()->getShader("BaseVS");
+	auto* basePs = engine->getShaderManager()->getShader("BasePS");
+	auto baseMat = Material{ "BaseMaterialUnlit", *baseVs, *basePs };
+	auto* spriteVs = engine->getShaderManager()->getShader("SpriteBatchVS");
+	auto* spritePs = engine->getShaderManager()->getShader("SpriteBatchPS");
+	auto spriteMat = Material{"SpriteMaterialUnlit", *spriteVs, *spritePs };
+	
 
 	// DEBUG! ////////////////////////////////////////////////////////////////////////////
 	auto& matInstance = spriteMat.createInstance();
@@ -113,7 +117,10 @@ int __stdcall main(HINSTANCE hInstance, HINSTANCE instance, LPSTR str, int nCmdS
 	//////////////////////////////////////////////////////////////////////////////////////
 
 	std::cout << "\n";
+	baseMat.debugPrintMaterialInfo();
+	std::cout << "\n";
 	spriteMat.debugPrintMaterialInfo();
+	std::cout << "\n";
 
 	// Callbacks -
 	// Window -> Vulkan cb's
@@ -154,6 +161,7 @@ int __stdcall main(HINSTANCE hInstance, HINSTANCE instance, LPSTR str, int nCmdS
 	//EC = PsoDesc::createFromMaterial(*engine->getShaderManager() ,spriteMat, basePso);
 	//vkCtx->createGraphicsPipeline(basePso);
 	vkCtx->createPipelineFromMaterial(engine->getShaderManager(), spriteMat);
+	vkCtx->createPipelineFromMaterial(engine->getShaderManager(), baseMat);
 	engine->createNewScene<GameScene>(nullptr);
 	engine->setTargetUpdateDeltaTime(0.0);
 	engine->start(vkCtx, inputMan);

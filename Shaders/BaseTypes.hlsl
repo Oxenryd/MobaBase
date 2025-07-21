@@ -1,6 +1,8 @@
 #ifndef BASE_TYPES_INCLUDED
 #define BASE_TYPES_INCLUDED
 
+#define UINT_INVALID 0xFFFFFFFF
+
 static const float4 QUAD2D[6] =
 {
     float4(-0.5, -0.5, 0, 0),
@@ -45,15 +47,61 @@ struct BaseMaterialInstance
 [[vk::binding(0, 0)]]
 cbuffer globalData : register(b0)
 {
-    float4x4 view;
-    float4x4 proj;
+    float4x4 worldToView;
+    float4x4 projection;
     float4 cameraPosition;
     float time;
 };
 
-[[vk::binding(1, 0)]] SamplerState smp : register(s0, space0);
-[[vk::binding(2, 0)]] Texture2D textures[] : register(t0, space0);
-[[vk::binding(3, 0)]] StructuredBuffer<BaseMaterialInstance> baseMatInstances;
+struct BaseMatPush
+{
+    uint matrixIndex;
+};
+
+[[vk::push_constant]]
+BaseMatPush basePush;
+
+struct ModelTransform
+{
+    float4x4 modelToWorld;
+};
+
+struct Index32
+{
+    uint value;
+};
+
+[[vk::binding(1, 0)]] StructuredBuffer<ModelTransform> modelMatrices : register(t0, space0);
+[[vk::binding(2, 0)]] StructuredBuffer<Index32> instanceIndices : register(t1, space0);
+
+
+[[vk::binding(1, 1)]] SamplerState smp : register(s0, space1);
+[[vk::binding(2, 1)]] StructuredBuffer<BaseMaterialInstance> baseMatInstances: register(t0, space1);
+[[vk::binding(3, 1)]] Texture2D textures[] : register(t1, space1);
+
+
+struct BaseVSIn
+{
+    [[vk::location(0)]] float3 pos          : POSITION;
+    [[vk::location(1)]] float3 normal       : NORMAL;
+    [[vk::location(2)]] float3 tangent      : TANGENT;
+    [[vk::location(3)]] float3 binormal     : BINORMAL;
+    [[vk::location(4)]] float2 texCoord     : TEX;
+    [[vk::location(5)]] uint instanceID     : SV_InstanceID;
+};
+
+struct BasePSIn
+{
+    [[vk::location(0)]] float4 pos          : SV_Position;
+    [[vk::location(1)]] float3 localPos     : TEXCOORD2;
+    [[vk::location(2)]] float3 worldPos     : TEXCOORD0;
+    [[vk::location(3)]] float3 normal       : NORMAL;
+    [[vk::location(4)]] float3 tangent      : TANGENT;
+    [[vk::location(5)]] float3 binormal     : BINORMAL;
+    [[vk::location(6)]] float3 localNormal  : TEXCOORD1;
+    [[vk::location(7)]] float2 texCoord     : TEX;
+};
+
 
 float4 RetainGlobals()
 {
@@ -62,7 +110,8 @@ float4 RetainGlobals()
     {
         float4 dummy2 = dummy.xxxx + textures[0].SampleLevel(smp, float2(0, 0), 0.0);
         float4 dummy3 = dummy2 + baseMatInstances[0].ia.xyzx;
-        return dummy3;
+        float4 dummy4 = mul(dummy3, modelMatrices[instanceIndices[0].value].modelToWorld);
+        return dummy4;
     }
         
     return float4(0,0,0,0);
@@ -72,72 +121,20 @@ float4 RetainGlobals()
 // Srites
 struct SpritebatchVSInput
 {
-    [[vk::location(0)]] uint vertexId : SV_VertexID;
+    [[vk::location(0)]] uint vertexId   : SV_VertexID;
     [[vk::location(1)]] uint instanceId : SV_InstanceID;
 };
 
 struct SpritebatchVSOutput
 {
     [[vk::location(0)]] float4 position : SV_Position;
-    [[vk::location(1)]] float2 uv : TEXCOORD0;
+    [[vk::location(1)]] float2 uv       : TEXCOORD0;
     [[vk::location(2)]] uint instanceId : TEXCOORD1;
 };
 
 [[vk::binding(0, 2)]] StructuredBuffer<SpriteInstance> spriteInstances : register(t0, space2);
 [[vk::binding(1, 2)]] SamplerState spriteSmp : register(s0, space2);
 [[vk::binding(2, 2)]] Texture2D spriteAtlas[] : register(t1, space2);
-
-
-
-
-
-
-
-
-// DEBUG DEBUG
-struct PushData
-{
-    float4 color;
-    int2 uvOffset;
-};
-
-[[vk::push_constant]]
-PushData pushData;
-
-
-
-// base
-//struct VSInput
-//{
-//    [[vk::location(0)]] float3  position         : POSITION;
-//    //[[vk::location(1)]] float3  normal           : NORMAL;
-//    //[[vk::location(2)]] float2  uv               : TEXCOORD0;
-//    //[[vk::location(3)]] float4  tangent          : TANGENT; // xyz = tangent, w = handedness
-//    //[[vk::location(4)]] float4  color            : COLOR0;
-//    //[[vk::location(5)]] uint4   boneIndices      : BLENDINDICES0;
-//    //[[vk::location(6)]] float4  boneWeights      : BLENDWEIGHT0;
-//};
-
-//struct VSOutput
-//{
-//    [[vk::location(0)]] float4 worldPos         : SV_Position;
-//    //[[vk::location(0)]] float3 localPos         : TEXCOORD0;
-//    //[[vk::location(1)]] float3 normal           : TEXCOORD1;
-//    //[[vk::location(2)]] float2 uv               : TEXCOORD2;
-//};
-
-//struct ObjectPush
-//{
-//    float4x4 model;
-//    uint g_boneOffset;
-//    uint g_boneCount;
-//    uint2 _pad;
-//};
-
-
-//[[vk::binding(1, 0)]]
-//StructuredBuffer<float4x4> BoneMatrices;
-
 
 
 #endif // BASE_TYPES_INCLUDED

@@ -18,12 +18,10 @@ SpritebatchVSOutput main(SpritebatchVSInput vin)
     );
 
 	float3 worldPos = float3(inst.position + rotated, inst.layerDepth);
-	float4 clipPos = mul(view, float4(worldPos, 1.0));
+	float4 clipPos = mul(worldToView, float4(worldPos, 1.0));
 
 	SpritebatchVSOutput vout;
-	vout.position = clipPos;
-
-    vout.position += RetainGlobals();
+    vout.position = clipPos + RetainGlobals();
 	
 	float2 uv = QUAD2D[vin.vertexId].zw;
     uint2 texSize;

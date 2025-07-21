@@ -5,6 +5,37 @@
 #include <glm/glm.hpp>
 #include "GlobalMacros.h"
 
+
+struct BaseVSIn
+{
+	alignas (16) glm::vec3 pos;
+	alignas (16) glm::vec3 normal;
+	alignas (16) glm::vec3 tangent;
+	alignas (16) glm::vec3 binormal;
+	alignas (16) glm::vec2 texCoord;
+};
+
+struct ModelTransform
+{
+	glm::mat4x4 modelToWorld;
+
+	operator glm::mat4x4() {
+		return modelToWorld;
+	}
+};
+
+struct Index32
+{
+	uint32_t value;
+
+	operator uint32_t() {
+		return value;
+	}
+	bool isValid() {
+		return value != UINT32_INVALID;
+	}
+};
+
 struct VSInput
 {
 	glm::vec3 position;

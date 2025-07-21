@@ -4,6 +4,7 @@
 #include <vector>
 #include <unordered_map>
 #include <utility>
+#include <queue>
 
 #include "ErrorCodes.hpp"
 #include "Timer.h"
@@ -14,6 +15,8 @@
 #include "Hashes.hpp"
 #include "ArenaAllocator.hpp"
 #include "GlobalMacros.h"
+#include "HlslTypes.h"
+#include "Transform.hpp"
 
 class ShaderManager;
 
@@ -27,7 +30,9 @@ public:
 	virtual ErrorCode hotReload(ShaderManager& manager) = 0;
 };
 
+
 using Index = size_t;
+using MatrixIndex = uint32_t;
 class Engine;
 class ShaderManager : public IShaderProvider
 {
@@ -42,6 +47,8 @@ private:
 	std::vector<Material> m_materials;
 	std::vector<std::string> m_paramNames;
 	Timer* m_hotreloadTimer = nullptr;
+	std::vector<ModelTransform> modelTransforms;
+	std::queue<std::pair<MatrixIndex, TransformComponent*>> pendingMatrixUpdates;
 
 	// Mapping
 	std::unordered_map<std::string, size_t> m_param_NameIndexMap;
