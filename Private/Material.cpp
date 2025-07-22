@@ -63,7 +63,7 @@ void Material::addShaderParams(
 
 		std::string name;
 		auto nameIndex = RenderManager::getInstance()->getParamNameIndex(param.name);
-		if (nameIndex == SIZE_T_INVALID) {
+		if (nameIndex == SIZE_INVALID) {
 			name = param.name;
 			matParam.nameIndex = RenderManager::getInstance()->registerParamName(name);
 		} else {
@@ -74,7 +74,7 @@ void Material::addShaderParams(
 
 		if (!parentName.empty()) {
 			auto parentNameIndex = RenderManager::getInstance()->getParamNameIndex(parentName);
-			if (parentNameIndex == SIZE_T_INVALID) {
+			if (parentNameIndex == SIZE_INVALID) {
 				matParam.parentNameIndex = RenderManager::getInstance()->registerParamName(parentName);
 			} else {
 				matParam.parentNameIndex = parentNameIndex;
@@ -297,7 +297,7 @@ std::string& Material::name() const {
 }
 MaterialBuffer* Material::getBuffer(const std::string& bufferName) {
 	auto nameIndex = RenderManager::getInstance()->getParamNameIndex(bufferName);
-	if (nameIndex != SIZE_T_INVALID) {
+	if (nameIndex != SIZE_INVALID) {
 		auto it = bufferNameIndexMap.find(nameIndex);
 		if (it != bufferNameIndexMap.end())
 			return &buffers[it->second];

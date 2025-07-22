@@ -119,6 +119,7 @@ public:
 		vec.emplace_back(std::forward<Args>(args)...);
 		T& obj = vec.back();
 		obj.m_entity = m_reg->create();
+		obj.m_reg = m_reg;
 		_emplaceBaseSystems(obj.m_entity, name);
 		return obj;
 	}

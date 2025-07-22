@@ -9,7 +9,7 @@ void GameObjectSystem::_emplaceBaseSystems(entt::entity entity, std::string& nam
 
 	auto& reg = scene->registry();
 	
-	scene->enabledSystem().registryEmplace(entity, nullptr, nullptr);
+	reg.emplace<EnabledTag>(entity);
 	scene->transformSystem().registryEmplace(entity, nullptr, nullptr);
 	reg.emplace_or_replace<SceneTrackerComponent>(entity);
 	scene->nameTagSystem().registryEmplace(entity, reinterpret_cast<void*>(&name), nullptr);

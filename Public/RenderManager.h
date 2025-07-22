@@ -92,7 +92,7 @@ public:
 		if (it != m_param_NameIndexMap.end())
 			return it->second;
 		
-		return SIZE_T_INVALID;
+		return SIZE_INVALID;
 	}
 	std::string& getParamName(size_t index) { return m_paramNames[index]; }
 	const std::string& getParamName(size_t index) const  { return const_cast<std::string&>(m_paramNames[index]); }

@@ -10,6 +10,18 @@ if (POLICY CMP0141)
   set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT "$<IF:$<AND:$<C_COMPILER_ID:MSVC>,$<CXX_COMPILER_ID:MSVC>>,$<$<CONFIG:Debug,RelWithDebInfo>:EditAndContinue>,$<$<CONFIG:Debug,RelWithDebInfo>:ProgramDatabase>>")
 endif()
 
+# Only apply to MSVC and Release builds
+if(MSVC AND CMAKE_BUILD_TYPE STREQUAL "Release")
+    message(STATUS "Enabling /GL and /LTCG for MSVC Release build")
+
+    # Enable /GL for compile step
+    add_compile_options(/GL)
+
+    # Enable /LTCG for link step
+    set(CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} /LTCG")
+    set(CMAKE_STATIC_LINKER_FLAGS_RELEASE "${CMAKE_STATIC_LINKER_FLAGS_RELEASE} /LTCG")
+    set(CMAKE_SHARED_LINKER_FLAGS_RELEASE "${CMAKE_SHARED_LINKER_FLAGS_RELEASE} /LTCG")
+endif()
 
 # FETCHES -----------------------------------------------------------------------------
 include(FetchContent)
@@ -106,12 +118,13 @@ add_executable (MobaBase
 	"Public/ObjectState.hpp"
 	"Public/MobaMath.hpp"
 	"Public/EnabledTag.hpp"
-	"Public/EnabledSystem.hpp"
+	#"Public/EnabledSystem.hpp"
 	"Public/GameObjectSystem.hpp"
 	"Public/GameObject.hpp"
 	"Public/NameTag.hpp"
 	"Public/NameTagSystem.hpp"
 	"Public/SceneTrackerSystem.h"
+	"Public/EnabledTag.hpp"
 	
 	"Private/Engine.cpp"
 	"Private/Timer.cpp"

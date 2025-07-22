@@ -6,8 +6,8 @@
 #include "SystemECS.h"
 #include "ErrorCodes.hpp"
 #include "Transform.hpp"
+#include "EnabledTag.hpp"
 
-#include "ObjectState.hpp"
 #include "MobaMath.hpp"
 
 class TransformSystem : public SystemECS_ModelTransformsProvider
@@ -21,10 +21,8 @@ public:
 		: SystemECS_ModelTransformsProvider{registry} {}
 	void run() override {
 
-		auto view = m_reg->view<TransformComponent>();
-		for (auto [entity, transform] : view.each()) {
-			if (!transform.state.isSet(ObjectState::Enabled))
-				continue;
+		auto view = m_reg->view<EnabledTag, TransformComponent>();
+		for (auto [entity, enabled, transform] : view.each()) {
 
 			if (transform.state.isSet(ObjectState::DirtyTransform)) {
 				m_modelTransforms[transform.matrixIndex] = transform.trs();

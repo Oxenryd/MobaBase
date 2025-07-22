@@ -42,7 +42,6 @@ protected:
     //HeapArenaEnttRegistry m_reg;
     uint32_t m_sceneIndex;
     entt::registry m_reg;
-    EnabledSystem m_enabledSys;
     TransformSystem m_transformSys;
     GameObjectSystem m_gameObjectSys;
     NameTagSystem m_nameTagSys;
@@ -55,7 +54,6 @@ public:
     SceneBase(uint32_t sceneIndex) :
         //m_heap(heapSize),
         //m_reg{ HeapArenaAllocator<entt::entity>(&m_heap) },
-        m_enabledSys{&m_reg},
         m_transformSys{&m_reg},
         m_gameObjectSys{ m_sceneIndex, &m_reg},
         m_nameTagSys{&m_reg},
@@ -77,7 +75,6 @@ public:
 
     // Base Systems accessors
     entt::registry& registry() { return m_reg; }
-    EnabledSystem& enabledSystem() { return m_enabledSys; }
     TransformSystem& transformSystem() { return m_transformSys; }
     GameObjectSystem& gameObjectSystem() { return m_gameObjectSys; }  
     NameTagSystem& nameTagSystem() { return m_nameTagSys; }
@@ -116,11 +113,13 @@ public:
         }
     }
 
-    void updateDispatch(double dt) override {
+    void updateDispatch(double dt) override {          
         if constexpr (requires (Derived & d) { d.update(dt); }) {
             static_cast<Derived&>(*this).update(dt);
             static_cast<Derived&>(*this).m_firstFrame = false;
         }
+        m_transformSys.run();
+        m_gameObjectSys.run();
     }
 
     void lateUpdateDispatch(double dt) override {

@@ -119,6 +119,11 @@ public:
     T& getField() const { return const_cast<T&>(m_field); }
     T& getField() { return m_field; }
 
+    template <typename U>
+    U asType() {
+        return static_cast<U>(m_field);
+    }
+
 private:
     static constexpr const uint8_t WordBits = sizeof(T) * 8;
     T m_field;

@@ -78,7 +78,8 @@ const std::string& RenderManager::getShaderName(const Shader& shader) {
 	if (it != m_shader_PairNameMap.end()) {
 		return it->second;
 	} else {
-		return std::string{ "INVALID SHADER AND THIS STRING SHOULD NEVER BE SEEN." };
+		throw std::invalid_argument("RenderManager::getShaderName(): shader name not found.");
+		//return std::string{ "INVALID SHADER AND THIS STRING SHOULD NEVER BE SEEN." };
 	}
 }
 

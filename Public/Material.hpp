@@ -157,7 +157,7 @@ private:
 	}
 
 public:
-	size_t arrayIndex = SIZE_T_INVALID;
+	size_t arrayIndex = SIZE_INVALID;
 	std::map<std::string, size_t> paramsMap;
 	std::vector<MatParam> params;
 	std::string vShaderName;
@@ -202,7 +202,7 @@ public:
 	std::string& name() const;
 	bool isInitialized() const {
 		return
-			arrayIndex != SIZE_T_INVALID &&
+			arrayIndex != SIZE_INVALID &&
 			pipelineId != UINT32_INVALID &&
 			pipeline && pipelineLayout;
 	}

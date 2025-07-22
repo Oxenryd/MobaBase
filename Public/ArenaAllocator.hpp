@@ -62,4 +62,14 @@ private:
     template<typename U> friend class HeapArenaAllocator;
 };
 
+namespace entt
+{
+    template <typename T, typename U>
+    class basic_registry;
+    class entity;
+}
+
+using HeapArenaEnttRegistry = entt::basic_registry<
+    entt::entity,
+    HeapArenaAllocator<entt::entity>>;
 #endif

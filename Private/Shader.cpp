@@ -78,7 +78,7 @@ std::tuple<
             std::string lastWord = (lastDot == std::string::npos) ? s : s.substr(lastDot + 1);
 
             auto semNameIndex = RenderManager::getInstance()->getParamNameIndex(lastWord);
-            if (semNameIndex == SIZE_T_INVALID) {
+            if (semNameIndex == SIZE_INVALID) {
                 attrib.semanticNameIndex = RenderManager::getInstance()->registerParamName(lastWord);
             } else {
                 attrib.semanticNameIndex = semNameIndex;
@@ -104,7 +104,7 @@ std::tuple<
             std::string lastWord = (lastDot == std::string::npos) ? s : s.substr(lastDot + 1);
 
             auto semNameIndex = RenderManager::getInstance()->getParamNameIndex(lastWord);
-            if (semNameIndex == SIZE_T_INVALID) {
+            if (semNameIndex == SIZE_INVALID) {
                 attrib.semanticNameIndex = RenderManager::getInstance()->registerParamName(lastWord);
             } else {
                 attrib.semanticNameIndex = semNameIndex;
@@ -145,7 +145,7 @@ std::tuple<
 
         ShaderPushConstant pcParam;
         auto nameIndex = RenderManager::getInstance()->getParamNameIndex(pc->name);
-        if (nameIndex == SIZE_T_INVALID) {
+        if (nameIndex == SIZE_INVALID) {
             pcParam.base.nameIndex = RenderManager::getInstance()->registerParamName(pc->name);
         } else {
             pcParam.base.nameIndex = nameIndex;
@@ -177,7 +177,7 @@ std::tuple<
                 attrib.type = parseReflectedTypeDesc(member.type_description, nullptr);
 
                 auto nameIndex = RenderManager::getInstance()->getParamNameIndex(member.name);
-                if (nameIndex == SIZE_T_INVALID) {
+                if (nameIndex == SIZE_INVALID) {
                     attrib.nameIndex = RenderManager::getInstance()->registerParamName(member.name);
                 } else {
                     attrib.nameIndex = nameIndex;
