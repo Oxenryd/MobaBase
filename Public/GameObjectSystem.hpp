@@ -106,7 +106,7 @@ public:
 			_deleteVector(vecPtr);
 	}
 	GameObjectSystem() = delete;
-	GameObjectSystem(uint32_t sceneIndex, entt::registry* const registry)
+	GameObjectSystem(uint32_t sceneIndex, ArenaRegistry* const registry)
 		: SystemECS{ registry }, m_sceneIndex{sceneIndex}
 	{}
 
@@ -131,5 +131,7 @@ public:
 
 
 };
+
+
 
 #endif

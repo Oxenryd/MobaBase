@@ -3,20 +3,17 @@
 
 #include <entt/entt.hpp>
 #include "HlslTypes.h"
-
-//using HeapArenaEnttRegistry = entt::basic_registry<
-//	entt::entity,
-//	HeapArenaAllocator<entt::entity>>;
+#include "ArenaAllocator.hpp"
 
 class SceneBase;
 class SystemECS
 {
 protected:
 	uint32_t m_sceneIndex;
-	entt::registry* const m_reg;
+	ArenaRegistry* const m_reg;
 
 public:
-	SystemECS(entt::registry* const registry)
+	SystemECS(ArenaRegistry* const registry)
 		: m_reg{registry} {}
 	virtual entt::entity createEntity() { 
 		return m_reg->create();
@@ -37,7 +34,7 @@ class SystemECS_ModelTransformsProvider : public SystemECS
 {
 public:
 	virtual ~SystemECS_ModelTransformsProvider() = default;
-	SystemECS_ModelTransformsProvider(entt::registry* const registry)
+	SystemECS_ModelTransformsProvider(ArenaRegistry* const registry)
 		: SystemECS{registry} {}
 	virtual std::vector<ModelTransform>& modelTransforms() = 0;
 	virtual std::vector<ModelTransform>& modelTransforms() const = 0;

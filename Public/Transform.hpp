@@ -4,13 +4,14 @@
 #include <glm/glm.hpp>
 #include <glm/gtx/quaternion.hpp>
 #include "Bits.hpp"
-#include <entt/entt.hpp>
+#include "ArenaAllocator.hpp"
 #include "MobaMath.hpp"
 #include "ObjectState.hpp"
 #include "GlobalMacros.h"
 
 struct TransformComponent
 {
+	
 	uint32_t matrixIndex = UINT32_INVALID;
 	glm::vec3 position{};
 	glm::quat rotation{};
@@ -26,7 +27,7 @@ class Transform
 {
 	
 private:
-	entt::registry* m_reg;
+	ArenaRegistry* m_reg;
 	entt::entity m_entity;
 
 	INLINE TransformComponent& _markDirty() {
@@ -38,7 +39,7 @@ private:
 public:
 	~Transform() = default;
 	Transform() = delete;
-	Transform(entt::registry* registry, entt::entity entity)
+	Transform(ArenaRegistry* registry, entt::entity entity)
 		: m_reg{registry}, m_entity{entity} {}
 	Transform(const Transform& other) {
 		m_reg = other.m_reg;
@@ -102,21 +103,19 @@ public:
 
 
 	// Static
-	INLINE static glm::vec3& position(entt::registry* registry, entt::entity entity) {
+	INLINE static glm::vec3& position(ArenaRegistry* registry, entt::entity entity) {
 		return registry->get<TransformComponent>(entity).position;
 	}
-	INLINE static glm::vec3& scale(entt::registry* registry, entt::entity entity) {
+	INLINE static glm::vec3& scale(ArenaRegistry* registry, entt::entity entity) {
 		return registry->get<TransformComponent>(entity).scale;
 	}
-	INLINE static glm::quat& rotation(entt::registry* registry, entt::entity entity) { 
+	INLINE static glm::quat& rotation(ArenaRegistry* registry, entt::entity entity) {
 		return registry->get<TransformComponent>(entity).rotation;
 	}
-	INLINE static SizedBitField<uint8_t>& state(entt::registry* registry, entt::entity entity) { 
+	INLINE static SizedBitField<uint8_t>& state(ArenaRegistry* registry, entt::entity entity) {
 		return registry->get<TransformComponent>(entity).state;
 	}
 
 };
-
-static_assert(std::is_nothrow_move_constructible_v<Transform>, "Transform is not noexcept");
 
 #endif

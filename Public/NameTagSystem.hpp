@@ -11,7 +11,7 @@ private:
 public:
 	virtual ~NameTagSystem() {}
 	NameTagSystem() = delete;
-	NameTagSystem(entt::registry* const registry)
+	NameTagSystem(ArenaRegistry* const registry)
 		: SystemECS{registry}
 	{}
 

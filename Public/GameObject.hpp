@@ -3,13 +3,14 @@
 
 #include "EnabledTag.hpp"
 #include "Transform.hpp"
+#include "ArenaAllocator.hpp"
 
 class GameObjectSystem;
 class GameObject
 {
 	friend GameObjectSystem;
 private:
-	entt::registry* m_reg;
+	ArenaRegistry* m_reg;
 	entt::entity m_entity;
 
 public:

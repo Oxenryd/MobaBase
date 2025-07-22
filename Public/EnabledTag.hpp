@@ -1,7 +1,7 @@
 #ifndef ENABLEDTAG_HPP
 #define ENABLEDTAG_HPP
 
-#include <entt/entt.hpp>
+#include "ArenaAllocator.hpp"
 
 struct EnabledTag{
 private:
@@ -12,13 +12,13 @@ class Enabled
 {
 private:
 	entt::entity m_entity;
-	entt::registry* m_reg;
+	ArenaRegistry* m_reg;
 
 public:
 	Enabled() :
 		m_reg{ nullptr },
 		m_entity{ entt::null } {}
-	Enabled(entt::registry* registry, entt::entity entity) :
+	Enabled(ArenaRegistry* registry, entt::entity entity) :
 		m_reg{registry},
 		m_entity{entity} {}
 	Enabled(const Enabled& other) :

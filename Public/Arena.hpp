@@ -209,6 +209,11 @@ public:
     }
 
     template <typename T>
+    inline void deallocate(T* ptr) {
+        destruct(ptr);
+    }
+
+    template <typename T>
     inline void destruct(T* ptr) {
         size_t pageStart = reinterpret_cast<size_t>(ptr);
         ArenaPage* page = findPage(pageStart);
@@ -300,27 +305,43 @@ private:
 
 class Arena
 { 
+private:
+    HeapArena* m_heap;
+    uint8_t* m_memory = nullptr;
+    size_t m_size;
+    size_t m_offset;
+    uint32_t m_arenaId;
+
+    static size_t alignUp(size_t addr, size_t alignment) {
+        return (addr + (alignment - 1)) & ~(alignment - 1);
+    }
 public:
 
     Arena(HeapArena* const memProvider, size_t size)
         : m_size(size), m_offset(0) {
-        m_memory = new uint8_t[size];
+        
         LOGLINE(LogType::Info, LogMod::Memory, "Creating Arena, Addr: " + std::to_string(reinterpret_cast<size_t>(m_memory)) +
                 ", " + std::to_string(m_size / 1024) + "kB... ");
-        m_arenaId = memProvider->registerArena();
-        //m_destructorsPtr = constructNoRegister<std::vector<DestructorEntry, HeapArenaAllocator<DestructorEntry>>>(HeapArenaAllocator<DestructorEntry>(memProvider));
+
+        if (memProvider) {
+            m_heap = memProvider;
+            m_arenaId = m_heap->registerArena();
+            m_memory = reinterpret_cast<uint8_t*>(m_heap->allocate(size));
+        } else {
+            m_arenaId = UINT32_INVALID;
+            m_memory = new uint8_t[size];
+        }
         LOG(LogType::Success, "Done.");
     }
 
     Arena(size_t size) :
         m_size{ size }, m_offset(0) {
-        m_arenaId = static_cast<uint32_t>(-1);
-
+        m_arenaId = UINT32_INVALID;
+        m_memory = new uint8_t[size];
     }
 
     ~Arena() {
         destroyAll();
-        //delete m_destructorsPtr;
         delete[] m_memory;
         m_memory = nullptr;
     }
@@ -339,6 +360,9 @@ public:
         m_offset = offset + size;
         return ptr;
     }
+
+    void* destruct(void* ptr, size_t size) {}
+    void deallocate(void* ptr, size_t size) {}
 
     //template<typename T, typename... Args>
     //T* construct(Args&&... args) {
@@ -378,17 +402,6 @@ public:
         //m_destructorsPtr->clear();
         reset();
         LOG(LogType::Success, "Done.");
-    }
-
-private:
-    //std::vector<DestructorEntry, HeapArenaAllocator<DestructorEntry>>* m_destructorsPtr = nullptr;
-    uint8_t* m_memory = nullptr;
-    size_t m_size;
-    size_t m_offset;
-    uint32_t m_arenaId;
-
-    static size_t alignUp(size_t addr, size_t alignment) {
-        return (addr + (alignment - 1)) & ~(alignment - 1);
     }
 };
 

@@ -6,7 +6,6 @@
 #include <concepts>
 #include <type_traits>
 
-#include "Arena.hpp"
 #include "ArenaAllocator.hpp"
 #include "EnabledSystem.hpp"
 #include "TransformSystem.hpp"
@@ -29,7 +28,6 @@ enum class SceneTransitionMode
 	
 };
 
-
 class Engine;
 class SceneBase
 {
@@ -39,9 +37,9 @@ private:
 
 protected:
     //HeapArena m_heap;
-    //HeapArenaEnttRegistry m_reg;
+    Arena m_arena;
     uint32_t m_sceneIndex;
-    entt::registry m_reg;
+    ArenaRegistry m_reg;
     TransformSystem m_transformSys;
     GameObjectSystem m_gameObjectSys;
     NameTagSystem m_nameTagSys;
@@ -52,8 +50,9 @@ protected:
 public:
     virtual ~SceneBase() = default;
     SceneBase(uint32_t sceneIndex) :
-        //m_heap(heapSize),
-        //m_reg{ HeapArenaAllocator<entt::entity>(&m_heap) },
+        //m_heap(DEFAULT_HEAP_SIZE),
+        m_arena{ DEFAULT_HEAP_SIZE },
+        m_reg{ ArenaAllocator<entt::entity>{&m_arena} },
         m_transformSys{&m_reg},
         m_gameObjectSys{ m_sceneIndex, &m_reg},
         m_nameTagSys{&m_reg},
@@ -74,7 +73,7 @@ public:
     virtual SceneTransitionStatus transitioningDispatch() { return SceneTransitionStatus::Done; }
 
     // Base Systems accessors
-    entt::registry& registry() { return m_reg; }
+    ArenaRegistry& registry() { return m_reg; }
     TransformSystem& transformSystem() { return m_transformSys; }
     GameObjectSystem& gameObjectSystem() { return m_gameObjectSys; }  
     NameTagSystem& nameTagSystem() { return m_nameTagSys; }
