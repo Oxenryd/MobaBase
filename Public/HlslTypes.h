@@ -17,6 +17,14 @@ struct BaseVSIn
 
 struct ModelTransform
 {
+	ModelTransform(const glm::mat4x4& mat) :
+		modelToWorld{mat} {}
+
+	ModelTransform& operator=(const glm::mat4x4& mat) {
+		modelToWorld = mat;
+		return *this;
+	}
+
 	glm::mat4x4 modelToWorld;
 
 	operator glm::mat4x4() {

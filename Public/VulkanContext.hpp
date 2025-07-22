@@ -26,7 +26,8 @@
 #include "Log.hpp"
 
 #include "Material.hpp"
-#include "IShaderProvider.h"
+//#include "IRenderProvider.h"
+#include "RenderManager.h"
 #include "HlslTypes.h"
 #include <variant>
 
@@ -365,7 +366,7 @@ public:
 
 static inline VkPipelineMultisampleStateCreateInfo GetMultisamplingPreset(MultiSamplingMode mode) {
 	switch (mode) {
-		case MultiSamplingMode::MSAA_None:
+		default:
 			return VkMultiSamplingStates::MSAA_1x;
 		case MultiSamplingMode::MSAA_4x:
 			return VkMultiSamplingStates::MSAA_4x;
@@ -536,18 +537,18 @@ public:
 	// Global Material Buffers
 	std::vector<BaseVSIn> vertices;
 	std::array<VkVertexInputAttributeDescription, 5> vertexAttributes{};
-	VkBuffer vertexBuffer;
-	VkDeviceMemory vertexMemory;
+	VkBuffer vertexBuffer = nullptr;;
+	VkDeviceMemory vertexMemory = nullptr;;
 
 	GlobalData matData_globalData;
-	VkBuffer matBuf_globalData;
-	VkDeviceMemory matDevMem_globalData;
+	VkBuffer matBuf_globalData = nullptr;
+	VkDeviceMemory matDevMem_globalData = nullptr;
 
 	std::vector<VkTextureResource> textures;
 
 	std::vector<BaseMaterialInstance> matData_baseMatInstances;
-	VkBuffer matBuf_baseMatInstances;
-	VkDeviceMemory matDevMem_baseMatInstances;
+	VkBuffer matBuf_baseMatInstances = nullptr;
+	VkDeviceMemory matDevMem_baseMatInstances = nullptr;
 
 
 	void setPendingExit() { m_pendingExit = true; }
@@ -1118,7 +1119,7 @@ public:
 	}
 
 
-	inline VkResult createPipelineFromMaterial(IShaderProvider* const provider, Material& material)
+	inline VkResult createPipelineFromMaterial(RenderManager* const renderMan, Material& material)
 	{
 		LOGLINE(LogType::Info, LogMod::Vulkan, std::string{ "Creating Pipeline for " + material.name() + "... "});
 		VkResult vkResult{};
@@ -1154,8 +1155,8 @@ public:
 
 
 		// Shader Stages
-		auto vs = provider->getShader(material.vShaderName);
-		auto ps = provider->getShader(material.pShaderName);
+		auto vs = renderMan->getShader(material.vShaderName);
+		auto ps = renderMan->getShader(material.pShaderName);
 		if (!vs || !ps)
 			return VK_ERROR_UNKNOWN;
 
@@ -1293,7 +1294,7 @@ public:
 				rBind.binding = key.bindings[i];
 				rBind.type = key.types[i];
 
-				if (set == MAT_GLOBALDATA_SET && provider->getParamName(key.nameIndices[i]) == MAT_GLOBALDATA_NAME) {
+				if (set == MAT_GLOBALDATA_SET && renderMan->getParamName(key.nameIndices[i]) == MAT_GLOBALDATA_NAME) {
 					rBind.handle = reinterpret_cast<uint64_t>(matBuf_globalData);
 					VkDescriptorBufferInfo bufferInfo{};
 					bufferInfo.buffer = matBuf_globalData;
@@ -1311,7 +1312,7 @@ public:
 
 					pendingWrites.push_back(write);
 
-				} else if (set == MAT_TEXTURES_SET && provider->getParamName(key.nameIndices[i]) == MAT_TEXTURES_NAME) {
+				} else if (set == MAT_TEXTURES_SET && renderMan->getParamName(key.nameIndices[i]) == MAT_TEXTURES_NAME) {
 					rBind.handle = reinterpret_cast<uint64_t>(&textures);
 					VkDescriptorSetVariableDescriptorCountAllocateInfo countInfo{};
 					uint32_t textures = 0;
@@ -1320,7 +1321,7 @@ public:
 					countInfo.pDescriptorCounts = &textures;
 					pendingCounts.push_back(countInfo);
 
-				} else if (set == MAT_BASE_MAT_INSTANCES_SET && provider->getParamName(key.nameIndices[i]) == MAT_BASE_MAT_INSTANCES_NAME) {
+				} else if (set == MAT_BASE_MAT_INSTANCES_SET && renderMan->getParamName(key.nameIndices[i]) == MAT_BASE_MAT_INSTANCES_NAME) {
 					rBind.handle = reinterpret_cast<uint64_t>(matBuf_baseMatInstances);
 					VkDescriptorBufferInfo bufferInfo{};
 					bufferInfo.buffer = matBuf_baseMatInstances;

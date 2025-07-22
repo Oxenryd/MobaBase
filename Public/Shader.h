@@ -67,11 +67,11 @@ struct ShaderPushConstant
     }
 };
 
-class ShaderManager;
+class RenderManager;
 class Shader
 {
 private:
-    friend ShaderManager;
+    friend RenderManager;
     size_t m_arrayIndex;
 public:
     std::string entryPoint;

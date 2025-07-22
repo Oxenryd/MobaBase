@@ -1,5 +1,5 @@
-#ifndef SHADERMANAGER_H
-#define SHADERMANAGER_H
+#ifndef RENDERMANAGER_H
+#define RENDERMANAGER_H
 
 #include <vector>
 #include <unordered_map>
@@ -10,7 +10,8 @@
 #include "Timer.h"
 #include "Delegate.hpp"
 
-#include "IShaderProvider.h"
+//#include "IRenderProvider.h"
+#include "Shader.h"
 #include "Material.hpp"
 #include "Hashes.hpp"
 #include "ArenaAllocator.hpp"
@@ -18,27 +19,26 @@
 #include "HlslTypes.h"
 #include "Transform.hpp"
 
-class ShaderManager;
+class RenderManager;
 
 class ShaderCompilerBase
 {
 public:
 	virtual ~ShaderCompilerBase() {}
-	virtual ErrorCode compileShaders(ShaderManager*) = 0;
+	virtual ErrorCode compileShaders(RenderManager*) = 0;
 	virtual ErrorCode compile(Shader& shader) = 0;
 	virtual ErrorCode checkForShaderChanges(Shader& shader) = 0;
-	virtual ErrorCode hotReload(ShaderManager& manager) = 0;
+	virtual ErrorCode hotReload(RenderManager& manager) = 0;
 };
 
 
 using Index = size_t;
-using MatrixIndex = uint32_t;
 class Engine;
-class ShaderManager : public IShaderProvider
+class RenderManager// : public IRenderProvider
 {
 private:
 	friend Engine;
-	static ShaderManager* s_instance;
+	static RenderManager* s_instance;
 	ShaderCompilerBase* const m_compiler;
 	friend ShaderCompilerBase;
 	std::vector<Shader> m_vShaders;
@@ -47,8 +47,8 @@ private:
 	std::vector<Material> m_materials;
 	std::vector<std::string> m_paramNames;
 	Timer* m_hotreloadTimer = nullptr;
-	std::vector<ModelTransform> modelTransforms;
-	std::queue<std::pair<MatrixIndex, TransformComponent*>> pendingMatrixUpdates;
+	//std::unordered_map<SceneIndex, std::vector<ModelTransform>> modelTransforms;
+	//std::unordered_map<SceneIndex, std::queue<std::pair<MatrixIndex, TransformComponent*>>> pendingMatrixUpdates;
 
 	// Mapping
 	std::unordered_map<std::string, size_t> m_param_NameIndexMap;
@@ -62,9 +62,9 @@ private:
 	
 
 public:
-	ShaderManager() = delete;
-	~ShaderManager() { delete m_hotreloadTimer; }
-	ShaderManager(ShaderCompilerBase* compiler);
+	RenderManager() = delete;
+	~RenderManager() { delete m_hotreloadTimer; }
+	RenderManager(ShaderCompilerBase* compiler);
 
 	ShaderCompilerBase* const getCompiler() { return m_compiler; }
 
@@ -72,7 +72,7 @@ public:
 	std::vector<Shader>& pixelShaders() { return m_pShaders; }
 	std::vector<Shader>& computeShaders() { return m_cShaders; }
 	Shader* const getShader(Shader::Type type, size_t index);
-	Shader* const getShader(const std::string& name) const override;
+	Shader* const getShader(const std::string& name) const;
 	Shader* const getShader(const std::string& name);
 	const std::string& getShaderName(const Shader& shader);
 	//const std::string& getShaderName(const Shader::Type type, const size_t index);
@@ -95,7 +95,7 @@ public:
 		return SIZE_T_INVALID;
 	}
 	std::string& getParamName(size_t index) { return m_paramNames[index]; }
-	const std::string& getParamName(size_t index) const override { return const_cast<std::string&>(m_paramNames[index]); }
+	const std::string& getParamName(size_t index) const  { return const_cast<std::string&>(m_paramNames[index]); }
 	size_t registerParamName(const std::string& name) {
 		auto index = m_paramNames.size();
 		m_param_NameIndexMap.insert({name, index});
@@ -108,7 +108,7 @@ public:
 	Event<void*> onShaderHotReloaded;
 
 	// 'Singleton'
-	static ShaderManager* getInstance() { 
+	static RenderManager* getInstance() { 
 		return s_instance;
 	}
 };
@@ -117,10 +117,10 @@ class DxcWin32VulkanShaderCompiler : public ShaderCompilerBase
 {
 public:
 	~DxcWin32VulkanShaderCompiler() {}
-	ErrorCode compileShaders(ShaderManager*) override;
+	ErrorCode compileShaders(RenderManager*) override;
 	ErrorCode compile(Shader& shader) override;
 	ErrorCode checkForShaderChanges(Shader& shader) override;
-	ErrorCode hotReload(ShaderManager& manager) override;
+	ErrorCode hotReload(RenderManager& manager) override;
 };
 
 #endif

@@ -1,18 +1,18 @@
-#include "ShaderManager.h"
+#include "RenderManager.h"
 #include <fstream>
 #include "FS.h"
 #include "Log.hpp"
 
 
-ShaderManager* ShaderManager::s_instance = nullptr;
+RenderManager* RenderManager::s_instance = nullptr;
 
-ShaderManager::ShaderManager(ShaderCompilerBase* compiler) :
+RenderManager::RenderManager(ShaderCompilerBase* compiler) :
 	m_compiler{ compiler },
 	m_paramArena{MB(16)}
 {
 }
 
-Shader* const ShaderManager::getShader(Shader::Type type, size_t index) {
+Shader* const RenderManager::getShader(Shader::Type type, size_t index) {
 	switch (type) {
 		case Shader::Type::Vertex:
 		{
@@ -34,7 +34,7 @@ Shader* const ShaderManager::getShader(Shader::Type type, size_t index) {
 	return nullptr;
 }
 
-Shader* const ShaderManager::getShader(
+Shader* const RenderManager::getShader(
 	const std::string& name) const {
 
 	auto it = m_shader_NamePairMap.find(name);
@@ -53,7 +53,7 @@ Shader* const ShaderManager::getShader(
 	return nullptr;
 }
 
-Shader* const ShaderManager::getShader(const std::string& name) {
+Shader* const RenderManager::getShader(const std::string& name) {
 	auto it = m_shader_NamePairMap.find(name);
 	if (it != m_shader_NamePairMap.end()) {
 		auto type = it->second.first;
@@ -72,7 +72,7 @@ Shader* const ShaderManager::getShader(const std::string& name) {
 	return nullptr;
 }
 
-const std::string& ShaderManager::getShaderName(const Shader& shader) {
+const std::string& RenderManager::getShaderName(const Shader& shader) {
 	auto pair = std::pair{ shader.type, shader.m_arrayIndex };
 	auto it = m_shader_PairNameMap.find(pair);
 	if (it != m_shader_PairNameMap.end()) {
@@ -92,7 +92,7 @@ const std::string& ShaderManager::getShaderName(const Shader& shader) {
 //	}
 //}
 
-Material* ShaderManager::getMaterial(const std::string& name) {
+Material* RenderManager::getMaterial(const std::string& name) {
 	auto it = m_mat_NameIndexMap.find(name);
 	if (it != m_mat_NameIndexMap.end()) {
 		return &m_materials[it->second];
@@ -100,7 +100,7 @@ Material* ShaderManager::getMaterial(const std::string& name) {
 		return nullptr;
 }
 
-Material* ShaderManager::getMaterial(const size_t& index) {
+Material* RenderManager::getMaterial(const size_t& index) {
 	auto it = m_mat_IndexNameMap.find(index);
 	if (it != m_mat_IndexNameMap.end()) {
 		return &m_materials[index];
@@ -108,7 +108,7 @@ Material* ShaderManager::getMaterial(const size_t& index) {
 		return nullptr;
 }
 
-std::string& ShaderManager::getMaterialName(const Material& mat) {
+std::string& RenderManager::getMaterialName(const Material& mat) {
 	return m_mat_IndexNameMap[mat.arrayIndex];
 }
 
@@ -116,7 +116,7 @@ std::string& ShaderManager::getMaterialName(const Material& mat) {
 //	return 
 //}
 
-ErrorCode ShaderManager::recompileShaderCache() {
+ErrorCode RenderManager::recompileShaderCache() {
 
 	// Find all HLSL files in directory
 	std::vector<std::filesystem::path> hlslFiles;
@@ -144,7 +144,7 @@ ErrorCode ShaderManager::recompileShaderCache() {
 	return ErrorCode::OK;
 }
 
-ErrorCode ShaderManager::registerShader(const std::string& name, Shader& shader) {
+ErrorCode RenderManager::registerShader(const std::string& name, Shader& shader) {
 	if (m_shader_NamePairMap.contains(name))
 		return ErrorCode::SHADER_NAME_ALREADY_EXISTS;
 
@@ -175,7 +175,7 @@ ErrorCode ShaderManager::registerShader(const std::string& name, Shader& shader)
 	return ErrorCode::OK;
 }
 
-Material* ShaderManager::registerMaterial(const std::string& name, Material& material) {
+Material* RenderManager::registerMaterial(const std::string& name, Material& material) {
 	if (m_mat_NameIndexMap.contains(name)) {
 		LOGLINE(LogType::Warning, LogMod::Rendering, "registerMaterial: material already exists.");
 		return nullptr;
@@ -189,7 +189,7 @@ Material* ShaderManager::registerMaterial(const std::string& name, Material& mat
 	return &m_materials.back();
 }
 
-ErrorCode DxcWin32VulkanShaderCompiler::compileShaders(ShaderManager*) {
+ErrorCode DxcWin32VulkanShaderCompiler::compileShaders(RenderManager*) {
 	return ErrorCode::OK;
 }
 
@@ -278,7 +278,7 @@ ErrorCode DxcWin32VulkanShaderCompiler::checkForShaderChanges(Shader& shader) {
 	return ErrorCode::OK;
 }
 
-ErrorCode DxcWin32VulkanShaderCompiler::hotReload(ShaderManager& manager) {
+ErrorCode DxcWin32VulkanShaderCompiler::hotReload(RenderManager& manager) {
 
 	ErrorCode EC{};
 	bool changed = false;

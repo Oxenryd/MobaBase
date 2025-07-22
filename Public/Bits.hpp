@@ -51,6 +51,15 @@ public:
         requires requires(ENUM e) {
             { static_cast<uint32_t>(e) };
     }
+    SizedBitField(ENUM startState) {
+        m_field = 0;
+        m_field |= (T(1) << ((uint32_t)startState % WordBits));
+    }
+
+    template <typename ENUM>
+        requires requires(ENUM e) {
+            { static_cast<uint32_t>(e) };
+    }
     void setByEnum(ENUM index) {
         m_field |= (T(1) << ((uint32_t)index % WordBits));
     }
@@ -106,6 +115,9 @@ public:
     uint32_t size() const {
         return WordBits;
     }
+
+    T& getField() const { return const_cast<T&>(m_field); }
+    T& getField() { return m_field; }
 
 private:
     static constexpr const uint8_t WordBits = sizeof(T) * 8;

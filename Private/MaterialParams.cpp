@@ -1,19 +1,19 @@
 #include "MaterialParams.h"
-#include "ShaderManager.h"
+#include "RenderManager.h"
 
 std::string& MatParam::name() {
-	return ShaderManager::getInstance()->paramNames()[nameIndex];
+	return RenderManager::getInstance()->paramNames()[nameIndex];
 }
 std::string& MatParam::name() const {
-	return ShaderManager::getInstance()->paramNames()[nameIndex];
+	return RenderManager::getInstance()->paramNames()[nameIndex];
 }
 
 std::string& MatParam::parentName() {
-	return ShaderManager::getInstance()->paramNames()[parentNameIndex];
+	return RenderManager::getInstance()->paramNames()[parentNameIndex];
 }
 
 std::string& MatParam::parentName() const {
-	return ShaderManager::getInstance()->paramNames()[parentNameIndex];
+	return RenderManager::getInstance()->paramNames()[parentNameIndex];
 }
 
 MaterialBuffer::MaterialBuffer(const MatParam& structure) :
@@ -31,7 +31,7 @@ MaterialBuffer::MaterialBuffer(const MatParam& structure) :
 	m_nameIndex = structure.nameIndex;
 
 	for (auto& member : structure.members) {
-		const auto name = ShaderManager::getInstance()->getParamName(member.nameIndex);
+		const auto name = RenderManager::getInstance()->getParamName(member.nameIndex);
 		m_indexNameMap.insert({ m_structure.size(), name });
 		m_nameIndexMap.insert({ name, m_structure.size() });
 		m_structure.push_back(member);

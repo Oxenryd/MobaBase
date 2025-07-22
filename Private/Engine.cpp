@@ -1,5 +1,5 @@
 #include "Engine.h"
-#include "ShaderManager.h"
+#include "RenderManager.h"
 #include <immintrin.h>
 
 Engine::Engine(HeapArena& heap) :
@@ -15,7 +15,9 @@ Engine::Engine(HeapArena& heap) :
 	m_fpsCountTimer{ m_baseTimers.createTimer(true, 1.0) },
 	m_baseArena{heap}
  {
+	assert(s_instance == nullptr && "THERE CAN BE ONLY ONE!");
 
+	s_instance = this;
 	m_baseTimers.m_incOnTimes[m_fpsCountTimer.m_timerIndex].subscribe([this]()
 		{
 			onReadFPS.notify(this, m_framesSinceLastFpsRead);
@@ -64,21 +66,21 @@ void Engine::_initShaderManager() {
 #ifdef BUILD_WIN
 
 	DxcWin32VulkanShaderCompiler* w32VkCompiler = m_baseArena.construct<DxcWin32VulkanShaderCompiler>();
-	m_shaderMan = m_baseArena.construct<ShaderManager>(ShaderManager{ w32VkCompiler });
+	m_renderMan = m_baseArena.construct<RenderManager>(RenderManager{ w32VkCompiler });
 
 #endif
 
 #ifdef SHADER_HOTRELOAD
 		LOGLINE(LogType::Info, LogMod::Rendering, "Shader HotReload is ON.");
-		m_shaderMan->m_hotreloadTimer = new Timer{ m_baseTimers.createTimer(true, 1.5) };
-		m_baseTimers.m_incOnTimes[m_shaderMan->m_hotreloadTimer->m_timerIndex].subscribe([this]()
+		m_renderMan->m_hotreloadTimer = new Timer{ m_baseTimers.createTimer(true, 1.5) };
+		m_baseTimers.m_incOnTimes[m_renderMan->m_hotreloadTimer->m_timerIndex].subscribe([this]()
 								{
-									m_shaderMan->hotReload();
+									m_renderMan->hotReload();
 								});
 #else
 		LOGLINE(LogType::Info, LogMod::Rendering, "Shader HotReload is OFF.");
 #endif
-		ShaderManager::s_instance = m_shaderMan;
+		RenderManager::s_instance = m_renderMan;
 		LOGLINE_IND(LogType::Success, LogMod::Rendering, "ShaderManager initialized.", -1);
 }
 

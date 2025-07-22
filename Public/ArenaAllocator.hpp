@@ -32,18 +32,14 @@ public:
         : m_provider(other.m_provider) {}
 
     T* allocate(std::size_t n) {
-#ifdef DEBUGGING
         assert(m_provider && "HeapArenaAllocator requires a valid Arena pointer");
-#endif
         void* ptr = m_provider->allocate(n * sizeof(T), alignof(T));
         if (!ptr) throw std::bad_alloc();
         return static_cast<T*>(ptr);
     }
 
     void deallocate(T* p, std::size_t n) noexcept {
-#ifdef DEBUGGING
         assert(m_provider && "HeapArenaAllocator requires a valid Arena pointer");
-#endif
         m_provider->destruct(p);
     }
 

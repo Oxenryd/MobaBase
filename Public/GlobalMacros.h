@@ -1,5 +1,8 @@
+#pragma once
 #ifndef GLOBALMACROS_H
 #define GLOBALMACROS_H
+
+#include "Log.hpp"
 
 #define UINT8_INVALID static_cast<uint8_t>(0xff)
 #define UINT8_MAX static_cast<uint8_t>(0xfe)
@@ -18,4 +21,20 @@
 #define MB(x) 1024 * 1024 * (x)
 #define KB(x) 1024 * (x)
 
+template<typename T>
+inline constexpr T& deref(void* ptr, const char* errorMsg = "null pointer in deref") {
+    if (!ptr) {
+        LOGLINE(LogType::Error, LogMod::Memory, errorMsg);
+        assert(false && errorMsg);
+    }
+    return *static_cast<T*>(ptr);
+}
+template<typename T>
+inline constexpr const T& deref(const void* ptr, const char* errorMsg = "null pointer in deref") {
+    if (!ptr) {
+        LOGLINE(LogType::Error, LogMod::Memory, errorMsg);
+        assert(false && errorMsg);
+    }
+    return *static_cast<const T*>(ptr);
+}
 #endif

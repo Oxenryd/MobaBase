@@ -162,7 +162,7 @@ int __stdcall main(HINSTANCE hInstance, HINSTANCE instance, LPSTR str, int nCmdS
 	//vkCtx->createGraphicsPipeline(basePso);
 	vkCtx->createPipelineFromMaterial(engine->getShaderManager(), spriteMat);
 	vkCtx->createPipelineFromMaterial(engine->getShaderManager(), baseMat);
-	engine->createNewScene<GameScene>(nullptr);
+	auto scene = engine->createNewScene<GameScene>(nullptr);
 	engine->setTargetUpdateDeltaTime(0.0);
 	engine->start(vkCtx, inputMan);
 

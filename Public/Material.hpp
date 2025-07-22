@@ -125,7 +125,7 @@ public:
 };
 
 class Shader;
-class ShaderManager;
+class RenderManager;
 class VulkanContext;
 struct ShaderBinding;
 struct PsoDesc;
@@ -133,7 +133,7 @@ struct PsoDesc;
 class Material
 {
 private:
-	friend ShaderManager;
+	friend RenderManager;
 	friend VulkanContext;
 	
 	//void fromJson(const json& j);

@@ -1,6 +1,6 @@
 #include "Material.hpp"
 #include "Shader.h"
-#include "ShaderManager.h"
+#include "RenderManager.h"
 #include "Hashes.hpp"
 
 #include <iostream>
@@ -62,20 +62,20 @@ void Material::addShaderParams(
 		matParam.offset = param.offset;
 
 		std::string name;
-		auto nameIndex = ShaderManager::getInstance()->getParamNameIndex(param.name);
+		auto nameIndex = RenderManager::getInstance()->getParamNameIndex(param.name);
 		if (nameIndex == SIZE_T_INVALID) {
 			name = param.name;
-			matParam.nameIndex = ShaderManager::getInstance()->registerParamName(name);
+			matParam.nameIndex = RenderManager::getInstance()->registerParamName(name);
 		} else {
 			matParam.nameIndex = nameIndex;
-			name = ShaderManager::getInstance()->getParamName(nameIndex);
+			name = RenderManager::getInstance()->getParamName(nameIndex);
 		}
 
 
 		if (!parentName.empty()) {
-			auto parentNameIndex = ShaderManager::getInstance()->getParamNameIndex(parentName);
+			auto parentNameIndex = RenderManager::getInstance()->getParamNameIndex(parentName);
 			if (parentNameIndex == SIZE_T_INVALID) {
-				matParam.parentNameIndex = ShaderManager::getInstance()->registerParamName(parentName);
+				matParam.parentNameIndex = RenderManager::getInstance()->registerParamName(parentName);
 			} else {
 				matParam.parentNameIndex = parentNameIndex;
 			}
@@ -91,7 +91,7 @@ void Material::addShaderParams(
 
 Material& Material::initFromShaders(const std::string& newName, Shader& vertex, Shader& fragment) {
 	Material material{};
-	auto& this_ = *ShaderManager::getInstance()->registerMaterial(newName, material);
+	auto& this_ = *RenderManager::getInstance()->registerMaterial(newName, material);
 	this_.vShaderName = vertex.name();
 	this_.pShaderName = fragment.name();
 
@@ -226,25 +226,25 @@ bool Material::operator==(const Material& other) {
 
 void Material::debugPrintMaterialInfo() {
 	size_t depth = 0;
-	auto* vs = ShaderManager::getInstance()->getShader(vShaderName);
-	auto* ps = ShaderManager::getInstance()->getShader(pShaderName);
+	auto* vs = RenderManager::getInstance()->getShader(vShaderName);
+	auto* ps = RenderManager::getInstance()->getShader(pShaderName);
 
 
 	std::cout << "* Material Info - " << name();
 	std::cout << std::format("\n\nVertex Shader - {}, Entry: {}\n  Input:", vs->name(), vs->entryPoint);
-	auto& vsAttribs = ShaderManager::getInstance()->getShader(vShaderName)->input.attributes;
+	auto& vsAttribs = RenderManager::getInstance()->getShader(vShaderName)->input.attributes;
 	for (auto& attrib : vsAttribs) {
 		std::cout << "\n\t" << std::format("[{}] ", attrib.location == 255 ? "" : std::to_string(attrib.location)) <<
 			TypeBaseToString(attrib.type) << " : " << attrib.semantic();
 	}
 	std::cout << std::format("\n\nPixel Shader - {}, Entry: {}\n  Input:", ps->name(), ps->entryPoint); //"\n\nPS Input:";
-	auto& attribs = ShaderManager::getInstance()->getShader(pShaderName)->input.attributes;
+	auto& attribs = RenderManager::getInstance()->getShader(pShaderName)->input.attributes;
 	for (auto& attrib : attribs) {
 		std::cout << "\n\t" << std::format("[{}] ", attrib.location == 255 ? "" : std::to_string(attrib.location)) <<
 			TypeBaseToString(attrib.type) << " : " << attrib.semantic();
 	}
 	std::cout << "\n  Output:";
-	auto& outAttribs = ShaderManager::getInstance()->getShader(pShaderName)->output.attributes;
+	auto& outAttribs = RenderManager::getInstance()->getShader(pShaderName)->output.attributes;
 	for (auto& attrib : outAttribs) {
 		std::cout << "\n\t" << std::format("[{}] ", attrib.location == 255 ? "" : std::to_string(attrib.location)) <<
 			TypeBaseToString(attrib.type) << " : " << attrib.semantic();
@@ -290,13 +290,13 @@ void Material::debugPrintParameters(size_t& depth, std::vector<MatParam>& params
 
 
 std::string& Material::name() {
-	return ShaderManager::getInstance()->getMaterialName(*this);
+	return RenderManager::getInstance()->getMaterialName(*this);
 }
 std::string& Material::name() const {
-	return ShaderManager::getInstance()->getMaterialName(*this);
+	return RenderManager::getInstance()->getMaterialName(*this);
 }
 MaterialBuffer* Material::getBuffer(const std::string& bufferName) {
-	auto nameIndex = ShaderManager::getInstance()->getParamNameIndex(bufferName);
+	auto nameIndex = RenderManager::getInstance()->getParamNameIndex(bufferName);
 	if (nameIndex != SIZE_T_INVALID) {
 		auto it = bufferNameIndexMap.find(nameIndex);
 		if (it != bufferNameIndexMap.end())

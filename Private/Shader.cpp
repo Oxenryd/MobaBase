@@ -1,5 +1,5 @@
 #include "Shader.h"
-#include "ShaderManager.h"
+#include "RenderManager.h"
 
 Shader::Shader(Type type, const std::filesystem::path& path) :
     type(type),
@@ -10,7 +10,7 @@ Shader::Shader(Type type, const std::filesystem::path& path) :
 }
 
 const std::string& Shader::name() {
-    return ShaderManager::getInstance()->getShaderName(*this);
+    return RenderManager::getInstance()->getShaderName(*this);
 }
 
 ErrorCode Shader::reflect() {
@@ -77,9 +77,9 @@ std::tuple<
             size_t lastDot = s.rfind('.');
             std::string lastWord = (lastDot == std::string::npos) ? s : s.substr(lastDot + 1);
 
-            auto semNameIndex = ShaderManager::getInstance()->getParamNameIndex(lastWord);
+            auto semNameIndex = RenderManager::getInstance()->getParamNameIndex(lastWord);
             if (semNameIndex == SIZE_T_INVALID) {
-                attrib.semanticNameIndex = ShaderManager::getInstance()->registerParamName(lastWord);
+                attrib.semanticNameIndex = RenderManager::getInstance()->registerParamName(lastWord);
             } else {
                 attrib.semanticNameIndex = semNameIndex;
             }
@@ -103,9 +103,9 @@ std::tuple<
             size_t lastDot = s.rfind('.');
             std::string lastWord = (lastDot == std::string::npos) ? s : s.substr(lastDot + 1);
 
-            auto semNameIndex = ShaderManager::getInstance()->getParamNameIndex(lastWord);
+            auto semNameIndex = RenderManager::getInstance()->getParamNameIndex(lastWord);
             if (semNameIndex == SIZE_T_INVALID) {
-                attrib.semanticNameIndex = ShaderManager::getInstance()->registerParamName(lastWord);
+                attrib.semanticNameIndex = RenderManager::getInstance()->registerParamName(lastWord);
             } else {
                 attrib.semanticNameIndex = semNameIndex;
             }
@@ -144,9 +144,9 @@ std::tuple<
         if (!pc) continue;
 
         ShaderPushConstant pcParam;
-        auto nameIndex = ShaderManager::getInstance()->getParamNameIndex(pc->name);
+        auto nameIndex = RenderManager::getInstance()->getParamNameIndex(pc->name);
         if (nameIndex == SIZE_T_INVALID) {
-            pcParam.base.nameIndex = ShaderManager::getInstance()->registerParamName(pc->name);
+            pcParam.base.nameIndex = RenderManager::getInstance()->registerParamName(pc->name);
         } else {
             pcParam.base.nameIndex = nameIndex;
         }
@@ -176,9 +176,9 @@ std::tuple<
                 attrib.size = member.padded_size;
                 attrib.type = parseReflectedTypeDesc(member.type_description, nullptr);
 
-                auto nameIndex = ShaderManager::getInstance()->getParamNameIndex(member.name);
+                auto nameIndex = RenderManager::getInstance()->getParamNameIndex(member.name);
                 if (nameIndex == SIZE_T_INVALID) {
-                    attrib.nameIndex = ShaderManager::getInstance()->registerParamName(member.name);
+                    attrib.nameIndex = RenderManager::getInstance()->registerParamName(member.name);
                 } else {
                     attrib.nameIndex = nameIndex;
                 }
@@ -238,10 +238,10 @@ ShaderBinding Shader::parseMember(
 
 
 std::string& ShaderIO::Attribute::semantic() const {
-    return ShaderManager::getInstance()->getParamName(semanticNameIndex);
+    return RenderManager::getInstance()->getParamName(semanticNameIndex);
 }
 
 
 std::string& ShaderPushConstant::Attribute::name() const {
-    return ShaderManager::getInstance()->getParamName(nameIndex);
+    return RenderManager::getInstance()->getParamName(nameIndex);
 }

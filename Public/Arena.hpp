@@ -28,8 +28,8 @@ using NewHeapBaseAddress = size_t;
 
 struct ArenaPage
 {
-    size_t offset;
-    uint32_t size;
+    size_t offset = 0;
+    uint32_t size = 0;
     uint8_t dataStartOffset = 0;
     uint8_t free = 1;
     //uint16_t type = static_cast<uint16_t>(-1); // for future reflection

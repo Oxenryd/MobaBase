@@ -25,7 +25,7 @@
 #include "Arena.hpp"
 #include "Timer.h"
 #include "TimerSystem.h"
-#include "ShaderManager.h"
+#include "RenderManager.h"
 #include "Scene.h"
 
 
@@ -37,7 +37,7 @@ constexpr const double			FPS_60 = 1.0 / 60.0;
 constexpr const double			FPS_50 = 1.0 / 50.0;
 constexpr static const double	MAX_DELTA_TIME = 0.25;
 
-class ShaderManager;
+class RenderManager;
 struct EngineSettings
 {
 	VulkanContext* graphicContext = nullptr;
@@ -56,6 +56,8 @@ enum class EngineStatus : uint8_t
 class Engine
 {
 private:
+	static inline Engine* s_instance = nullptr;
+
 	HeapArena& m_baseArena;
 	EngineSettings m_options;
 	std::vector<SceneBase*> m_scenes;
@@ -82,8 +84,7 @@ private:
 	void _initShaderManager();
 
 	// Base Systems
-
-	ShaderManager* m_shaderMan;
+	RenderManager* m_renderMan;
 	TimerSystem m_baseTimers;
 	Timer m_fpsCountTimer;
 
@@ -104,7 +105,9 @@ public:
 
 	template <SceneConcept T>	
 	inline SceneBase* createNewScene(void* argument) {
-		m_scenes.emplace_back(T::createDefault(argument));
+		uint32_t index = m_scenes.size();
+		m_scenes.emplace_back(T::createDefault(index, argument));
+		//m_scenes.back()->m_sceneIndex = m_scenes.size() - 1;
 		if (m_scenes.size() == 1)
 			m_curSceneIndex = 0;
 		return m_scenes.back();
@@ -114,7 +117,7 @@ public:
 	~Engine();
 	inline const double& deltaTime() { return m_updateDeltaTime; }
 	inline void setTargetUpdateDeltaTime(const double targetDt) { m_targetUpdateDeltaTime = targetDt; }
-	ShaderManager* getShaderManager() { return m_shaderMan; }
+	RenderManager* getShaderManager() { return m_renderMan; }
 	void start(VulkanContext* graphicContext, InputManager* inputPtr);
 	void stop();
 	inline const EngineStatus& getStatus() const { return m_status; }
@@ -127,6 +130,8 @@ public:
 			m_requestedSceneIndex = requestedSceneIndex;
 		}
 	}
+
+	static Engine* getInstance() { return s_instance; }
 };
 
 #endif //ENGINE_H
