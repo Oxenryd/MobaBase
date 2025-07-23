@@ -27,8 +27,8 @@ public:
 
         auto transform = m_go.transform();
         transform.modifyPosition() = glm::vec3{5 * std::cos(m_time), 5 * std::sin(m_time), 0.0};
-        auto& pos = transform.position();
-        LOGLINE(LogType::Info, LogMod::Engine, std::format("Position: {}, {}", pos.x, pos.y));
+        //auto& pos = transform.position();
+        //LOGLINE(LogType::Info, LogMod::Engine, std::format("Position: {}, {}", pos.x, pos.y));
     }
 
 };

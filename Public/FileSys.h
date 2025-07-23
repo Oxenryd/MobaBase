@@ -1,5 +1,5 @@
-#ifndef FS_H
-#define FS_H
+#ifndef FILESYS_H
+#define FILESYS_H
 
 #include <filesystem>
 #include <vector>
@@ -11,7 +11,7 @@
 #include "Shader.h"
 #include "ErrorCodes.hpp"
 
-class FS
+class FileSys
 {
 public:
 	static std::vector<std::filesystem::path> getAllFilesWithExtension(

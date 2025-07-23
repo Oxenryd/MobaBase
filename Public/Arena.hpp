@@ -306,7 +306,7 @@ private:
 class Arena
 { 
 private:
-    HeapArena* m_heap;
+    HeapArena* m_heap = nullptr;
     uint8_t* m_memory = nullptr;
     size_t m_size;
     size_t m_offset;

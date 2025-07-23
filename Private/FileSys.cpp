@@ -1,4 +1,4 @@
-#include "FS.h"
+#include "FileSys.h"
 #ifdef BUILD_WIN
 	#include <windows.h>
 #endif
@@ -10,7 +10,7 @@
 
 
 
-std::vector<std::filesystem::path> FS::getAllFilesWithExtension(
+std::vector<std::filesystem::path> FileSys::getAllFilesWithExtension(
 	const std::filesystem::path& directory, const std::wstring& extension) {
 	std::vector<std::filesystem::path> files;
 	for (const auto& entry : std::filesystem::directory_iterator(directory)) {
@@ -23,7 +23,7 @@ std::vector<std::filesystem::path> FS::getAllFilesWithExtension(
 	return files;
 }
 
-std::filesystem::path FS::getExecutableDir() {
+std::filesystem::path FileSys::getExecutableDir() {
 #ifdef BUILD_WIN
 	char buffer[1024];
 	GetModuleFileNameA(NULL, buffer, sizeof(buffer));
@@ -32,7 +32,7 @@ std::filesystem::path FS::getExecutableDir() {
 #endif
 }
 
-Shader::Type FS::parseShaderTypeFromFile(const std::filesystem::path& filePath) {
+Shader::Type FileSys::parseShaderTypeFromFile(const std::filesystem::path& filePath) {
     std::ifstream file(filePath);
     std::string line;
     while (std::getline(file, line)) {
@@ -48,7 +48,7 @@ Shader::Type FS::parseShaderTypeFromFile(const std::filesystem::path& filePath) 
 	return Shader::Type::Invalid;
 }
 
-std::string FS::parseShaderNameFromFile(const std::filesystem::path& filePath) {
+std::string FileSys::parseShaderNameFromFile(const std::filesystem::path& filePath) {
     std::ifstream file(filePath);
     std::string line;
 
@@ -66,7 +66,7 @@ std::string FS::parseShaderNameFromFile(const std::filesystem::path& filePath) {
     return "";
 }
 
-ErrorCode FS::execAndCapture(const std::string& command, std::string& outStr) {
+ErrorCode FileSys::execAndCapture(const std::string& command, std::string& outStr) {
     std::array<char, 1024> buffer;
     outStr.clear();
 
