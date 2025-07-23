@@ -7,10 +7,9 @@
 #include <type_traits>
 
 #include "ArenaAllocator.hpp"
-#include "EnabledSystem.hpp"
 #include "TransformSystem.hpp"
 #include "GameObjectSystem.hpp"
-#include "NameTagSystem.hpp"
+#include "TagSystem.hpp"
 
 enum class SceneTransitionStatus
 {
@@ -42,7 +41,7 @@ protected:
     ArenaRegistry m_reg;
     TransformSystem m_transformSys;
     GameObjectSystem m_gameObjectSys;
-    NameTagSystem m_nameTagSys;
+    TagSystem m_nameTagSys;
     
     bool m_firstFrame = true;
     
@@ -57,7 +56,11 @@ public:
         m_gameObjectSys{ m_sceneIndex, &m_reg},
         m_nameTagSys{&m_reg},
         m_sceneIndex{sceneIndex}
-    {}
+    {
+        m_reg.storage<TransformComponent>().reserve(ECS_BASE_COMPONENTS_RESERVATION_COUNT);
+        m_reg.storage<EnabledTag>().reserve(ECS_BASE_COMPONENTS_RESERVATION_COUNT);
+        m_reg.storage<TagComponent>().reserve(ECS_BASE_COMPONENTS_RESERVATION_COUNT);
+    }
     //SceneBase() : SceneBase(DEFAULT_HEAP_SIZE) {}
 
     //HeapArena& heapArena() { return m_heap; }
@@ -76,7 +79,7 @@ public:
     ArenaRegistry& registry() { return m_reg; }
     TransformSystem& transformSystem() { return m_transformSys; }
     GameObjectSystem& gameObjectSystem() { return m_gameObjectSys; }  
-    NameTagSystem& nameTagSystem() { return m_nameTagSys; }
+    TagSystem& nameTagSystem() { return m_nameTagSys; }
 
     uint32_t sceneIndex() const { return m_sceneIndex; }
 };

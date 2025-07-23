@@ -118,14 +118,14 @@ add_executable (MobaBase
 	"Public/ObjectState.hpp"
 	"Public/MobaMath.hpp"
 	"Public/EnabledTag.hpp"
-	#"Public/EnabledSystem.hpp"
 	"Public/GameObjectSystem.hpp"
 	"Public/GameObject.hpp"
-	"Public/NameTag.hpp"
-	"Public/NameTagSystem.hpp"
+	"Public/Tag.hpp"
+	"Public/TagSystem.hpp"
 	"Public/SceneTrackerSystem.h"
 	"Public/EnabledTag.hpp"
 	"Public/RenderingSystem.hpp"
+	"Public/FixedString.hpp"
 	
 	"Private/Engine.cpp"
 	"Private/Timer.cpp"
@@ -182,6 +182,12 @@ target_compile_definitions(MobaBase PRIVATE
 	MAT_BASE_MAT_INSTANCES_NAME=\"baseMatInstances\"
 	MAT_BASE_MAT_INSTANCES_SET=0;
 
+	# Data types settings
+	FIXED_STRINGS_MAX_LENGTH=63
+
+	# ECS
+	ECS_BASE_COMPONENTS_RESERVATION_COUNT=2048
+	
 
 	# Directories
 	SHADER_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/Shaders\"

@@ -54,8 +54,10 @@ struct DestructorEntry
 class HeapArena
 {
 public:
-    HeapArena(size_t size)
-        : m_size(size + 1), m_lastStart(0) {
+    HeapArena() = delete;
+    HeapArena(size_t size, bool destruct = true)
+        : m_size(size + 1), m_lastStart(0), m_destruct{ destruct }
+    {
         m_memory = new uint8_t[m_size];
         size_t memStart = reinterpret_cast<size_t>(m_memory);
         if (!m_memory) {
@@ -78,7 +80,8 @@ public:
 
         reset();
 
-        m_destructorsPtr.emplace_back(std::vector<DestructorEntry>{});
+        if (m_destruct)
+            m_destructorsPtr.emplace_back(std::vector<DestructorEntry>{});
         
 
         LOG(LogType::Success, "Done.");
@@ -198,7 +201,8 @@ public:
 
     uint32_t registerArena() {
         auto id = m_nextArenaId++;
-        m_destructorsPtr.emplace_back();
+        if (m_destruct)
+            m_destructorsPtr.emplace_back();
         return id;
     }
 
@@ -209,17 +213,20 @@ public:
     }
 
     template <typename T>
-    inline void deallocate(T* ptr) {
-        destruct(ptr);
+    inline void deallocate(T* ptr, size_t size) {
+        destruct(ptr, size);
     }
 
     template <typename T>
-    inline void destruct(T* ptr) {
+    inline void destruct(T* ptr, size_t size) {
         size_t pageStart = reinterpret_cast<size_t>(ptr);
         ArenaPage* page = findPage(pageStart);
         if (!page)
             throw std::exception("No such pointer allocated.");
-        static_cast<T*>(ptr)->~T();
+        if (page->size != size)
+            throw std::exception("Deallocation/Page size mismatch.");
+        if (m_destruct)
+            static_cast<T*>(ptr)->~T();
         m_used -= page->size;
         page->release();
     }
@@ -258,23 +265,25 @@ public:
 
         LOGLINE_IND(LogType::Info, LogMod::Memory, "Destroying HeapArena elements, Addr: " +
                 addrStr + "... ", 1);
-        for (auto& list : m_destructorsPtr) {
-            for (auto& entry : list) {
-                if (entry.object && entry.destroyFunc) {
-                    try {
-                        entry.destroyFunc(entry.object);
-                    } catch (std::exception& e) {
-                        LOGLINE(LogType::Warning, LogMod::Memory, "Failed to execute a destructor.");
-                    }                 
+        if (m_destruct)             {
+            for (auto& list : m_destructorsPtr) {
+                for (auto& entry : list) {
+                    if (entry.object && entry.destroyFunc) {
+                        try {
+                            entry.destroyFunc(entry.object);
+                        } catch (std::exception& e) {
+                            LOGLINE(LogType::Warning, LogMod::Memory, "Failed to execute a destructor.");
+                        }
+                    }
+                    #ifdef LOGGING
+                    else
+                        LOG(LogType::Warning, "\n\t\tDestructor missing. Skipping... ");
+                    #endif
                 }
-#ifdef LOGGING
-                else
-                    LOG(LogType::Warning, "\n\t\tDestructor missing. Skipping... ");
-#endif
             }
-        }
-        for (size_t i = m_destructorsPtr.size() - 1; i > 1; --i) {
-            m_destructorsPtr.erase(m_destructorsPtr.end());
+            for (size_t i = m_destructorsPtr.size() - 1; i > 1; --i) {
+                m_destructorsPtr.erase(m_destructorsPtr.end());
+            }
         }
 
         m_pagesPtr.clear();
@@ -293,6 +302,7 @@ private:
     size_t m_lastSize;
     uint32_t m_nextArenaId = 1;
     size_t m_used = 0;
+    bool m_destruct = true;
 
     static size_t alignUp(size_t addr, size_t alignment) {
         return (addr + (alignment - 1)) & ~(alignment - 1);
@@ -317,27 +327,48 @@ private:
     }
 public:
 
-    Arena(HeapArena* const memProvider, size_t size)
+    Arena(size_t size, HeapArena* const memProvider = nullptr)
         : m_size(size), m_offset(0) {
         
+        m_heap = memProvider;
+        m_memory = memProvider ? reinterpret_cast<uint8_t*>(m_heap->allocate(size)) : new uint8_t[size];
+        m_arenaId = memProvider ? m_heap->registerArena() : UINT32_INVALID;
         LOGLINE(LogType::Info, LogMod::Memory, "Creating Arena, Addr: " + std::to_string(reinterpret_cast<size_t>(m_memory)) +
                 ", " + std::to_string(m_size / 1024) + "kB... ");
-
-        if (memProvider) {
-            m_heap = memProvider;
-            m_arenaId = m_heap->registerArena();
-            m_memory = reinterpret_cast<uint8_t*>(m_heap->allocate(size));
-        } else {
-            m_arenaId = UINT32_INVALID;
-            m_memory = new uint8_t[size];
-        }
         LOG(LogType::Success, "Done.");
     }
+    Arena(const Arena& other) :
+        m_heap{other.m_heap},
+        m_memory{other.m_memory},
+        m_size{other.m_size},
+        m_offset{other.m_offset},
+        m_arenaId{other.m_arenaId} {}
 
-    Arena(size_t size) :
-        m_size{ size }, m_offset(0) {
-        m_arenaId = UINT32_INVALID;
-        m_memory = new uint8_t[size];
+    Arena(Arena&& other) noexcept {
+        m_heap = other.m_heap;
+        m_memory = other.m_memory;
+        m_size = other.m_size;
+        m_offset = other.m_offset;
+        m_arenaId = other.m_arenaId;
+
+        other.m_heap = nullptr;
+        other.m_memory = nullptr;
+        other.m_size = 0;
+        other.m_arenaId = UINT32_INVALID;
+    }
+
+    Arena& operator=(Arena&& rhs) noexcept {
+        m_heap = rhs.m_heap;
+        m_memory = rhs.m_memory;
+        m_size = rhs.m_size;
+        m_offset = rhs.m_offset;
+        m_arenaId = rhs.m_arenaId;
+
+        rhs.m_heap = nullptr;
+        rhs.m_memory = nullptr;
+        rhs.m_size = 0;
+        rhs.m_arenaId = UINT32_INVALID;
+        return *this;
     }
 
     ~Arena() {

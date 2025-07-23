@@ -97,9 +97,10 @@ void Engine::start(VulkanContext* graphicContext, InputManager* inputPtr) {
 	if (m_scenes.empty()) {
 		LOGLINE(LogType::Remark, LogMod::Engine, "Creating a default scene... ");
 		auto* scenePtr = this->createNewScene<DefaultScene>(nullptr);
-		m_curSceneIndex = 0;
+		m_activeSceneIndices.insert(0);
 		LOGLINE(LogType::Remark, LogMod::Engine, "Scene created.");
-	}
+	} else if (m_activeSceneIndices.empty())
+		m_activeSceneIndices.insert(0);
 
 	// Set main window
 	m_options.inputManager = inputPtr;
@@ -134,39 +135,39 @@ inline void Engine::_run() {
 			m_fixedAccu -= m_targetFixedDeltaTime;
 		}
 
-		// Scene transit
-		if (m_sceneTransitionRequested) {
-			switch (m_sceneTransitMode)
-			{
-				case SceneTransitionMode::DontRunTransitioning:
-				{
-					m_scenes[m_requestedSceneIndex]->loadDispatch();
-					m_scenes[m_curSceneIndex]->unloadDispatch();
-					m_curSceneIndex = m_requestedSceneIndex;
-					m_sceneTransitionRequested = false;
-				} break;
+		//// Scene transit
+		//if (m_sceneTransitionRequested) {
+		//	switch (m_sceneTransitMode)
+		//	{
+		//		case SceneTransitionMode::DontRunTransitioning:
+		//		{
+		//			m_scenes[m_requestedSceneIndex]->loadDispatch();
+		//			m_scenes[m_curSceneIndex]->unloadDispatch();
+		//			m_curSceneIndex = m_requestedSceneIndex;
+		//			m_sceneTransitionRequested = false;
+		//		} break;
 
-				case SceneTransitionMode::RunOnce:
-				{
-					m_scenes[m_curSceneIndex]->transitioningDispatch();
-					m_scenes[m_requestedSceneIndex]->loadDispatch();
-					m_scenes[m_curSceneIndex]->unloadDispatch();
-					m_curSceneIndex = m_requestedSceneIndex;
-					m_sceneTransitionRequested = false;
-				} break;
+		//		case SceneTransitionMode::RunOnce:
+		//		{
+		//			m_scenes[m_curSceneIndex]->transitioningDispatch();
+		//			m_scenes[m_requestedSceneIndex]->loadDispatch();
+		//			m_scenes[m_curSceneIndex]->unloadDispatch();
+		//			m_curSceneIndex = m_requestedSceneIndex;
+		//			m_sceneTransitionRequested = false;
+		//		} break;
 
-				case SceneTransitionMode::WaitForDone:
-				{
-					auto doneStatus = m_scenes[m_curSceneIndex]->transitioningDispatch();
-					if (doneStatus == SceneTransitionStatus::Done) {
-						m_scenes[m_requestedSceneIndex]->loadDispatch();
-						m_scenes[m_curSceneIndex]->unloadDispatch();
-						m_curSceneIndex = m_requestedSceneIndex;
-						m_sceneTransitionRequested = false;
-					}
-				} break;
-			}
-		}
+		//		case SceneTransitionMode::WaitForDone:
+		//		{
+		//			auto doneStatus = m_scenes[m_curSceneIndex]->transitioningDispatch();
+		//			if (doneStatus == SceneTransitionStatus::Done) {
+		//				m_scenes[m_requestedSceneIndex]->loadDispatch();
+		//				m_scenes[m_curSceneIndex]->unloadDispatch();
+		//				m_curSceneIndex = m_requestedSceneIndex;
+		//				m_sceneTransitionRequested = false;
+		//			}
+		//		} break;
+		//	}
+		//}
 
 		m_options.inputManager->pollEvents();
 		_updateEarly(dt);
@@ -202,21 +203,27 @@ void Engine::stop() {
 
 inline void Engine::_updateEarly(double dt) {
 	onEarlyUpdateEnter.notify(this);
-	if (m_scenes[m_curSceneIndex]->isFirstFrame())
-		m_scenes[m_curSceneIndex]->startDispatch();
+	for (auto& index : m_activeSceneIndices) {
+		if (m_scenes[index]->isFirstFrame())
+			m_scenes[index]->startDispatch();
 
-	m_scenes[m_curSceneIndex]->updateDispatch(dt);
+		m_scenes[index]->updateDispatch(dt);	
+	}
 	onEarlyUpdateExit.notify(this);
 }
 
 inline void Engine::_updateLate(double dt) {
 	onLateUpdateEnter.notify(this);
-	m_scenes[m_curSceneIndex]->lateUpdateDispatch(dt);
+	for (auto& index : m_activeSceneIndices) 
+		m_scenes[index]->lateUpdateDispatch(dt);
+	
 	onLateUpdateExit.notify(this);
 }
 
 inline void Engine::_updateFixed() {
 	onFixedUpdateEnter.notify(this);
-	m_scenes[m_curSceneIndex]->fixedUpdateDispatch();
+	for (auto& index : m_activeSceneIndices)
+		m_scenes[index]->fixedUpdateDispatch();
+
 	onFixedUpdateExit.notify(this);
 }

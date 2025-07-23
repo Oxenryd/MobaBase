@@ -63,7 +63,9 @@ private:
 
 public:
 	RenderManager() = delete;
-	~RenderManager() { delete m_hotreloadTimer; }
+	~RenderManager() { 
+		delete m_hotreloadTimer;
+	}
 	RenderManager(ShaderCompilerBase* compiler);
 
 	ShaderCompilerBase* const getCompiler() { return m_compiler; }

@@ -73,10 +73,10 @@ int __stdcall main(HINSTANCE hInstance, HINSTANCE instance, LPSTR str, int nCmdS
 	InputManager* inputMan = mainArena.construct<InputManager>(wnd);
 	Engine* engine = mainArena.construct<Engine>(mainArena);
 	LOGLINE(LogType::Info, LogMod::Rendering, "Compiling Shaders...\n");
-	ErrorCode EC = engine->getShaderManager()->recompileShaderCache();
+	ErrorCode EC = engine->getRenderManager()->recompileShaderCache();
 	if (EC == ErrorCode::OK)
 		LOG(LogType::Success,
-			"\t\t\t\t\tDone. Compiled " + std::to_string(engine->getShaderManager()->totalShaders()) + " shaders.\n");
+			"\t\t\t\t\tDone. Compiled " + std::to_string(engine->getRenderManager()->totalShaders()) + " shaders.\n");
 	else {
 		LOG(LogType::Error, "Failed. Code: " + std::to_string(static_cast<uint8_t>(EC)));
 		return (int)EC;
@@ -101,11 +101,11 @@ int __stdcall main(HINSTANCE hInstance, HINSTANCE instance, LPSTR str, int nCmdS
 	LOGLINE(LogType::Success, LogMod::Vulkan, "Vulkan init Complete.\n");
 	
 	// Create Base Materials
-	auto* baseVs = engine->getShaderManager()->getShader("BaseVS");
-	auto* basePs = engine->getShaderManager()->getShader("BasePS");
+	auto* baseVs = engine->getRenderManager()->getShader("BaseVS");
+	auto* basePs = engine->getRenderManager()->getShader("BasePS");
 	auto baseMat = Material{ "BaseMaterialUnlit", *baseVs, *basePs };
-	auto* spriteVs = engine->getShaderManager()->getShader("SpriteBatchVS");
-	auto* spritePs = engine->getShaderManager()->getShader("SpriteBatchPS");
+	auto* spriteVs = engine->getRenderManager()->getShader("SpriteBatchVS");
+	auto* spritePs = engine->getRenderManager()->getShader("SpriteBatchPS");
 	auto spriteMat = Material{"SpriteMaterialUnlit", *spriteVs, *spritePs };
 	
 
@@ -140,11 +140,11 @@ int __stdcall main(HINSTANCE hInstance, HINSTANCE instance, LPSTR str, int nCmdS
 
 	// Shader Hotreloaded
 #ifdef SHADER_HOTRELOAD	
-	engine->getShaderManager()->onShaderHotReloaded.subscribe([engine, vkCtx](void*)
+	engine->getRenderManager()->onShaderHotReloaded.subscribe([engine, vkCtx](void*)
 							{
 								vkCtx->resetPipeline(0,
-									engine->getShaderManager()->vertexShaders()[0],
-									engine->getShaderManager()->pixelShaders()[0]);
+									engine->getRenderManager()->vertexShaders()[0],
+									engine->getRenderManager()->pixelShaders()[0]);
 							});
 #endif
 
@@ -157,12 +157,9 @@ int __stdcall main(HINSTANCE hInstance, HINSTANCE instance, LPSTR str, int nCmdS
 							});
 
 	// Start Engine
-	//PsoDesc basePso{};
-	//EC = PsoDesc::createFromMaterial(*engine->getShaderManager() ,spriteMat, basePso);
-	//vkCtx->createGraphicsPipeline(basePso);
-	vkCtx->createPipelineFromMaterial(engine->getShaderManager(), spriteMat);
-	vkCtx->createPipelineFromMaterial(engine->getShaderManager(), baseMat);
-	auto scene = engine->createNewScene<GameScene>(nullptr);
+	vkCtx->createPipelineFromMaterial(engine->getRenderManager(), spriteMat);
+	vkCtx->createPipelineFromMaterial(engine->getRenderManager(), baseMat);
+	engine->createNewScene<GameScene>(nullptr);
 	engine->setTargetUpdateDeltaTime(0.0);
 	engine->start(vkCtx, inputMan);
 
