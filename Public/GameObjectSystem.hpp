@@ -9,6 +9,12 @@
 #include "SystemECS.h"
 #include "GameObject.hpp"
 
+struct UntypedVectorWithDeleter
+{
+	void* ptr;
+	void (*deleter)(void*);
+};
+
 struct IGameObjectRange
 {
 	virtual ~IGameObjectRange() = default;
@@ -75,7 +81,7 @@ class GameObjectSystem : public SystemECS
 {
 private:
 	uint32_t m_sceneIndex = UINT32_INVALID;
-	std::unordered_map<std::type_index, void*> m_typeVectors;
+	std::unordered_map<std::type_index, UntypedVectorWithDeleter> m_typeVectors;
 	std::vector<std::unique_ptr<IGameObjectRange>> m_ranges;
 
 	template<typename T>
@@ -86,24 +92,24 @@ private:
 		auto it = m_typeVectors.find(typeId);
 		if (it == m_typeVectors.end()) {
 			auto* vec = new std::vector<T>();
-			m_typeVectors[typeId] = vec;
+			auto deleterFn = [](void* p) {
+				delete static_cast<std::vector<T>*>(p);
+			};
+			m_typeVectors[typeId] = { vec, deleterFn };
 			m_ranges.emplace_back(std::make_unique<GameObjectRangeImpl<T>>(vec));
 			return *vec;
 		}
-		return *static_cast<std::vector<T>*>(m_typeVectors[typeId]);
-	}
-
-	void _deleteVector(void* ptr) {
-		delete ptr; // for now
+		return *static_cast<std::vector<T>*>(m_typeVectors[typeId].ptr);
 	}
 
 	void _emplaceBaseSystems(entt::entity entity, std::string& name);
 
 public:
 	using iterator = GameObjectSystemIterator;
+
 	~GameObjectSystem() {
-		for (auto& [_, vecPtr] : m_typeVectors)
-			_deleteVector(vecPtr);
+		for (auto& [_, entry] : m_typeVectors)
+			entry.deleter(entry.ptr);
 	}
 	GameObjectSystem() = delete;
 	GameObjectSystem(uint32_t sceneIndex, ArenaRegistry* const registry)

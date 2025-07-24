@@ -4,7 +4,10 @@
 #include <cstdint>
 
 #define EC_FAILED(ec) ((ec) != ErrorCode::OK)
+#define EC_RETURN_FAILED(ec) if ( (ec) != ErrorCode::OK) return (ec);
+#define EC_RETURN_FAILED_INT(ec) if ( (ec) != ErrorCode::OK) return static_cast<int>(ec);
 #define EC_CHECK(ecVar, expr) (ecVar) = (expr); if (EC_FAILED(ecVar)) return (ecVar);
+#define EC_INT(ec) static_cast<int>(ec)
 
 enum class ErrorCode : uint32_t
 {

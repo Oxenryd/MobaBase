@@ -24,10 +24,25 @@
 #define SIZE_INVALID static_cast<size_t>(0xffffffffffffffff)
 #define SIZE_SAFEMAX static_cast<size_t>(0xfffffffffffffffe)
 
-#define TB(x) 1024 * 1024 * 1024 * 1024 * (x)
-#define GB(x) 1024 * 1024 * 1024 * (x)
-#define MB(x) 1024 * 1024 * (x)
-#define KB(x) 1024 * (x)
+constexpr std::size_t operator"" _KB(unsigned long long val) {
+    return val * 1024ULL;
+}
+
+constexpr std::size_t operator"" _MB(unsigned long long val) {
+    return val * 1024ULL * 1024ULL;
+}
+
+constexpr std::size_t operator"" _GB(unsigned long long val) {
+    return val * 1024ULL * 1024ULL * 1024ULL;
+}
+constexpr std::size_t operator"" _TB(unsigned long long val) {
+    return val * 1024ULL * 1024ULL * 1024ULL * 1024ULL;
+}
+
+//#define TB(x) static_cast<size_t>(1024 * 1024 * 1024 * 1024 * (x))
+//#define GB(x) static_cast<size_t>(1024 * 1024 * 1024 * (x))
+//#define MB(x) static_cast<size_t>(1024 * 1024 * (x))
+//#define KB(x) static_cast<size_t>(1024 * (x))
 
 template<typename T>
 inline constexpr T& deref(void* ptr, const char* errorMsg = "null pointer in deref") {

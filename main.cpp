@@ -1,14 +1,10 @@
-﻿// MobaBase.cpp : Defines the entry point for the application.
+﻿// main.cpp : Defines the entry point for the application.
 //
 
 #include "Engine.h"
 #include "Templates.hpp"
 
-#ifdef IGPU_PRIO
-	const bool igpuPriority = true;
-#else
-	const bool igpuPriority = false;
-#endif
+
 
 #ifdef BUILD_WIN
 
@@ -43,6 +39,7 @@ int __stdcall main(HINSTANCE hInstance, HINSTANCE instance, LPSTR str, int nCmdS
 	
 #ifdef DEBUGGING
 	_CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
+	//_CrtSetBreakAlloc(175);
 	atexit(finalBreak);
 #else
 	atexit(finalCleanup);
@@ -54,114 +51,49 @@ int __stdcall main(HINSTANCE hInstance, HINSTANCE instance, LPSTR str, int nCmdS
 	// Setup logger
 	Log::init<DefaultTerminalLogger>();
 
-	// Setup base HeapArenad
-	HeapArena mainArena{ 1048 * 1048 * 128 };
+	// Create Engine
+	Engine engine{ "VulkanTest", 256_MB };
 
-	// Create Window Handle
-	WindowSurface* wnd = mainArena.construct<WindowSurface>();
-	wnd->enableRawInput();
-	wnd->appName = "VulkanTest";
-	auto wndResult = createSurface(
-		hInstance, instance, nullptr, nCmdShow, CLASS_NAME, WINDOW_TITLE, WND_WIDTH, WND_HEIGHT, wnd);
-	if (wndResult != ErrorCode::OK) {
-		LOGLINE(LogType::Error, LogMod::Window, "Could not create HWND: " + 
-				std::to_string(static_cast<DWORD>(wndResult)));
-		return (int)wndResult;
+	// Create Window surface
+	LOGLINE(LogType::Info, LogMod::Window, "Creating Window Surface... ");
+	ErrorCode EC = createSurface(
+		hInstance, instance, nullptr, nCmdShow, CLASS_NAME, WINDOW_TITLE, WND_WIDTH, WND_HEIGHT, engine.getWndSurface());
+	if (EC_FAILED(EC)) {
+		LOGLINE(LogType::Error, LogMod::Window, "Could not create HWND: " +
+				std::to_string(static_cast<DWORD>(EC)));
+		EC_RETURN_FAILED_INT(EC);
 	}
-	
-	// Set up engine parameters
-	InputManager* inputMan = mainArena.construct<InputManager>(wnd);
-	Engine* engine = mainArena.construct<Engine>(mainArena);
-	LOGLINE(LogType::Info, LogMod::Rendering, "Compiling Shaders...\n");
-	ErrorCode EC = engine->getRenderManager()->recompileShaderCache();
-	if (EC == ErrorCode::OK)
-		LOG(LogType::Success,
-			"\t\t\t\t\tDone. Compiled " + std::to_string(engine->getRenderManager()->totalShaders()) + " shaders.\n");
-	else {
-		LOG(LogType::Error, "Failed. Code: " + std::to_string(static_cast<uint8_t>(EC)));
-		return (int)EC;
-	}
+	LOG(LogType::Success, "Done.");
 
-	// Create Vulkan Context
-	LOGLINE(LogType::Info, LogMod::Vulkan, "Creating Vulkan context... ");
-	VulkanContext* vkCtx = mainArena.construct<VulkanContext>(wnd);
+	// Setup rest of engine
+	EC = engine.init();
+	EC_RETURN_FAILED_INT(EC); 
 
-	VkPresentModeKHR presentMode;
-#ifdef IGPU_PRIO
-	presentMode = VkPresentModeKHR::VK_PRESENT_MODE_FIFO_KHR;
-#else
-	presentMode = VkPresentModeKHR::VK_PRESENT_MODE_MAILBOX_KHR;
-#endif
-
-	auto vk = vkCtx->initVulkan(presentMode, igpuPriority);
-	if (vk != VK_SUCCESS) {
-		LOG(LogType::Error, "Failed. Code: " + std::to_string(static_cast<uint32_t>(vk)));
-		return (int)vk;
-	}
-	LOGLINE(LogType::Success, LogMod::Vulkan, "Vulkan init Complete.\n");
-	
-	// Create Base Materials
-	auto* baseVs = engine->getRenderManager()->getShader("BaseVS");
-	auto* basePs = engine->getRenderManager()->getShader("BasePS");
-	auto baseMat = Material{ "BaseMaterialUnlit", *baseVs, *basePs };
-	auto* spriteVs = engine->getRenderManager()->getShader("SpriteBatchVS");
-	auto* spritePs = engine->getRenderManager()->getShader("SpriteBatchPS");
-	auto spriteMat = Material{"SpriteMaterialUnlit", *spriteVs, *spritePs };
-	
-
-	// DEBUG! ////////////////////////////////////////////////////////////////////////////
-	auto& matInstance = spriteMat.createInstance();
-	glm::vec2 size = { 12.2f, 13.5f };
-	matInstance.setParameter("spriteInstances", "size", &size);
-	auto checkedSize = matInstance.getParameter<glm::vec2>("spriteInstances", "size");
-	//////////////////////////////////////////////////////////////////////////////////////
-
-	std::cout << "\n";
-	baseMat.debugPrintMaterialInfo();
-	std::cout << "\n";
-	spriteMat.debugPrintMaterialInfo();
-	std::cout << "\n";
-
-	// Callbacks -
-	// Window -> Vulkan cb's
-	wnd->onResize.subscribe([vkCtx, engine](WindowSurface::SizeType type, glm::u16vec2 newSize)
+	// Callbacks for Window->Vulkan
+	engine.getWndSurface()->onResize.subscribe([&engine](WindowSurface::SizeType type, glm::u16vec2 newSize)
 							{
 								resizeTimes++;
 								if (resizeTimes < 2) return;
 								bool pendingExit = 
-									engine->getStatus() == EngineStatus::PendingStop ? true : false;
-								vkCtx->notifyViewResized(&pendingExit, newSize.x, newSize.y);
+									engine.getStatus() == EngineStatus::PendingStop ? true : false;
+								engine.getVulkanContext()->notifyViewResized(&pendingExit, newSize.x, newSize.y);
 							});
-	wnd->onClose.subscribe([engine, vkCtx]()
+	engine.getWndSurface()->onClose.subscribe([&engine]()
 						   {
-							    vkCtx->setPendingExit();
-								engine->stop();
+							    engine.getVulkanContext()->setPendingExit();
+								engine.stop();
 						   });
-
-	// Shader Hotreloaded
-#ifdef SHADER_HOTRELOAD	
-	engine->getRenderManager()->onShaderHotReloaded.subscribe([engine, vkCtx](void*)
-							{
-								vkCtx->resetPipeline(0,
-									engine->getRenderManager()->vertexShaders()[0],
-									engine->getRenderManager()->pixelShaders()[0]);
-							});
-#endif
-
-	// Engine - Show Fps cb
-	engine->onReadFPS.subscribe([&wnd](Engine* engPtr, uint32_t frames)
+	engine.onReadFPS.subscribe([&engine](Engine* engPtr, uint32_t frames)
 							{
 								static std::wstring windowTitle;
 								windowTitle = L"VulkanTest - " + std::to_wstring(frames) + L" FPS";
-								SetWindowTextW(wnd->windowHandle, windowTitle.c_str());
+								SetWindowTextW(engine.getWndSurface()->windowHandle, windowTitle.c_str());
 							});
 
 	// Start Engine
-	vkCtx->createPipelineFromMaterial(engine->getRenderManager(), spriteMat);
-	vkCtx->createPipelineFromMaterial(engine->getRenderManager(), baseMat);
-	engine->createNewScene<GameScene>(nullptr);
-	engine->setTargetUpdateDeltaTime(0.0);
-	engine->start(vkCtx, inputMan);
+	engine.createNewScene<GameScene>(nullptr);
+	engine.setTargetUpdateDeltaTime(0.0);
+	engine.start();
 
 	// Reset timing
 	timeEndPeriod(1);

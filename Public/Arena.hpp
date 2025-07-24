@@ -164,7 +164,10 @@ public:
         } 
         else {
             if (registerDestructor) {
-                m_destructorsPtr[0].push_back({ [](void* p) { static_cast<T*>(p)->~T(); }, obj });
+                m_destructorsPtr[0].push_back({
+                    [](void* p) { 
+                        static_cast<T*>(p)->~T();
+                    }, obj});
             }
         }
 

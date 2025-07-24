@@ -8,7 +8,7 @@ RenderManager* RenderManager::s_instance = nullptr;
 
 RenderManager::RenderManager(ShaderCompilerBase* compiler) :
 	m_compiler{ compiler },
-	m_paramArena{MB(16)}
+	m_paramArena{16_MB}
 {
 }
 

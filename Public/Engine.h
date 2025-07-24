@@ -39,14 +39,6 @@ constexpr const double			FPS_60 = 1.0 / 60.0;
 constexpr const double			FPS_50 = 1.0 / 50.0;
 constexpr static const double	MAX_DELTA_TIME = 0.25;
 
-class RenderManager;
-struct EngineSettings
-{
-	VulkanContext* graphicContext = nullptr;
-	InputManager* inputManager = nullptr;
-	double deltaTimeJitterThreshold = DEFAULT_DELTATIME_JITTER_SETTING;
-};
-
 enum class EngineStatus : uint8_t
 {
 	Stopped,
@@ -60,12 +52,11 @@ class Engine
 private:
 	static inline Engine* s_instance = nullptr;
 
-	HeapArena& m_baseArena;
-	EngineSettings m_options;
+	HeapArena m_baseArena;
+	std::string m_appName;
 	std::vector<SceneBase*> m_scenes;
 	std::set<uint32_t> m_activeSceneIndices;
 	size_t m_newSceneIndex = 0;
-	//size_t m_curSceneIndex;
 	double m_targetUpdateDeltaTime;
 	double m_updateDeltaTime;
 	double m_targetFixedDeltaTime;
@@ -74,25 +65,36 @@ private:
 	EngineStatus m_status = EngineStatus::Stopped;
 	double m_lastReadFps;
 	bool m_sceneTransitionRequested = false;
-	size_t m_requestedSceneIndex = static_cast<size_t>(-1);
+	size_t m_requestedSceneIndex = SIZE_INVALID;
 	SceneTransitionMode m_sceneTransitMode = SceneTransitionMode::WaitForDone;
 	uint64_t m_totalFrames = 0;
 	std::chrono::steady_clock::time_point m_lastUpdateTime;
 
 
-	inline double _tickDt();
-	inline void _updateEarly(double dt);
-	inline void _updateLate(double dt);
-	inline void _updateFixed();
-	inline void _run();
-	void _initShaderManager();
+	INLINE double _tickDt();
+	INLINE void _updateEarly(double dt);
+	INLINE void _updateLate(double dt);
+	INLINE void _updateFixed();
+	INLINE void _run();
+	INLINE ErrorCode _initShaderManager();
+	INLINE ErrorCode _initInputManager();
+	INLINE ErrorCode _initGraphics();
+	INLINE ErrorCode _initBaseShaders();
+	INLINE ErrorCode _initBaseCallbacks();
 
 	// Base Systems
-	RenderManager* m_renderMan;
+	RenderManager* m_renderMan = nullptr;
+	WindowSurface* m_wnd = nullptr;;
+	InputManager* m_inputMan = nullptr;;
+	VulkanContext* m_vkCtx = nullptr;;
+
 	TimerSystem m_baseTimers;
 	Timer m_fpsCountTimer;
 
 public:
+	~Engine();
+	Engine(const std::string& appName, size_t heapSize);
+	
 	// EVENTS
 	Event<Engine*> onStartInitiated;
 	Event<Engine*> onStarted;
@@ -108,14 +110,14 @@ public:
 	Event<Engine*, uint32_t> onReadFPS;
 
 	template <SceneConcept T>	
-	inline SceneBase* createNewScene(void* argument) {
+	INLINE SceneBase* createNewScene(void* argument) {
 		uint32_t index = m_newSceneIndex++;
 		m_scenes.resize(std::max(static_cast<size_t>(index), m_scenes.size() + 1));
 		m_scenes[index] = (T::createDefault(index, argument));
 		return m_scenes[index];
 	}
 
-	inline ErrorCode registerActiveScene(SceneBase* const scene) {
+	INLINE ErrorCode registerActiveScene(SceneBase* const scene) {
 		auto it = m_activeSceneIndices.find({ scene->m_sceneIndex });
 		if (it != m_activeSceneIndices.end()) {
 			return ErrorCode::SCENE_ALREADY_ACTIVE;
@@ -123,7 +125,7 @@ public:
 		m_activeSceneIndices.insert({ scene->m_sceneIndex });
 		return ErrorCode::OK;
 	}
-	inline ErrorCode unregisterActiveScene(SceneBase* const scene) {
+	INLINE ErrorCode unregisterActiveScene(SceneBase* const scene) {
 		auto it = m_activeSceneIndices.find({ scene->m_sceneIndex });
 		if (it == m_activeSceneIndices.end()) {
 			return ErrorCode::SCENE_UNTRACKED_SCENE_REFERENCE;
@@ -131,33 +133,38 @@ public:
 		m_activeSceneIndices.erase(scene->m_sceneIndex);
 		return ErrorCode::OK;
 	}
-	inline ArenaRegistry& getSceneRegistry(SceneBase* const scene) {
+	INLINE ArenaRegistry& getSceneRegistry(SceneBase* const scene) {
 		return m_scenes[scene->m_sceneIndex]->registry();
 	}
 
-	Engine(HeapArena& heap);
-	~Engine();
-	inline const double& deltaTime() { return m_updateDeltaTime; }
-	inline void setTargetUpdateDeltaTime(const double targetDt) { m_targetUpdateDeltaTime = targetDt; }
-	RenderManager* getRenderManager() { return m_renderMan; }
-	void start(VulkanContext* graphicContext, InputManager* inputPtr);
+
+	INLINE HeapArena& baseArena() { return m_baseArena; }
+	INLINE const double& deltaTime() { return m_updateDeltaTime; }
+	INLINE void setTargetUpdateDeltaTime(const double targetDt) { m_targetUpdateDeltaTime = targetDt; }
+	INLINE RenderManager* getRenderManager() { return m_renderMan; }
+	void start();
 	void stop();
-	inline const EngineStatus& getStatus() const { return m_status; }
-	inline SceneBase* const getScene(const size_t index) { return m_scenes[index]; }
-	inline std::vector<SceneBase*> const getActiveScenes() { 
+	INLINE const EngineStatus& getStatus() const { return m_status; }
+	INLINE SceneBase* const getScene(const size_t index) { return m_scenes[index]; }
+	INLINE std::vector<SceneBase*> const getActiveScenes() { 
 		std::vector<SceneBase*> scenes;
 		for (auto& index : m_activeSceneIndices) {
 			scenes.push_back(m_scenes[index]);
 		}
 		return scenes;
 	}
-	inline void requestSceneTransition(const SceneTransitionMode mode, const size_t requestedSceneIndex) {
+	INLINE void requestSceneTransition(const SceneTransitionMode mode, const size_t requestedSceneIndex) {
 		if (!m_sceneTransitionRequested) {
 			m_sceneTransitionRequested = true;
 			m_sceneTransitMode = mode;
 			m_requestedSceneIndex = requestedSceneIndex;
 		}
 	}
+
+	ErrorCode init();
+	INLINE WindowSurface* const getWndSurface() { return m_wnd; }
+	INLINE InputManager* const getInputManager() { return m_inputMan; }
+	INLINE VulkanContext* const getVulkanContext() { return m_vkCtx; }
 
 	static Engine* getInstance() { return s_instance; }
 };

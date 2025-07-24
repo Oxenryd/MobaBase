@@ -2,29 +2,31 @@
 #include "RenderManager.h"
 #include <immintrin.h>
 
-Engine::Engine(HeapArena& heap) :
+Engine::Engine(const std::string& appName, size_t baseSize) :
+	m_appName{appName},
 	m_targetUpdateDeltaTime{ FPS_400 },
 	m_updateDeltaTime{ 0.0 },
 	m_lastUpdateTime{ std::chrono::steady_clock::now() },
-	m_options{},
 	m_targetFixedDeltaTime{ FPS_60 },
 	m_fixedAccu{ 0.0 },
 	m_framesSinceLastFpsRead{ 0 },
 	m_baseTimers{ 1 },
 	m_lastReadFps{m_targetUpdateDeltaTime},
 	m_fpsCountTimer{ m_baseTimers.createTimer(true, 1.0) },
-	m_baseArena{heap}
+	m_baseArena{baseSize}
  {
 	assert(s_instance == nullptr && "THERE CAN BE ONLY ONE!");
 
 	s_instance = this;
+
+	m_wnd = m_baseArena.construct<WindowSurface>();
+	m_wnd->enableRawInput();
+
 	m_baseTimers.m_incOnTimes[m_fpsCountTimer.m_timerIndex].subscribe([this]()
 		{
 			onReadFPS.notify(this, m_framesSinceLastFpsRead);
 			m_framesSinceLastFpsRead = 0;
 		});
-
-	_initShaderManager();
 }
 
 Engine::~Engine() {
@@ -43,7 +45,7 @@ inline double Engine::_tickDt() {
 		if (remaining <= 0.0)
 			break;
 
-		if (remaining > m_options.deltaTimeJitterThreshold)
+		if (remaining > DEFAULT_DELTATIME_JITTER_SETTING)
 			std::this_thread::sleep_for(0.001s);
 		else {
 			_mm_pause();
@@ -61,7 +63,7 @@ inline double Engine::_tickDt() {
 	return m_updateDeltaTime;
 }
 
-void Engine::_initShaderManager() {
+ErrorCode Engine::_initShaderManager() {
 	LOGLINE_IND(LogType::Info, LogMod::Rendering, "Setting up ShaderManager... ", 1);
 #ifdef BUILD_WIN
 
@@ -82,9 +84,98 @@ void Engine::_initShaderManager() {
 #endif
 		RenderManager::s_instance = m_renderMan;
 		LOGLINE_IND(LogType::Success, LogMod::Rendering, "ShaderManager initialized.", -1);
+		return ErrorCode::OK;
 }
 
-void Engine::start(VulkanContext* graphicContext, InputManager* inputPtr) {
+ErrorCode Engine::_initInputManager() {
+	m_inputMan = baseArena().construct<InputManager>(m_wnd);
+
+	return ErrorCode::OK;
+}
+
+ErrorCode Engine::_initGraphics() {
+
+	// Create Vulkan Context
+	LOGLINE(LogType::Info, LogMod::Vulkan, "Creating Vulkan context... ");
+	m_vkCtx = m_baseArena.construct<VulkanContext>(m_wnd);
+	VkPresentModeKHR presentMode;
+#ifdef IGPU_PRIO
+	presentMode = VkPresentModeKHR::VK_PRESENT_MODE_FIFO_KHR;
+#else
+	presentMode = VkPresentModeKHR::VK_PRESENT_MODE_MAILBOX_KHR;
+#endif
+
+#ifdef IGPU_PRIO
+	const bool igpuPriority = true;
+#else
+	const bool igpuPriority = false;
+#endif
+
+	auto vk = m_vkCtx->initVulkan(presentMode, igpuPriority);
+	if (vk != VK_SUCCESS) {
+		LOG(LogType::Error, "Failed. Code: " + std::to_string(static_cast<uint32_t>(vk)));
+		return (ErrorCode)vk;
+	}
+	LOGLINE(LogType::Success, LogMod::Vulkan, "Vulkan init Complete.\n");
+
+	return ErrorCode::OK;
+}
+
+ErrorCode Engine::_initBaseShaders() {
+
+	LOGLINE(LogType::Info, LogMod::Rendering, "Compiling Shaders...\n");
+	ErrorCode EC = m_renderMan->recompileShaderCache();
+	if (EC == ErrorCode::OK)
+		LOG(LogType::Success,
+			"\t\t\t\t\tDone. Compiled " + std::to_string(m_renderMan->totalShaders()) + " shaders.\n");
+	else {
+		LOG(LogType::Error, "Failed. Code: " + std::to_string(static_cast<uint8_t>(EC)));
+		return (ErrorCode)EC;
+	}
+
+	// Create Base Materials
+	auto* baseVs = getRenderManager()->getShader("BaseVS");
+	auto* basePs = getRenderManager()->getShader("BasePS");
+	auto baseMat = Material{ "BaseMaterialUnlit", *baseVs, *basePs };
+	auto* spriteVs = getRenderManager()->getShader("SpriteBatchVS");
+	auto* spritePs = getRenderManager()->getShader("SpriteBatchPS");
+	auto spriteMat = Material{ "SpriteMaterialUnlit", *spriteVs, *spritePs };
+
+
+	// DEBUG! ////////////////////////////////////////////////////////////////////////////
+	auto& matInstance = spriteMat.createInstance();
+	glm::vec2 size = { 12.2f, 13.5f };
+	matInstance.setParameter("spriteInstances", "size", &size);
+	auto checkedSize = matInstance.getParameter<glm::vec2>("spriteInstances", "size");
+	
+	std::cout << "\n";
+	baseMat.debugPrintMaterialInfo();
+	std::cout << "\n";
+	spriteMat.debugPrintMaterialInfo();
+	std::cout << "\n";
+	//////////////////////////////////////////////////////////////////////////////////////
+
+	m_vkCtx->createPipelineFromMaterial(m_renderMan, spriteMat);
+	m_vkCtx->createPipelineFromMaterial(m_renderMan, baseMat);
+
+	return ErrorCode::OK;
+}
+
+ErrorCode Engine::_initBaseCallbacks() {
+
+	// Shader Hotreloaded
+#ifdef SHADER_HOTRELOAD	
+	m_renderMan->onShaderHotReloaded.subscribe([this](void*) {
+		this->getVulkanContext()->resetPipeline(0,
+							 this->m_renderMan->vertexShaders()[0],
+							 this->m_renderMan->pixelShaders()[0]);
+															  });
+#endif
+	return ErrorCode::OK;
+}
+
+
+void Engine::start() {
 
 	if (m_status != EngineStatus::Stopped) {
 		LOGLINE(LogType::Warning, LogMod::Engine, "Tried to start while not stopped. Ignoring.");
@@ -103,13 +194,14 @@ void Engine::start(VulkanContext* graphicContext, InputManager* inputPtr) {
 		m_activeSceneIndices.insert(0);
 
 	// Set main window
-	m_options.inputManager = inputPtr;
-	m_options.graphicContext = graphicContext;
+	//m_options.inputManager = inputPtr;
+	//m_options.graphicContext = graphicContext;
 
 	m_status = EngineStatus::PendingRun;
 	onStartInitiated.notify(this);
 	
-	m_options.graphicContext->windowSurface->showWindow(SW_NORMAL);
+	//m_options.graphicContext->windowSurface->showWindow(SW_NORMAL);
+	m_wnd->showWindow(SW_NORMAL);
 
 	m_status = EngineStatus::Running;
 	onStarted.notify(this);
@@ -169,7 +261,7 @@ inline void Engine::_run() {
 		//	}
 		//}
 
-		m_options.inputManager->pollEvents();
+		m_inputMan->pollEvents();
 		_updateEarly(dt);
 		_updateLate(dt);
 
@@ -182,13 +274,13 @@ inline void Engine::_run() {
 		drawCtx.frameCount = m_totalFrames;
 
 
-		m_options.graphicContext->draw(static_cast<void*>(&drawCtx));
+		m_vkCtx->draw(static_cast<void*>(&drawCtx));
 		m_framesSinceLastFpsRead++;
 		m_totalFrames++;
 		std::this_thread::yield();
 	}
 
-	m_options.graphicContext->windowSurface->destroyWindow();
+	m_wnd->destroyWindow();
 
 	m_status = EngineStatus::Stopped;
 	onStopped.notify(this);
@@ -199,6 +291,18 @@ void Engine::stop() {
 	LOGLINE(LogType::Info, LogMod::Engine, "Stopping... ");
 	m_status = EngineStatus::PendingStop;
 	onPendingStop.notify(this);
+}
+
+ErrorCode Engine::init() {
+
+	ErrorCode EC{};
+	EC_CHECK(EC, _initShaderManager());
+	EC_CHECK(EC, _initInputManager());
+	EC_CHECK(EC, _initGraphics());
+	EC_CHECK(EC, _initBaseShaders());
+	EC_CHECK(EC, _initBaseCallbacks());
+
+	return ErrorCode::OK;
 }
 
 inline void Engine::_updateEarly(double dt) {

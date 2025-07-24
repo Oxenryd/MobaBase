@@ -67,7 +67,7 @@ public:
 		delete m_hotreloadTimer;
 	}
 	RenderManager(ShaderCompilerBase* compiler);
-
+	RenderManager(RenderManager&& other) = default;
 	ShaderCompilerBase* const getCompiler() { return m_compiler; }
 
 	std::vector<Shader>& vertexShaders() { return m_vShaders; }
