@@ -22,6 +22,7 @@
 #include <array>
 #include <unordered_map>
 
+#include "DrawCommand.hpp"
 #include "WindowSurface.h"
 #include "Log.hpp"
 
@@ -30,6 +31,7 @@
 #include "RenderManager.h"
 #include "HlslTypes.h"
 #include <variant>
+#include "DrawCommand.hpp"
 
 #define Vk_FAILED(ec) ((ec) != VK_SUCCESS)
 #define Vk_CHECK(ecVar, expr) (ecVar) = (expr); if (Vk_FAILED(ecVar)) return (ecVar);
@@ -372,24 +374,6 @@ static inline VkPipelineMultisampleStateCreateInfo GetMultisamplingPreset(MultiS
 			return VkMultiSamplingStates::MSAA_4x;
 	}
 }
-
-enum class DrawType : uint8_t
-{
-	Mesh,
-	SkinnedMesh,
-	Billboard,
-	Sprite,
-	UI,
-	Custom
-};
-
-struct DrawCommand
-{
-	MaterialInstance* material;
-	void* drawContextPtr;
-	uint16_t priority;
-	DrawType type;
-};
 
 
 class VulkanContext

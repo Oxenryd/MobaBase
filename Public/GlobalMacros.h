@@ -60,4 +60,5 @@ inline constexpr const T& deref(const void* ptr, const char* errorMsg = "null po
     }
     return *static_cast<const T*>(ptr);
 }
+
 #endif

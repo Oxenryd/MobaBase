@@ -7,6 +7,8 @@
     #endif
 #endif
 
+#include "MobaMath.hpp"
+
 #include <cstdint>
 #include <glm/glm.hpp>
 
@@ -14,7 +16,7 @@
 #include "Delegate.hpp"
 #include "ErrorCodes.hpp"
 #include "Bits.hpp"
-#include "MathTypes.h"
+
 
 enum class MouseButtonDownState
 {
@@ -282,7 +284,7 @@ static LRESULT CALLBACK WindowProc(
             {
                 RECT* rp = reinterpret_cast<RECT*>(lParam);
                 int16_t dpi = static_cast<int16_t>(HIWORD(wParam));
-                IntRect<32> rect{ *rp };
+                IntRect<32> rect{ rp->left, rp->top, rp->right - rp->left, rp->bottom - rp->top };
                 surface->onDpiChanged.notify(dpi, rect);
             } break;
 

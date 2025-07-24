@@ -96,7 +96,6 @@ add_executable (MobaBase
 	"Public/Shader.h"
 	"Public/ArenaAllocator.hpp"
 	"Public/MemoryProviderConcept.h"
-	"Public/MathTypes.h"
 	"Public/BaseTypesHLSL.h"
 	"Public/RenderManager.h"
 	"Public/ErrorCodes.hpp"
@@ -122,11 +121,10 @@ add_executable (MobaBase
 	"Public/GameObject.hpp"
 	"Public/Tag.hpp"
 	"Public/TagSystem.hpp"
-	"Public/SceneTrackerSystem.h"
 	"Public/EnabledTag.hpp"
 	"Public/RenderingSystem.hpp"
 	"Public/FixedString.hpp"
-	
+	"Public/DrawCommand.hpp"
 	"Private/Engine.cpp"
 	"Private/Timer.cpp"
 	"Private/TimerSystem.cpp"
@@ -137,7 +135,8 @@ add_executable (MobaBase
     "Private/Material.cpp"
 	"Private/MaterialParams.cpp"
 	"Private/SystemECS.cpp" 
-	"Private/GameObjectSystem.cpp")
+	"Private/GameObjectSystem.cpp"
+	"Private/Transform.cpp")
 
 
 

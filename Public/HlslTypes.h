@@ -27,9 +27,11 @@ struct ModelTransform
 
 	glm::mat4x4 modelToWorld;
 
-	operator glm::mat4x4() {
+	operator glm::mat4x4()& {
 		return modelToWorld;
 	}
+	glm::mat4x4 operator*(glm::mat4x4& rhs) const { return modelToWorld * rhs; }
+	glm::mat4x4& operator*=(glm::mat4x4& rhs) { return modelToWorld = modelToWorld * rhs; }
 };
 
 struct Index32

@@ -4,15 +4,16 @@
 #include <cstdint>
 #include <Bits.hpp>
 
-#define NONE 0x00
-#define DIRTY_TRANSFORM 0x01
+#define ObjectStateType uint16_t
+#define StateField SizedBitField<ObjectStateType>
 
-enum class ObjectState : uint8_t
+enum class ObjectState : ObjectStateType
 {
-	None			= NONE,
-	DirtyTransform	= DIRTY_TRANSFORM
+	None					= 0x00,
+	DirtyTransform			= 0x01,
+	IgnoreParentTransform   = 0x02,
+	LocalEnableOverride		= 0x04
 };
 
-#undef NONE
-#undef DIRTY_TRANSFORM
+
 #endif

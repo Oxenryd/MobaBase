@@ -1,6 +1,8 @@
 #ifndef TRANSFORM_HPP
 #define TRANSFORM_HPP
 
+#include <span>
+#include <optional>
 #include <glm/glm.hpp>
 #include <glm/gtx/quaternion.hpp>
 #include "Bits.hpp"
@@ -12,18 +14,19 @@
 struct TransformComponent
 {
 	
-	uint32_t matrixIndex = UINT32_INVALID;
+	uint32_t matrixIndex{ UINT32_INVALID };
 	glm::vec3 position{};
 	glm::quat rotation{};
 	glm::vec3 scale{1,1,1};
-	SizedBitField<uint8_t> state{0};
+	uint16_t sceneIndex{ UINT16_INVALID };
+	StateField state{0};
 
 	glm::mat4x4 trs() {
 		return MMath::composeTRS(position, rotation, scale);
 	}
 };
 
-class Transform
+struct Transform
 {
 	
 private:
@@ -86,14 +89,14 @@ public:
 	INLINE glm::vec3& modifyScale() {
 		return _markDirty().scale;
 	}
-	INLINE SizedBitField<uint8_t>& modifyState() {
+	INLINE StateField& modifyState() {
 		return _markDirty().state;
 	}
 
 	INLINE const glm::vec3& position() const { return m_reg->get<TransformComponent>(m_entity).position; }
 	INLINE const glm::vec3& scale() const { return m_reg->get<TransformComponent>(m_entity).scale; }
 	INLINE const glm::quat& rotation() const { return m_reg->get<TransformComponent>(m_entity).rotation; }
-	INLINE const SizedBitField<uint8_t>& state() const { return m_reg->get<TransformComponent>(m_entity).state; }
+	INLINE const StateField& state() const { return m_reg->get<TransformComponent>(m_entity).state; }
 
 	INLINE const glm::mat4x4 trs() const { return m_reg->get<TransformComponent>(m_entity).trs(); }
 
@@ -101,6 +104,12 @@ public:
 		return m_reg && m_reg->valid(m_entity) && m_reg->all_of<TransformComponent>(m_entity);
 	}
 
+	std::span<entt::entity> getChildren();
+	std::optional<Transform> getParent();
+
+	void setParent(const Transform* parent);
+	void setParent(const entt::entity& parent);
+	void clearChildren();
 
 	// Static
 	INLINE static glm::vec3& position(ArenaRegistry* registry, entt::entity entity) {
@@ -112,10 +121,11 @@ public:
 	INLINE static glm::quat& rotation(ArenaRegistry* registry, entt::entity entity) {
 		return registry->get<TransformComponent>(entity).rotation;
 	}
-	INLINE static SizedBitField<uint8_t>& state(ArenaRegistry* registry, entt::entity entity) {
+	INLINE static StateField& state(ArenaRegistry* registry, entt::entity entity) {
 		return registry->get<TransformComponent>(entity).state;
 	}
-
+	static std::span<entt::entity> getChildren(ArenaRegistry* registry, entt::entity ofEntity);
+	static std::optional<Transform> getParent(ArenaRegistry* registry, entt::entity ofEntity);
 };
 
 #endif
