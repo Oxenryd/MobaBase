@@ -52,7 +52,7 @@ public:
         //m_heap(DEFAULT_HEAP_SIZE),
         m_arena{ DEFAULT_HEAP_SIZE },
         m_reg{ ArenaAllocator<entt::entity>{&m_arena} },
-        m_transformSys{&m_reg},
+        m_transformSys{&m_reg, &m_arena},
         m_gameObjectSys{ m_sceneIndex, &m_reg},
         m_nameTagSys{&m_reg},
         m_sceneIndex{sceneIndex}

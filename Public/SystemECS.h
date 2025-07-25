@@ -13,8 +13,11 @@ protected:
 	ArenaRegistry* const m_reg;
 
 public:
-	SystemECS(ArenaRegistry* const registry)
-		: m_reg{registry} {}
+	SystemECS(ArenaRegistry* const registry) :
+		m_reg{ registry },
+		m_sceneIndex{ UINT32_INVALID }
+	{}
+
 	virtual entt::entity createEntity() { 
 		return m_reg->create();
 	};
@@ -36,8 +39,8 @@ public:
 	virtual ~SystemECS_ModelTransformsProvider() = default;
 	SystemECS_ModelTransformsProvider(ArenaRegistry* const registry)
 		: SystemECS{registry} {}
-	virtual std::vector<ModelTransform>& modelTransforms() = 0;
-	virtual std::vector<ModelTransform>& modelTransforms() const = 0;
+	virtual ArenaVector<ModelTransform>& modelTransforms() = 0;
+	virtual ArenaVector<ModelTransform>& modelTransforms() const = 0;
 };
 
 #endif

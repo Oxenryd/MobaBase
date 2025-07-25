@@ -27,7 +27,8 @@ enum class LogMod : uint8_t
 	Rendering,
 	Window,
 	Input,
-	Log
+	Log,
+	Assets
 };
 
 constexpr const char* MODULE_STRINGS[]{
@@ -38,7 +39,8 @@ constexpr const char* MODULE_STRINGS[]{
 	"RENDER\t",
 	"WINDOW\t",
 	"INPUT\t",
-	"LOGGER\t"
+	"LOGGER\t",
+	"ASSETS\t"
 };
 
 enum class TermColor : uint8_t

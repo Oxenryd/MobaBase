@@ -82,7 +82,7 @@ public:
 
     ArenaAllocator() noexcept : m_provider(static_cast<Arena*>(nullptr)) {}
 
-    ArenaAllocator(Arena* memProvider) noexcept
+    ArenaAllocator(Arena* const memProvider) noexcept
         : m_provider(memProvider) {}
 
     template<typename U>
@@ -140,5 +140,18 @@ private:
 };
 
 using ArenaRegistry = entt::basic_registry<entt::entity, ArenaAllocator<entt::entity>>;
+
+template <typename T>
+using ArenaVector = std::vector<T, ArenaAllocator<T>>;
+
+template <typename Key, typename Value>
+using ArenaUMap = std::unordered_map<
+    Key,
+    Value,
+    std::hash<Key>,
+    std::equal_to<Key>,
+    ArenaAllocator<std::pair<const Key, Value>>
+>;
+
 
 #endif

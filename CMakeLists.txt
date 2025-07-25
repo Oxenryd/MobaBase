@@ -68,6 +68,14 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(json)
 
+# AssImp
+include(FetchContent)
+FetchContent_Declare(
+  assimp
+  GIT_REPOSITORY https://github.com/assimp/assimp.git
+  GIT_TAG v6.0.2 # or whatever version you want
+)
+FetchContent_MakeAvailable(assimp)
 
 get_property(all_targets DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY BUILDSYSTEM_TARGETS)
 message(STATUS "Available targets: ${all_targets}")
@@ -125,6 +133,9 @@ add_executable (MobaBase
 	"Public/RenderingSystem.hpp"
 	"Public/FixedString.hpp"
 	"Public/DrawCommand.hpp"
+	"Public/MeshComponent.hpp"
+	"Public/AssetLoader.h"
+
 	"Private/Engine.cpp"
 	"Private/Timer.cpp"
 	"Private/TimerSystem.cpp"
@@ -136,7 +147,8 @@ add_executable (MobaBase
 	"Private/MaterialParams.cpp"
 	"Private/SystemECS.cpp" 
 	"Private/GameObjectSystem.cpp"
-	"Private/Transform.cpp")
+	"Private/Transform.cpp"
+	"Private/AssetLoader.cpp")
 
 
 
@@ -149,6 +161,7 @@ target_link_libraries(MobaBase PRIVATE
 	EnTT::EnTT
 	spirv-reflect-static
 	nlohmann_json
+	assimp::assimp
 )
 
 target_include_directories(MobaBase PRIVATE 

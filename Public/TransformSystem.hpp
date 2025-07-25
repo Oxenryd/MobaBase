@@ -9,13 +9,12 @@
 
 
 
-
 class TransformSystem : public SystemECS_ModelTransformsProvider
 {
 private:
-	std::vector<ModelTransform> m_modelTransforms;
-	std::vector<entt::entity> m_parentOf;
-	std::vector<std::vector<entt::entity>> m_childrenOf;
+	ArenaVector<ModelTransform> m_modelTransforms;
+	ArenaVector<entt::entity> m_parentOf;
+	ArenaVector<std::vector<entt::entity>> m_childrenOf;
 
 	INLINE void _onDestroy(ArenaRegistry& reg, entt::entity entity) {
 		auto id = entt::to_integral(entity);
@@ -37,8 +36,12 @@ public:
 		m_reg->on_destroy<TransformComponent>()
 			.disconnect<&TransformSystem::_onDestroy>(this);
 	}
-	TransformSystem(ArenaRegistry* const registry)
-		: SystemECS_ModelTransformsProvider{registry} {
+	TransformSystem(ArenaRegistry* const registry, Arena* const arena)
+		: SystemECS_ModelTransformsProvider{registry},
+		m_modelTransforms{ ArenaAllocator<ModelTransform>(arena) },
+		m_parentOf{ ArenaAllocator<entt::entity>(arena) },
+		m_childrenOf{ ArenaAllocator<entt::entity>(arena) }
+	{
 		registry->on_destroy<TransformComponent>()
 			.connect<&TransformSystem::_onDestroy>(this);
 	}
@@ -87,11 +90,11 @@ public:
 		m_modelTransforms.push_back(transComp.trs());
 	}
 
-	INLINE std::vector<ModelTransform>& modelTransforms() override {
+	INLINE ArenaVector<ModelTransform>& modelTransforms() override {
 		return m_modelTransforms;
 	}
-	INLINE std::vector<ModelTransform>& modelTransforms() const override {
-		return const_cast<std::vector<ModelTransform>&>(m_modelTransforms);
+	INLINE ArenaVector<ModelTransform>& modelTransforms() const override {
+		return const_cast<ArenaVector<ModelTransform>&>(m_modelTransforms);
 	}
 
 	INLINE void setParent(const entt::entity entity, const entt::entity* parent) {
