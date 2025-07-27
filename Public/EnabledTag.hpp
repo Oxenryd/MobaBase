@@ -89,4 +89,13 @@ public:
 
 static_assert(std::is_nothrow_move_constructible_v<Enabled>, "Enabled is not noexcept");
 
+namespace entt
+{
+	template<>
+	struct storage_type<EnabledTag, ArenaRegistry>
+	{
+		using type = ArenaStorage<EnabledTag>;
+	};
+}
+
 #endif

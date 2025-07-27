@@ -82,6 +82,7 @@ public:
 
     ArenaAllocator() noexcept : m_provider(static_cast<Arena*>(nullptr)) {}
 
+
     ArenaAllocator(Arena* const memProvider) noexcept
         : m_provider(memProvider) {}
 
@@ -152,6 +153,49 @@ using ArenaUMap = std::unordered_map<
     std::equal_to<Key>,
     ArenaAllocator<std::pair<const Key, Value>>
 >;
+
+
+
+
+
+
+
+
+
+template<typename T>
+using ArenaStorage = entt::basic_storage<entt::entity, T, ArenaAllocator<T>>;
+
+template<typename T>
+struct StorageSelector
+{
+    using type = ArenaStorage<T>;
+};
+
+
+//namespace entt
+//{
+//    template<>
+//    struct storage_type<TransformComponent, ArenaRegistry>
+//    {
+//        using type = ArenaStorage<TransformComponent>;
+//    };
+//
+//    template<>
+//    struct storage_type<EnabledTag, ArenaRegistry>
+//    {
+//        using type = ArenaStorage<EnabledTag>;
+//    };
+//
+//    template<>
+//    struct storage_type<TagComponent, ArenaRegistry>
+//    {
+//        using type = ArenaStorage<TagComponent>;
+//    };
+//
+//    // Repeat as needed for each component type
+//}
+
+
 
 
 #endif

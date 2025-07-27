@@ -20,6 +20,16 @@ struct DrawCommand
 	uint16_t priority;
 	DrawType type;
 	bool instanceRequest;
+	bool persistent;
+
+	uint64_t hash() {
+		uint64_t seed = 0;
+		seed ^= std::hash<uint64_t>{}(reinterpret_cast<uint64_t>(material) + 0x9e3779b9 + (seed << 6) + (seed >> 2));
+		seed ^= std::hash<uint64_t>{}(reinterpret_cast<uint64_t>(drawContextPtr) + 0x9e3779b9 + (seed << 6) + (seed >> 2));
+		seed ^= std::hash<uint64_t>{}(priority) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+		seed ^= std::hash<uint64_t>{}(instanceRequest) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+		return seed;
+	}
 };
 
 #endif

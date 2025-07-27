@@ -24,4 +24,14 @@ public:
 	}
 };
 
+namespace entt
+{
+	template<>
+	struct storage_type<TagComponent, ArenaRegistry>
+	{
+		using type = ArenaStorage<TagComponent>;
+	};
+}
+
+
 #endif

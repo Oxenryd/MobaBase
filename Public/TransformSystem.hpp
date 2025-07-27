@@ -154,4 +154,14 @@ public:
 };
 
 
+namespace entt
+{
+	template<>
+	struct storage_type<TransformComponent, ArenaRegistry>
+	{
+		using type = ArenaStorage<TransformComponent>;
+	};
+}
+
+
 #endif

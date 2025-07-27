@@ -1,14 +1,17 @@
 #include "AssetLoader.h"
 #include "RenderManager.h"
+#include <format>
 
 ErrorCode AssetLoader::loadModel(
 	const std::string& filename,
-	ArenaVector<Mesh>& meshes,
+	ArenaVector<MeshData>& meshes,
 	ArenaVector<BaseVSIn>& vertexBuffer,
 	ArenaVector<SubMesh>& subMeshBuffer,
-	ArenaVector<uint32_t>& indexBuffer) {
+	ArenaVector<uint32_t>& indexBuffer,
+	RenderManager& render,
+	uint32_t* outMeshIndex) {
 
-	LOGLINE(LogType::Info, LogMod::Assets, std::format("Loading '{}'... "));
+	LOGLINE(LogType::Info, LogMod::Assets, std::format("Loading '{}'... ", filename));
 
 	Assimp::Importer importer;
 
@@ -25,10 +28,10 @@ ErrorCode AssetLoader::loadModel(
 	} else if (!scene->mRootNode)
 		return _logReturnError(ErrorCode::ASSETS_MODEL_NO_ROOT, std::format("Assimp Error:  {}", importer.GetErrorString()));
 
-	Mesh mesh{};
-	mesh.firstSubMeshIndex = vertexBuffer.size();
+	MeshData mesh{};
+	mesh.firstSubMeshIndex = subMeshBuffer.size();
 	mesh.subMeshCount = scene->mNumMeshes;
-
+	size_t vertCount = 0;
 
 	for (unsigned int i = 0; i < scene->mNumMeshes; ++i) {
 		const aiMesh* aiMesh = scene->mMeshes[i];
@@ -47,9 +50,11 @@ ErrorCode AssetLoader::loadModel(
 				vertex.binormal = toVec3(aiMesh->mBitangents[j]);
 			}
 			vertexBuffer.push_back(vertex);
+			vertCount++;
 		}
 
 		// Indices
+		subMesh.indexOffset = indexBuffer.size();
 		for (size_t f = 0; f < aiMesh->mNumFaces; ++f) {
 			const aiFace& face = aiMesh->mFaces[f];
 			if (face.mNumIndices != 3) {
@@ -57,24 +62,33 @@ ErrorCode AssetLoader::loadModel(
 				continue;
 			}
 			for (size_t id = 0; id < 3; ++id)
-				indexBuffer.push_back(subMesh.vertexOffset + face.mIndices[id]);
+				indexBuffer.push_back(face.mIndices[id]);
 		}
 		subMesh.indexCount = static_cast<uint32_t>(indexBuffer.size()) - subMesh.indexOffset;
-		subMeshBuffer.push_back(subMesh);
+		
 
 		// Material
-		const aiMaterial* material = scene->mMaterials[aiMesh->mMaterialIndex];
-		if (material) {
-
+		const aiMaterial* aiMat = scene->mMaterials[aiMesh->mMaterialIndex];
+		if (aiMat) {
+			auto material = render.getMaterial(aiMat->GetName().C_Str());
+			if (!material) {
+				/* TODO: CREATE NEW MATERIAL HERE!! */ subMesh.materialIndex = UINT32_INVALID;
+			} else {
+				subMesh.materialIndex = material->matIndex;
+			}
+		} else {
+			subMesh.materialIndex = UINT32_INVALID;
 		}
+
+		subMeshBuffer.push_back(subMesh);
 	}
-
-	//for (unsigned int m = 0; m < scene->mNumMaterials; ++m) {
-	//	const aiMaterial* material = scene->mMaterials[m];
-	//	aiString name;
-	//	material->Get(AI_MATKEY_NAME, name);
-	//	std::cout << "Material " << m << ": " << name.C_Str() << "\n";
-	//}
-
+	if (outMeshIndex)
+		*outMeshIndex = meshes.size();
 	meshes.push_back(mesh);
+
+	
+	LOGLINE(LogType::Info, LogMod::Assets, std::format("\t{} meshes, {} materials, {} total vertices... ",
+													   mesh.subMeshCount, scene->mNumMaterials, vertCount));
+	LOG(LogType::Success, "Done.");
+	return ErrorCode::OK;
 }

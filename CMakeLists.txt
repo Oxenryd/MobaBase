@@ -73,8 +73,14 @@ include(FetchContent)
 FetchContent_Declare(
   assimp
   GIT_REPOSITORY https://github.com/assimp/assimp.git
-  GIT_TAG v6.0.2 # or whatever version you want
+  GIT_TAG v6.0.2
 )
+
+# FORCE STATIC BUILD
+set(ASSIMP_BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+set(ASSIMP_BUILD_ZLIB ON CACHE BOOL "" FORCE)
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE) # global fallback
+
 FetchContent_MakeAvailable(assimp)
 
 get_property(all_targets DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY BUILDSYSTEM_TARGETS)
@@ -200,6 +206,9 @@ target_compile_definitions(MobaBase PRIVATE
 	# ECS
 	ECS_BASE_COMPONENTS_RESERVATION_COUNT=2048
 	
+	# System
+	SCENE_MAX_SCENES=512
+	RENDER_SCENE_MAX_THREADS=128
 
 	# Directories
 	SHADER_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/Shaders\"

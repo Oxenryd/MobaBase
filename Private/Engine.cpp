@@ -2,6 +2,9 @@
 #include "RenderManager.h"
 #include <immintrin.h>
 
+thread_local std::unordered_map<uint16_t, size_t> SceneRenderSystem::s_threadIndex;
+
+
 Engine::Engine(const std::string& appName, size_t baseSize) :
 	m_appName{appName},
 	m_targetUpdateDeltaTime{ FPS_400 },
@@ -68,7 +71,7 @@ ErrorCode Engine::_initShaderManager() {
 #ifdef BUILD_WIN
 
 	DxcWin32VulkanShaderCompiler* w32VkCompiler = m_baseArena.construct<DxcWin32VulkanShaderCompiler>();
-	m_renderMan = m_baseArena.construct<RenderManager>(RenderManager{ w32VkCompiler });
+	m_renderMan = m_baseArena.construct<RenderManager>(RenderManager{m_vkCtx, w32VkCompiler, 128_MB });
 
 #endif
 
@@ -158,6 +161,8 @@ ErrorCode Engine::_initBaseShaders() {
 	m_vkCtx->createPipelineFromMaterial(m_renderMan, spriteMat);
 	m_vkCtx->createPipelineFromMaterial(m_renderMan, baseMat);
 
+	
+
 	return ErrorCode::OK;
 }
 
@@ -187,20 +192,16 @@ void Engine::start() {
 	// No scenes, create default and run.
 	if (m_scenes.empty()) {
 		LOGLINE(LogType::Remark, LogMod::Engine, "Creating a default scene... ");
-		auto* scenePtr = this->createNewScene<DefaultScene>(nullptr);
+		auto* scenePtr = this->createNewScene<DefaultScene>(512_MB, nullptr);
 		m_activeSceneIndices.insert(0);
 		LOGLINE(LogType::Remark, LogMod::Engine, "Scene created.");
 	} else if (m_activeSceneIndices.empty())
 		m_activeSceneIndices.insert(0);
 
-	// Set main window
-	//m_options.inputManager = inputPtr;
-	//m_options.graphicContext = graphicContext;
 
 	m_status = EngineStatus::PendingRun;
 	onStartInitiated.notify(this);
 	
-	//m_options.graphicContext->windowSurface->showWindow(SW_NORMAL);
 	m_wnd->showWindow(SW_NORMAL);
 
 	m_status = EngineStatus::Running;
@@ -280,6 +281,11 @@ inline void Engine::_run() {
 		std::this_thread::yield();
 	}
 
+	for (auto scene : m_scenes) {
+		scene->unloadDispatch();
+	}
+	m_scenes.clear();
+
 	m_wnd->destroyWindow();
 
 	m_status = EngineStatus::Stopped;
@@ -318,9 +324,21 @@ inline void Engine::_updateEarly(double dt) {
 
 inline void Engine::_updateLate(double dt) {
 	onLateUpdateEnter.notify(this);
-	for (auto& index : m_activeSceneIndices) 
+	std::vector<uint32_t> removeIndices;
+	for (auto& index : m_activeSceneIndices) {
 		m_scenes[index]->lateUpdateDispatch(dt);
-	
+		if (m_scenes[index]->pendingUnload()) {
+			m_scenes[index]->unloadDispatch();
+			delete m_scenes[index];
+			auto it = m_scenes.begin() + index;
+			m_scenes.erase(it);
+			removeIndices.push_back(index);
+		}
+	}
+	for (auto& index : removeIndices) {
+		m_activeSceneIndices.erase(index);
+	}
+		
 	onLateUpdateExit.notify(this);
 }
 

@@ -10,7 +10,6 @@
 #include "Timer.h"
 #include "Delegate.hpp"
 
-//#include "IRenderProvider.h"
 #include "Shader.h"
 #include "Material.hpp"
 #include "Hashes.hpp"
@@ -47,6 +46,7 @@ private:
 	std::vector<Material> m_materials;
 	std::vector<std::string> m_paramNames;
 	Timer* m_hotreloadTimer = nullptr;
+	VulkanContext* const m_vkContext = nullptr;
 	//std::unordered_map<SceneIndex, std::vector<ModelTransform>> modelTransforms;
 	//std::unordered_map<SceneIndex, std::queue<std::pair<MatrixIndex, TransformComponent*>>> pendingMatrixUpdates;
 
@@ -63,10 +63,10 @@ private:
 
 public:
 	RenderManager() = delete;
-	~RenderManager() { 
+	~RenderManager() {
 		delete m_hotreloadTimer;
 	}
-	RenderManager(ShaderCompilerBase* compiler);
+	RenderManager(VulkanContext* const vkContext, ShaderCompilerBase* compiler, size_t paramArenaSize);
 	RenderManager(RenderManager&& other) = default;
 	ShaderCompilerBase* const getCompiler() { return m_compiler; }
 
@@ -82,6 +82,8 @@ public:
 	ErrorCode hotReload() { if (m_compiler) return m_compiler->hotReload(*this); return ErrorCode::MEMORY_IS_NULL; }
 	size_t totalShaders() { return m_vShaders.size() + m_pShaders.size() + m_cShaders.size(); }
 	ErrorCode registerShader(const std::string& name, Shader& shader);
+
+
 
 	std::vector<Material>& materials() { return m_materials; }
 	Material* getMaterial(const std::string& name);
@@ -113,6 +115,7 @@ public:
 	static RenderManager* getInstance() { 
 		return s_instance;
 	}
+
 };
 
 class DxcWin32VulkanShaderCompiler : public ShaderCompilerBase

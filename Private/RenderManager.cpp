@@ -6,9 +6,10 @@
 
 RenderManager* RenderManager::s_instance = nullptr;
 
-RenderManager::RenderManager(ShaderCompilerBase* compiler) :
+RenderManager::RenderManager(VulkanContext* const vkContext, ShaderCompilerBase* compiler, size_t paramArenaSize) :
 	m_compiler{ compiler },
-	m_paramArena{16_MB}
+	m_vkContext {vkContext},
+	m_paramArena{ paramArenaSize }
 {
 }
 
@@ -110,7 +111,7 @@ Material* RenderManager::getMaterial(const size_t& index) {
 }
 
 std::string& RenderManager::getMaterialName(const Material& mat) {
-	return m_mat_IndexNameMap[mat.arrayIndex];
+	return m_mat_IndexNameMap[mat.matIndex];
 }
 
 //std::string& ShaderManager::getMaterialName(const size_t matIndex) {
@@ -184,11 +185,13 @@ Material* RenderManager::registerMaterial(const std::string& name, Material& mat
 
 	m_mat_NameIndexMap.insert({ name, m_materials.size() });
 	m_mat_IndexNameMap.insert({ m_materials.size() , name});
-	material.arrayIndex = m_materials.size();
+	material.matIndex = m_materials.size();
 	m_materials.push_back(material);
 
 	return &m_materials.back();
 }
+
+
 
 ErrorCode DxcWin32VulkanShaderCompiler::compileShaders(RenderManager*) {
 	return ErrorCode::OK;

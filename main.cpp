@@ -91,7 +91,7 @@ int __stdcall main(HINSTANCE hInstance, HINSTANCE instance, LPSTR str, int nCmdS
 							});
 
 	// Start Engine
-	engine.createNewScene<GameScene>(nullptr);
+	engine.createNewScene<GameScene>(512_MB, nullptr);
 	engine.setTargetUpdateDeltaTime(0.0);
 	engine.start();
 

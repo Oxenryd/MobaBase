@@ -2,7 +2,7 @@
 #define ASSETLOADER_H
 
 #include <string>
-#include <format>
+
 
 #include <assimp/Importer.hpp>
 #include <assimp/scene.h>
@@ -15,6 +15,8 @@
 #include "ErrorCodes.hpp"
 #include "HlslTypes.h"
 
+
+class RenderManager;
 
 INLINE glm::vec3 toVec3(const aiVector3D& aiVec) {
 	return { aiVec.x, aiVec.y, aiVec.z };
@@ -29,7 +31,6 @@ enum class AssetLoaderType : uint8_t
 	OBJ_MTL
 };
 
-
 class AssetLoader
 {
 private:
@@ -42,10 +43,12 @@ private:
 public:
 	static ErrorCode loadModel(
 		const std::string& filename,
-		ArenaVector<Mesh>& meshes,
+		ArenaVector<MeshData>& meshes,
 		ArenaVector<BaseVSIn>& vertexBuffer,
 		ArenaVector<SubMesh>& subMeshBuffer,
-		ArenaVector<uint32_t>& indexBuffer);
+		ArenaVector<uint32_t>& indexBuffer,
+		RenderManager& render,
+		uint32_t* outMeshIndex);
 };
 
 #endif

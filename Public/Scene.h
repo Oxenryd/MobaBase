@@ -10,6 +10,7 @@
 #include "TransformSystem.hpp"
 #include "GameObjectSystem.hpp"
 #include "TagSystem.hpp"
+#include "RenderingSystem.hpp"
 
 enum class SceneTransitionStatus
 {
@@ -37,29 +38,42 @@ private:
 protected:
     //HeapArena m_heap;
     Arena m_arena;
-    uint32_t m_sceneIndex;
+    uint16_t m_sceneIndex;
+    bool m_pendingUnload = false;
     ArenaRegistry m_reg;
+    SceneRenderSystem m_renderSys;
+    TagSystem m_nameTagSys;
     TransformSystem m_transformSys;
     GameObjectSystem m_gameObjectSys;
-    TagSystem m_nameTagSys;
+    
     
     bool m_firstFrame = true;
     
+    //template<typename T>
+    //void _registerComponent() {
+    //    m_reg.storage<T>(ArenaAllocator<T>{&m_arena}).reserve(ECS_BASE_COMPONENTS_RESERVATION_COUNT);
+    //}
 
 public:
     virtual ~SceneBase() = default;
-    SceneBase(uint32_t sceneIndex) :
+    SceneBase(const SceneBase&) = delete;
+    SceneBase& operator=(const SceneBase&) = delete;
+    SceneBase(SceneBase&&) = delete;
+    SceneBase& operator=(SceneBase&&) = delete;
+    SceneBase(size_t arenaSize, uint16_t sceneIndex) :
         //m_heap(DEFAULT_HEAP_SIZE),
-        m_arena{ DEFAULT_HEAP_SIZE },
+        m_arena{ arenaSize },
         m_reg{ ArenaAllocator<entt::entity>{&m_arena} },
         m_transformSys{&m_reg, &m_arena},
         m_gameObjectSys{ m_sceneIndex, &m_reg},
+        m_renderSys{ &m_reg, &m_arena, m_sceneIndex },
         m_nameTagSys{&m_reg},
         m_sceneIndex{sceneIndex}
     {
         m_reg.storage<TransformComponent>().reserve(ECS_BASE_COMPONENTS_RESERVATION_COUNT);
         m_reg.storage<EnabledTag>().reserve(ECS_BASE_COMPONENTS_RESERVATION_COUNT);
         m_reg.storage<TagComponent>().reserve(ECS_BASE_COMPONENTS_RESERVATION_COUNT);
+        m_reg.storage<MeshComponent>().reserve(ECS_BASE_COMPONENTS_RESERVATION_COUNT);
     }
     //SceneBase() : SceneBase(DEFAULT_HEAP_SIZE) {}
 
@@ -80,8 +94,10 @@ public:
     TransformSystem& transformSystem() { return m_transformSys; }
     GameObjectSystem& gameObjectSystem() { return m_gameObjectSys; }  
     TagSystem& nameTagSystem() { return m_nameTagSys; }
-
+    SceneRenderSystem& sceneRender() { return m_renderSys; }
+    void setUnload() { m_pendingUnload = true; }
     uint32_t sceneIndex() const { return m_sceneIndex; }
+    bool pendingUnload() const { return m_pendingUnload; }
 };
 
 template<typename Derived>
@@ -90,7 +106,7 @@ class Scene : public SceneBase
 public:
     virtual ~Scene() {}
     Scene() = delete;
-    Scene(uint32_t index) : SceneBase(index) {}
+    Scene(size_t arenaSize, uint32_t index) : SceneBase(arenaSize, index) {}
     //static SceneBase* defaultCreation(void* arg) {
     //    return new Derived{};
     //}
@@ -128,6 +144,7 @@ public:
         if constexpr (requires (Derived & d) { d.lateUpdate(dt); }) {
             static_cast<Derived&>(*this).lateUpdate(dt);
         }
+        m_renderSys.afterDraw();
     }
 
     void fixedUpdateDispatch() override {
@@ -145,30 +162,22 @@ public:
             return SceneTransitionStatus::Done;
         }
     }
-
-    //SceneBase* createDefault(uint32_t sceneIndex, void* args) {
-    //    if constexpr (requires (Derived & d) { { d.createDefault(sceneIndex, args) } -> std::convertible_to<SceneBase*>;
-    //    }) {
-    //        return static_cast<Derived&>(*this).createDefault(sceneIndex, args);
-    //    } else
-    //        return nullptr;
-    //}
 };
 
 class DefaultScene : public Scene<DefaultScene>
 {
 public:
-    DefaultScene(uint32_t index)
-        : Scene<DefaultScene>(index) {}
-    static SceneBase* createDefault(uint32_t index, void* arg) {
-        return new DefaultScene{index};
+    DefaultScene(size_t arenaSize, uint32_t index)
+        : Scene<DefaultScene>{ arenaSize, index } {}
+    static SceneBase* createDefault(size_t arenaSize, uint32_t index, void* arg) {
+        return new DefaultScene{ arenaSize, index};
     }
 };
 
 template<typename T>
-concept SceneConcept = requires(T t, void* arg, double dt, uint32_t index) {
+concept SceneConcept = requires(T t, void* arg, double dt, uint32_t index, size_t size) {
     { std::is_base_of_v<SceneBase, T> };
-    { T::createDefault(index, arg) } -> std::convertible_to<SceneBase*>;
+    { T::createDefault(size, index, arg) } -> std::convertible_to<SceneBase*>;
 };
 
 

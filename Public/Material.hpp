@@ -157,7 +157,7 @@ private:
 	}
 
 public:
-	size_t arrayIndex = SIZE_INVALID;
+	size_t matIndex = SIZE_INVALID;
 	std::map<std::string, size_t> paramsMap;
 	std::vector<MatParam> params;
 	std::string vShaderName;
@@ -195,14 +195,18 @@ public:
 	};
 	//Material(const json& j) { fromJson(j); }
 	Material(const std::string& name, Shader& vertex, Shader& fragment) : 
-		Material{ initFromShaders(name, vertex, fragment) } {}
+		Material{ initFromShaders(name, vertex, fragment) } {
+	
+		//DEBUG
+		createInstance();
+	}
 
 
 	std::string& name();
 	std::string& name() const;
 	bool isInitialized() const {
 		return
-			arrayIndex != SIZE_INVALID &&
+			matIndex != SIZE_INVALID &&
 			pipelineId != UINT32_INVALID &&
 			pipeline && pipelineLayout;
 	}

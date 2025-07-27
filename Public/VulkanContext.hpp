@@ -31,7 +31,6 @@
 #include "RenderManager.h"
 #include "HlslTypes.h"
 #include <variant>
-#include "DrawCommand.hpp"
 
 #define Vk_FAILED(ec) ((ec) != VK_SUCCESS)
 #define Vk_CHECK(ecVar, expr) (ecVar) = (expr); if (Vk_FAILED(ecVar)) return (ecVar);
@@ -524,7 +523,7 @@ public:
 	VkBuffer vertexBuffer = nullptr;;
 	VkDeviceMemory vertexMemory = nullptr;;
 
-	GlobalData matData_globalData;
+	GlobalData matData_globalData{};
 	VkBuffer matBuf_globalData = nullptr;
 	VkDeviceMemory matDevMem_globalData = nullptr;
 
@@ -558,7 +557,8 @@ public:
 		swapchainExtent{},
 		surfaceFormat{},
 		presentMode{},
-		renderPassIndex{}
+		renderPassIndex{},
+		matData_globalData{}
 	{
 		//pipelineLayouts.reserve(2048);
 		rendPasses.reserve(2048);
