@@ -212,6 +212,7 @@ target_compile_definitions(MobaBase PRIVATE
 	RENDER_SCENE_MAX_THREADS=128
 
 	# Directories
+	ASSETS_DIR=\"${CMAKE_SOURCE_DIR}/Assets/\"
 	SHADER_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/Shaders\"
 	SHADER_TARGET_DIR=\"${CMAKE_BINARY_DIR}/Shaders/Build\"
 	DXC_DIR=\"${CMAKE_SOURCE_DIR}/Ext/dxc\"

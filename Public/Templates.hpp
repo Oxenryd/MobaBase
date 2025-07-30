@@ -22,7 +22,8 @@ public:
         
         m_go = gameObjectSystem().createGameObject<GameObject>(m_name);
         MeshDescription meshInfo{};
-        auto ec = sceneRender().loadModel("H:\\Dev\\Projects\\MobaBase\\Assets\\Cube\\cube.obj", &meshInfo);
+        const std::string path = std::format("{}{}", ASSETS_DIR, "Cube/cube.obj");
+        auto ec = sceneRender().loadModel(path, &meshInfo);
         if (!EC_FAILED(ec)) {
             MeshComponent meshComp{};
             meshComp.meshIndex = meshInfo.meshIndex;
