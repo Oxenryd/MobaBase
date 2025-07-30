@@ -31,8 +31,8 @@ class SceneRenderSystem : public SystemECS
 private:
 
 	// Array of per-thread command lists
-	std::vector<ArenaVector<DrawCommand>> s_pendingDrawCommands;
-	std::vector<ArenaVector<DrawCommand>> s_threadPresistentDrawBuffers;
+	//std::vector<ArenaVector<DrawCommand>> s_pendingDrawCommands;
+	std::vector<ArenaVector<MeshDrawCommand>> s_threadPresistentDrawBuffers;
 	std::vector<ArenaUMap<uint64_t, size_t>> s_persistentDcmdHashIndexMap;
 	std::atomic<size_t> m_threadCounter = 0;
 	static thread_local std::unordered_map<uint16_t, size_t> s_threadIndex;
@@ -48,8 +48,6 @@ private:
 	ArenaVector<BaseVSIn> m_vertices;
 	ArenaVector<uint32_t> m_indices;
 
-	uint16_t m_sceneIndex;
-
 public:
 	~SceneRenderSystem() {}
 	SceneRenderSystem(const SceneRenderSystem&) = delete;
@@ -57,7 +55,7 @@ public:
 	SceneRenderSystem(SceneRenderSystem&&) = delete;
 	SceneRenderSystem& operator=(SceneRenderSystem&&) = delete;
 	SceneRenderSystem(ArenaRegistry* const registry, Arena* const arena, uint16_t sceneIndex) :
-		SystemECS{ registry },
+		SystemECS{ registry, sceneIndex },
 		m_vertexUpdates{ ArenaAllocator<std::pair<const VkBuffer, VertexUpdate>>(arena) },
 		m_subMeshes{ ArenaAllocator<SubMesh>{arena} },
 		m_vertices{ ArenaAllocator<BaseVSIn>{arena} },
@@ -66,9 +64,8 @@ public:
 		m_pendingDrawCommands{ ArenaAllocator<DrawCommand>{arena} },
 		m_persistentDrawCommands{ ArenaAllocator<DrawCommand>{arena} },
 		m_persistentDcmdHashIndexMap{ ArenaAllocator<std::pair<const uint64_t, size_t>>(arena) },
-		m_sceneIndex{sceneIndex},
-		s_pendingDrawCommands{ SCENE_MAX_SCENES, ArenaVector<DrawCommand>{RENDER_SCENE_MAX_THREADS, ArenaAllocator<DrawCommand>{arena} } },
-		s_threadPresistentDrawBuffers{ SCENE_MAX_SCENES, ArenaVector<DrawCommand>{RENDER_SCENE_MAX_THREADS, ArenaAllocator<DrawCommand>{arena} } },
+		//s_pendingDrawCommands{ SCENE_MAX_SCENES, ArenaVector<DrawCommand>{RENDER_SCENE_MAX_THREADS, ArenaAllocator<DrawCommand>{arena} } },
+		s_threadPresistentDrawBuffers{ SCENE_MAX_SCENES, ArenaVector<MeshDrawCommand>{ArenaAllocator<MeshDrawCommand>{arena} } },
 		s_persistentDcmdHashIndexMap{ SCENE_MAX_SCENES, ArenaUMap<uint64_t, size_t>{RENDER_SCENE_MAX_THREADS, ArenaAllocator<std::pair<const uint64_t, size_t>>(arena) } }
 	{
 		s_threadIndex[m_sceneIndex] = SIZE_INVALID;
@@ -89,35 +86,38 @@ public:
 			s_threadIndex[m_sceneIndex] = m_threadCounter++;
 	}
 
-	uint64_t submitDraw(DrawCommand drawCmd) {
+	void submitPersistent(entt::entity entity, uint32_t meshIndex, uint16_t matInstancecIndex, uint16_t prio) {
+		setFrameThreadIndex();
+
+		auto& mesh = m_reg->get<MeshComponent>(entity);
+		for (size_t i = 0; i < m_meshes[mesh.meshIndex].subMeshCount; ++i) {
+			MeshDrawCommand dCmd{};
+			dCmd.entityId = entity;
+			dCmd.priority = prio;
+			dCmd.instanceIndex = matInstancecIndex;
+			dCmd.submeshOffset = m_meshes[mesh.meshIndex].firstSubMeshIndex + i;
+			dCmd.materialIndex = m_subMeshes[dCmd.submeshOffset].materialIndex;
+			s_threadPresistentDrawBuffers[m_sceneIndex].push_back(dCmd);
+		}
+	}
+
+	uint64_t submitPersistentMeshDraw(MeshDrawCommand drawCmd) {
 
 		setFrameThreadIndex();
 
 		auto hash = drawCmd.hash();
 
-		if (drawCmd.persistent) {
-			
-			auto it = s_persistentDcmdHashIndexMap[m_sceneIndex].find(hash);
-			if (it == s_persistentDcmdHashIndexMap[m_sceneIndex].end()) {
-				s_persistentDcmdHashIndexMap[m_sceneIndex].insert({ hash, s_threadPresistentDrawBuffers[m_sceneIndex].size() });
-			}
-		} else
-			s_pendingDrawCommands[m_sceneIndex].push_back(drawCmd);
+
+		auto it = s_persistentDcmdHashIndexMap[m_sceneIndex].find(hash);
+		if (it == s_persistentDcmdHashIndexMap[m_sceneIndex].end()) {
+			s_persistentDcmdHashIndexMap[m_sceneIndex].insert({ hash, s_threadPresistentDrawBuffers[m_sceneIndex].size() });
+		}
 		
+
 		return hash;
 	}
 
-	ErrorCode loadModel(const std::string& filename, uint32_t* outMeshIndex) {
-		auto ec = AssetLoader::loadModel(filename,
-									  m_meshes, m_vertices, m_subMeshes, m_indices,
-									  *RenderManager::getInstance(), outMeshIndex);
-
-		if (!EC_FAILED(ec)) {
-			//to gpu buffers
-		}
-
-		return ec;
-	}
+	ErrorCode loadModel(const std::string& filename, MeshDescription* outMeshInfo);
 
 	void afterDraw() {
 		m_pendingDrawCommands.clear();
@@ -136,6 +136,9 @@ public:
 	bool cancelPersistentDraw(DrawCommand drawCmd) {
 		cancelPersistentDraw(drawCmd.hash());
 	}
+
+	std::span<MeshDrawCommand> persistentDrawCommands() { 
+		return std::span<MeshDrawCommand>(s_threadPresistentDrawBuffers[m_sceneIndex]); }
 
 	std::span<BaseVSIn> getVertices() { return std::span<BaseVSIn>(m_vertices); }
 	std::span<SubMesh> getSubMeshes() { return std::span<SubMesh>(m_subMeshes); }

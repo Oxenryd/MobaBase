@@ -116,6 +116,8 @@ public:
 		return s_instance;
 	}
 
+	VulkanContext* const vkContext() { return m_vkContext; }
+
 };
 
 class DxcWin32VulkanShaderCompiler : public ShaderCompilerBase

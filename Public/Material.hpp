@@ -15,6 +15,23 @@
 #include "MaterialStates.h"
 #include "ArenaAllocator.hpp"
 
+
+struct ResourceBinding
+{
+	uint64_t handle = UINT64_INVALID;
+	uint32_t binding;
+	VkDescriptorType type;
+	void hash(size_t& seed) const {
+		seed ^= std::hash<uint64_t>{}(handle)+0x9e3779b9 + (seed << 6) + (seed >> 2);
+		seed ^= std::hash<uint32_t>{}(binding)+0x9e3779b9 + (seed << 6) + (seed >> 2);
+		seed ^= std::hash<uint32_t>{}(type)+0x9e3779b9 + (seed << 6) + (seed >> 2);
+	}
+
+	bool operator==(const ResourceBinding& rhs) const {
+		return handle == rhs.handle && binding == rhs.binding && type == rhs.type;
+	}
+};
+
 class Material;
 
 using DrawIndex = uint32_t;
@@ -104,8 +121,13 @@ class MaterialInstance
 {
 private:
 	uint32_t m_instanceIndex;
+	//std::vector<ResourceBinding> m_resourceBindings;
+	std::vector<std::pair<uint8_t, VkDescriptorSet>>* m_descriptorSets = nullptr;
 
 public:
+	~MaterialInstance() {
+		delete m_descriptorSets;
+	}
 	MaterialInstance(Material* const base, size_t index) :
 		base{ base },
 		m_instanceIndex{static_cast<uint32_t>(index)}
@@ -122,6 +144,13 @@ public:
 		return nullptr;
 	}
 	void* const pushDataPtr() { return nullptr; }
+
+	//std::vector<ResourceBinding> resourceBindings() const {
+	//	return m_resourceBindings;
+	//}
+	std::vector<std::pair<uint8_t, VkDescriptorSet>>* descriptorSets() {
+		return m_descriptorSets;
+	}
 };
 
 class Shader;
@@ -150,10 +179,12 @@ private:
 		}
 	}
 
-	void init(VkPipeline& pipeline, VkPipelineLayout& layout, uint32_t id) {
+	void init(VkPipeline& pipeline, VkPipelineLayout& layout, uint32_t id, std::vector<std::pair<uint8_t, VkDescriptorSet>>& descriptors) {
 		this->pipeline = pipeline;
 		this->pipelineLayout = layout;
 		pipelineId = id;
+		defaultDescriptors.resize(descriptors.size());
+		std::memcpy(defaultDescriptors.data(), descriptors.data(), descriptors.size() * sizeof(std::pair<uint8_t, VkDescriptorSet>));
 	}
 
 public:
@@ -173,12 +204,12 @@ public:
 	uint32_t pipelineId = UINT32_INVALID;
 	VkPipeline pipeline = nullptr;
 	VkPipelineLayout pipelineLayout = nullptr;
-	std::vector<VkDescriptorSet> sets;
 	uint32_t pushConstantOffset = 0;
 	uint32_t pushConstantSize = 0;
 	VkShaderStageFlags pushShaderFlags{};
 	std::unordered_map<VkBindPair, SamplerState, VkBindPairHash> samplerStates;
-	std::unordered_map<uint32_t, DescriptorSetLayoutKey> descriptorSetKeys;
+	std::vector<std::pair<uint8_t, VkDescriptorSet>> defaultDescriptors;
+	std::unordered_map<uint32_t, DescriptorSetLayoutKey> descriptorSetLayoutKeys;
 	std::vector<MaterialInstance> instances;
 	std::vector<MaterialBuffer> buffers;
 	std::unordered_map<uint32_t, size_t> bufferNameIndexMap;

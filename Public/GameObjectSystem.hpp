@@ -80,7 +80,6 @@ private:
 class GameObjectSystem : public SystemECS
 {
 private:
-	uint32_t m_sceneIndex = UINT32_INVALID;
 	std::unordered_map<std::type_index, UntypedVectorWithDeleter> m_typeVectors;
 	std::vector<std::unique_ptr<IGameObjectRange>> m_ranges;
 
@@ -112,8 +111,8 @@ public:
 			entry.deleter(entry.ptr);
 	}
 	GameObjectSystem() = delete;
-	GameObjectSystem(uint32_t sceneIndex, ArenaRegistry* const registry)
-		: SystemECS{ registry }, m_sceneIndex{sceneIndex}
+	GameObjectSystem(uint16_t sceneIndex, ArenaRegistry* const registry)
+		: SystemECS{ registry, sceneIndex }
 	{}
 
 	iterator begin() { return iterator(&m_ranges, 0, 0); }

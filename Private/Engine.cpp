@@ -140,17 +140,21 @@ ErrorCode Engine::_initBaseShaders() {
 	auto* baseVs = getRenderManager()->getShader("BaseVS");
 	auto* basePs = getRenderManager()->getShader("BasePS");
 	auto baseMat = Material{ "BaseMaterialUnlit", *baseVs, *basePs };
+	getRenderManager()->getMaterial(0)->createInstance();
+	m_vkCtx->createPipelineFromMaterial(m_renderMan, *getRenderManager()->getMaterial(0));
 	auto* spriteVs = getRenderManager()->getShader("SpriteBatchVS");
 	auto* spritePs = getRenderManager()->getShader("SpriteBatchPS");
 	auto spriteMat = Material{ "SpriteMaterialUnlit", *spriteVs, *spritePs };
+	getRenderManager()->getMaterial(1)->createInstance();
+	m_vkCtx->createPipelineFromMaterial(m_renderMan, *getRenderManager()->getMaterial(1));
 
 
 	// DEBUG! ////////////////////////////////////////////////////////////////////////////
-	auto& matInstance = spriteMat.createInstance();
-	glm::vec2 size = { 12.2f, 13.5f };
-	matInstance.setParameter("spriteInstances", "size", &size);
-	auto checkedSize = matInstance.getParameter<glm::vec2>("spriteInstances", "size");
-	
+	//auto& matInstance = spriteMat.createInstance();
+	//glm::vec2 size = { 12.2f, 13.5f };
+	//matInstance.setParameter("spriteInstances", "size", &size);
+	//auto checkedSize = matInstance.getParameter<glm::vec2>("spriteInstances", "size");
+
 	std::cout << "\n";
 	baseMat.debugPrintMaterialInfo();
 	std::cout << "\n";
@@ -158,8 +162,8 @@ ErrorCode Engine::_initBaseShaders() {
 	std::cout << "\n";
 	//////////////////////////////////////////////////////////////////////////////////////
 
-	m_vkCtx->createPipelineFromMaterial(m_renderMan, spriteMat);
-	m_vkCtx->createPipelineFromMaterial(m_renderMan, baseMat);
+	//m_vkCtx->createPipelineFromMaterial(m_renderMan, spriteMat);
+	
 
 	
 
@@ -302,9 +306,11 @@ void Engine::stop() {
 ErrorCode Engine::init() {
 
 	ErrorCode EC{};
+	EC_CHECK(EC, _initGraphics());
+
 	EC_CHECK(EC, _initShaderManager());
 	EC_CHECK(EC, _initInputManager());
-	EC_CHECK(EC, _initGraphics());
+	
 	EC_CHECK(EC, _initBaseShaders());
 	EC_CHECK(EC, _initBaseCallbacks());
 

@@ -9,13 +9,13 @@ class SceneBase;
 class SystemECS
 {
 protected:
-	uint32_t m_sceneIndex;
+	uint16_t m_sceneIndex;
 	ArenaRegistry* const m_reg;
 
 public:
-	SystemECS(ArenaRegistry* const registry) :
+	SystemECS(ArenaRegistry* const registry, uint16_t sceneIndex) :
 		m_reg{ registry },
-		m_sceneIndex{ UINT32_INVALID }
+		m_sceneIndex{ sceneIndex }
 	{}
 
 	virtual entt::entity createEntity() { 
@@ -37,8 +37,8 @@ class SystemECS_ModelTransformsProvider : public SystemECS
 {
 public:
 	virtual ~SystemECS_ModelTransformsProvider() = default;
-	SystemECS_ModelTransformsProvider(ArenaRegistry* const registry)
-		: SystemECS{registry} {}
+	SystemECS_ModelTransformsProvider(ArenaRegistry* const registry, uint16_t sceneIndex)
+		: SystemECS{registry, sceneIndex} {}
 	virtual ArenaVector<ModelTransform>& modelTransforms() = 0;
 	virtual ArenaVector<ModelTransform>& modelTransforms() const = 0;
 };

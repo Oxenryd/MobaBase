@@ -11,8 +11,8 @@ private:
 public:
 	virtual ~TagSystem() {}
 	TagSystem() = delete;
-	TagSystem(ArenaRegistry* const registry)
-		: SystemECS{registry}
+	TagSystem(ArenaRegistry* const registry, uint16_t sceneIndex)
+		: SystemECS{registry, sceneIndex}
 	{}
 
 	virtual void registryEmplace(entt::entity entity, void* valuePtr, void* valueOut) {

@@ -48,7 +48,7 @@ public:
 		ArenaVector<SubMesh>& subMeshBuffer,
 		ArenaVector<uint32_t>& indexBuffer,
 		RenderManager& render,
-		uint32_t* outMeshIndex);
+		MeshDescription* outMeshInfo);
 };
 
 #endif

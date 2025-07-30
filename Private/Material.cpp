@@ -167,7 +167,7 @@ Material& Material::initFromShaders(const std::string& newName, Shader& vertex, 
 
 		// Skip push constants
 		if (param.type != TypeBase::PushConstStruct) {
-			auto& descSetKey = this_.descriptorSetKeys[param.setIndex];
+			auto& descSetKey = this_.descriptorSetLayoutKeys[param.setIndex];
 			descSetKey.setIndex = param.setIndex;
 			descSetKey.bindings.push_back(param.bindingIndex);
 			descSetKey.types.push_back(param.descriptorType);
@@ -203,7 +203,7 @@ Material& Material::initFromShaders(const std::string& newName, Shader& vertex, 
 		}
 	}
 
-	for (auto& [set, key] : this_.descriptorSetKeys) {
+	for (auto& [set, key] : this_.descriptorSetLayoutKeys) {
 		key.sortByBinding();
 	}
 	return this_;

@@ -154,7 +154,8 @@ add_executable (MobaBase
 	"Private/SystemECS.cpp" 
 	"Private/GameObjectSystem.cpp"
 	"Private/Transform.cpp"
-	"Private/AssetLoader.cpp")
+	"Private/AssetLoader.cpp"
+	"Private/VulkanContext.cpp" "Private/RenderingSystem.cpp")
 
 
 

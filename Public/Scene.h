@@ -64,10 +64,10 @@ public:
         //m_heap(DEFAULT_HEAP_SIZE),
         m_arena{ arenaSize },
         m_reg{ ArenaAllocator<entt::entity>{&m_arena} },
-        m_transformSys{&m_reg, &m_arena},
+        m_transformSys{&m_reg, sceneIndex, &m_arena},
         m_gameObjectSys{ m_sceneIndex, &m_reg},
         m_renderSys{ &m_reg, &m_arena, m_sceneIndex },
-        m_nameTagSys{&m_reg},
+        m_nameTagSys{&m_reg, sceneIndex },
         m_sceneIndex{sceneIndex}
     {
         m_reg.storage<TransformComponent>().reserve(ECS_BASE_COMPONENTS_RESERVATION_COUNT);

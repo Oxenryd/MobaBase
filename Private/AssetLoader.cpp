@@ -9,7 +9,7 @@ ErrorCode AssetLoader::loadModel(
 	ArenaVector<SubMesh>& subMeshBuffer,
 	ArenaVector<uint32_t>& indexBuffer,
 	RenderManager& render,
-	uint32_t* outMeshIndex) {
+	MeshDescription* outMeshInfo) {
 
 	LOGLINE(LogType::Info, LogMod::Assets, std::format("Loading '{}'... ", filename));
 
@@ -32,6 +32,7 @@ ErrorCode AssetLoader::loadModel(
 	mesh.firstSubMeshIndex = subMeshBuffer.size();
 	mesh.subMeshCount = scene->mNumMeshes;
 	size_t vertCount = 0;
+	size_t indexCount = 0;
 
 	for (unsigned int i = 0; i < scene->mNumMeshes; ++i) {
 		const aiMesh* aiMesh = scene->mMeshes[i];
@@ -61,8 +62,11 @@ ErrorCode AssetLoader::loadModel(
 				LOGLINE(LogType::Warning, LogMod::Assets, "loadModel(): face not triangulated? Skipping... ");
 				continue;
 			}
-			for (size_t id = 0; id < 3; ++id)
+			for (size_t id = 0; id < 3; ++id) {
 				indexBuffer.push_back(face.mIndices[id]);
+				indexCount++;
+			}
+			
 		}
 		subMesh.indexCount = static_cast<uint32_t>(indexBuffer.size()) - subMesh.indexOffset;
 		
@@ -72,7 +76,7 @@ ErrorCode AssetLoader::loadModel(
 		if (aiMat) {
 			auto material = render.getMaterial(aiMat->GetName().C_Str());
 			if (!material) {
-				/* TODO: CREATE NEW MATERIAL HERE!! */ subMesh.materialIndex = UINT32_INVALID;
+				/* TODO: CREATE NEW MATERIAL HERE!! and remove ->*/ subMesh.materialIndex = 0;
 			} else {
 				subMesh.materialIndex = material->matIndex;
 			}
@@ -82,8 +86,13 @@ ErrorCode AssetLoader::loadModel(
 
 		subMeshBuffer.push_back(subMesh);
 	}
-	if (outMeshIndex)
-		*outMeshIndex = meshes.size();
+	if (outMeshInfo) {
+		outMeshInfo->meshIndex = meshes.size();
+		outMeshInfo->vertexOffset = subMeshBuffer[mesh.firstSubMeshIndex].vertexOffset;
+		outMeshInfo->vertexCount = vertCount;
+		outMeshInfo->indexOffset = subMeshBuffer[mesh.firstSubMeshIndex].indexOffset;
+		outMeshInfo->indexCount = indexCount;
+	}
 	meshes.push_back(mesh);
 
 	

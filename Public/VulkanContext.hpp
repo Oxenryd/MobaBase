@@ -83,28 +83,20 @@ constexpr VkFormat GetVkFormat(TypeBase type) {
 }
 
 
-struct ResourceBinding
-{
-	uint64_t handle;
-	uint32_t binding;
-	VkDescriptorType type;
-	void hash(size_t& seed) const { 
-		seed ^= std::hash<uint64_t>{}(handle)+0x9e3779b9 + (seed << 6) + (seed >> 2);
-		seed ^= std::hash<uint32_t>{}(binding) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
-		seed ^= std::hash<uint32_t>{}(type)+0x9e3779b9 + (seed << 6) + (seed >> 2);
-	}
-
-	bool operator==(const ResourceBinding& rhs) const {
-		return handle == rhs.handle && binding == rhs.binding && type == rhs.type;
-	}
-};
-
 struct BoundDescriptorKey
 {
 	VkDescriptorSetLayout layout;
 	std::vector<ResourceBinding> bindings;
 
 	bool operator==(const BoundDescriptorKey&) const = default;
+
+	static BoundDescriptorKey nullDescriptor() {
+		BoundDescriptorKey key{};
+
+		key.layout = VK_NULL_HANDLE;
+
+		return key;
+	}
 };
 
 struct BoundDescriptorKeyHash
@@ -519,9 +511,12 @@ public:
 
 	// Global Material Buffers
 	std::vector<BaseVSIn> vertices;
+	std::vector<uint32_t> indices;
 	std::array<VkVertexInputAttributeDescription, 5> vertexAttributes{};
 	VkBuffer vertexBuffer = nullptr;;
 	VkDeviceMemory vertexMemory = nullptr;;
+	VkBuffer indexBuffer = nullptr;
+	VkDeviceMemory indexMemory = nullptr;
 
 	GlobalData matData_globalData{};
 	VkBuffer matBuf_globalData = nullptr;
@@ -563,6 +558,54 @@ public:
 		//pipelineLayouts.reserve(2048);
 		rendPasses.reserve(2048);
 		//pipelines.reserve(2048);
+	}
+
+	INLINE VkResult registerMesh(BaseVSIn* vertices, uint32_t vertexCount, uint32_t* indices, uint32_t indexCount) {
+		VkResult vkResult{};
+		
+		auto vertStartId = this->vertices.size();
+		this->vertices.resize(vertStartId + vertexCount);
+		std::memcpy(&this->vertices[vertStartId], vertices, vertexCount * sizeof(BaseVSIn));
+
+		auto indexStartId = this->indices.size();
+		this->indices.resize(indexStartId + indexCount);
+		std::memcpy(&this->indices[indexStartId], indices, indexCount * sizeof(uint32_t));
+
+		//for (size_t i = 0; i < vertexCount; ++i) {
+		//	this->vertices.push_back(vertices[i]);
+		//}
+		//for (size_t i = 0; i < indexCount; ++i) {
+		//	this->indices.push_back(indices[i]);
+		//}
+
+		// Vertexbuffer
+		VkDeviceSize vertexBufferSize = sizeof(BaseVSIn) * this->vertices.size();
+		VkBufferCreateInfo vBufferInfo{};
+		vBufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+		vBufferInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+		vBufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+		vBufferInfo.size = vertexBufferSize;
+		Vk_CHECK(vkResult, vkCreateBuffer(m_vkDevice, &vBufferInfo, nullptr, &vertexBuffer));
+		VkMemoryRequirements vBufferMemReq{};
+		vkGetBufferMemoryRequirements(m_vkDevice, vertexBuffer, &vBufferMemReq);
+		VkMemoryAllocateInfo vertexAllocInfo{};
+		vertexAllocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+		vertexAllocInfo.allocationSize = vBufferMemReq.size;
+		vertexAllocInfo.memoryTypeIndex = findMemoryType(
+			vBufferMemReq.memoryTypeBits,
+			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+			m_phyDevice
+		);
+		Vk_CHECK(vkResult, vkAllocateMemory(m_vkDevice, &vertexAllocInfo, nullptr, &vertexMemory));
+		Vk_CHECK(vkResult, vkBindBufferMemory(m_vkDevice, vertexBuffer, vertexMemory, 0));
+
+		void* data;
+		vkMapMemory(m_vkDevice, vertexMemory, 0, vertexBufferSize, 0, &data);
+		memcpy(data, this->vertices.data(), (size_t)vertexBufferSize);
+		vkUnmapMemory(m_vkDevice, vertexMemory);
+
+
+		return VK_SUCCESS;
 	}
 
 	inline VkResult initVulkan(const VkPresentModeKHR mode, bool prioIGpu = false) {
@@ -691,6 +734,28 @@ public:
 
 		Vk_CHECK(vkResult, vkAllocateMemory(m_vkDevice, &baseMatAllocInfo, nullptr, &matDevMem_baseMatInstances));
 		Vk_CHECK(vkResult, vkBindBufferMemory(m_vkDevice, matBuf_baseMatInstances, matDevMem_baseMatInstances, 0));
+
+
+		//// Vertexbuffer
+		//VkDeviceSize vertexBufferSize = sizeof(BaseVSIn) * 0;
+		//VkBufferCreateInfo vBufferInfo{};
+		//vBufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+		//vBufferInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+		//vBufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+		//vBufferInfo.size = vertexBufferSize;
+		//Vk_CHECK(vkResult, vkCreateBuffer(m_vkDevice, &vBufferInfo, nullptr, &vertexBuffer));
+		//VkMemoryRequirements vBufferMemReq{};
+		//vkGetBufferMemoryRequirements(m_vkDevice, vertexBuffer, &vBufferMemReq);
+		//VkMemoryAllocateInfo vertexAllocInfo{};
+		//vertexAllocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+		//vertexAllocInfo.allocationSize = vBufferMemReq.size;
+		//vertexAllocInfo.memoryTypeIndex = findMemoryType(
+		//	vBufferMemReq.memoryTypeBits,
+		//	VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+		//	m_phyDevice
+		//);
+		//Vk_CHECK(vkResult, vkAllocateMemory(m_vkDevice, &vertexAllocInfo, nullptr, &vertexMemory));
+		//Vk_CHECK(vkResult, vkBindBufferMemory(m_vkDevice, vertexBuffer, vertexMemory, 0));
 
 
 		LOG(LogType::Success, "Done.");
@@ -1238,7 +1303,8 @@ public:
 
 		// Layout & Descriptor sets
 		std::vector<VkDescriptorSetLayout> layouts;
-		for (auto& [set, key] : material.descriptorSetKeys) {
+		std::vector<std::pair<uint8_t, VkDescriptorSet>> descriptorSetsList;
+		for (auto& [set, key] : material.descriptorSetLayoutKeys) {
 
 			VkDescriptorSetLayout layout;
 			auto layoutIt = descSetLayoutCache.find(key);
@@ -1329,6 +1395,7 @@ public:
 			auto descSetIt = descriptorSetCache.find(descSetKey);
 			if (descSetIt == descriptorSetCache.end()) {
 
+				// TODO TODO
 				void* allocPtr = nullptr;
 				if (!pendingCounts.empty()) {
 					allocPtr = &pendingCounts[0];
@@ -1357,6 +1424,9 @@ public:
 				descriptorSetCache.insert({ descSetKey, descriptorSet });
 			} else
 				descriptorSet = descSetIt->second;
+
+			// TESTING TESTING
+			descriptorSetsList.push_back({static_cast<uint8_t>(set), descriptorSet });
 
 			layouts.resize(std::max(layouts.size(), static_cast<size_t>(set + 1)));
 			layouts[set] = layout;
@@ -1413,7 +1483,7 @@ public:
 		Vk_CHECK(vkResult, vkCreateGraphicsPipelines(m_vkDevice, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &graphicsPipeline));
 
 		// Make Material ready
-		material.init(graphicsPipeline, pipelineLayout, pipelineId++);
+		material.init(graphicsPipeline, pipelineLayout, pipelineId++, descriptorSetsList);
 
 		LOG(LogType::Success, "Done.");
 		return VK_SUCCESS;
@@ -1777,182 +1847,7 @@ public:
 	}
 
 
-	inline void draw(void* rendCtx) {
-
-		if (isPendingExit()) {
-			vkDeviceWaitIdle(m_vkDevice);
-			return;
-		}
-
-		auto* ctx = static_cast<RenderContext*>(rendCtx);
-		auto& frame = frameSync[currentFrame];
-
-		// Wait for previous frame fence 
-		vkWaitForFences(m_vkDevice, 1, &frame.inFlight, VK_TRUE, UINT64_MAX);
-
-		// Acquire swapchain image
-		uint32_t imageIndex = 0;
-		auto acquireResult = vkAcquireNextImageKHR(
-			m_vkDevice, swapchain,
-			UINT64_MAX, frame.imageAvailable,
-			VK_NULL_HANDLE, &imageIndex);
-
-		if (acquireResult == VK_ERROR_OUT_OF_DATE_KHR || pendingResize) {
-			recreateSwapchain();
-			return;
-		}
-
-		// Release the fence
-		vkResetFences(m_vkDevice, 1, &frame.inFlight);
-
-		//Begin command buffer
-		vkResetCommandBuffer(frame.cmdBuffer, 0);
-		recordCommandBuffer(frame.cmdBuffer, currentFrame);
-
-		
-		// Begin Render Pass
-		VkClearValue clearColor{};
-		clearColor.color.float32[0] = ctx->clearColor[0];
-		clearColor.color.float32[1] = ctx->clearColor[1];
-		clearColor.color.float32[2] = ctx->clearColor[2];
-		clearColor.color.float32[3] = ctx->clearColor[3];
-		VkClearValue stencilClear{};
-		stencilClear.depthStencil.depth = 0.0f;
-		VkClearValue clearValues[] = {
-			clearColor,
-			stencilClear
-		};
-
-		VkRenderPassBeginInfo renderPassInfo{};
-		renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-		renderPassInfo.renderPass = rendPasses[ctx->renderPassIndex];
-		renderPassInfo.framebuffer = swapChainFramebuffers[imageIndex];
-		renderPassInfo.renderArea.offset = { 0, 0 };
-		renderPassInfo.renderArea.extent = swapchainExtent;
-		renderPassInfo.clearValueCount = 2;
-		renderPassInfo.pClearValues = &clearValues[0];
-		vkCmdBeginRenderPass(frame.cmdBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
-
-		// Set Dynamic state
-		VkViewport viewport{};
-		viewport.x = ctx->vPortPos[0];
-		viewport.y = ctx->vPortPos[1];
-		viewport.width = ctx->vPortSize[0] < 0 ? static_cast<float>(swapchainExtent.width) : ctx->vPortSize[0];
-		viewport.height = ctx->vPortSize[1] < 0 ? static_cast<float>(swapchainExtent.height) : ctx->vPortSize[1];
-		viewport.minDepth = ctx->vPortMinDepth;
-		viewport.maxDepth = ctx->vPortMaxDepth;
-		vkCmdSetViewport(frame.cmdBuffer, 0, 1, &viewport);
-
-		VkRect2D scissor{};
-		scissor.offset = { ctx->sciOffset[0], ctx->sciOffset[1] };
-		scissor.extent = swapchainExtent;
-		vkCmdSetScissor(frame.cmdBuffer, 0, 1, &scissor);
-
-
-		// Sort the draw commands
-		std::sort(drawCommands.begin(), drawCommands.end(), [](const DrawCommand& a, const DrawCommand& b) {
-			return std::tie(a.priority, a.material->base->pipelineId) <
-				std::tie(b.priority, b.material->base->pipelineId);
-				  });
-
-		VkPipeline lastPipeline = VK_NULL_HANDLE;
-		Material* lastMaterial = nullptr;
-
-		// Check the draw commands and issue binds and draw calls
-		for (const auto& cmd : drawCommands) {
-			Material* matBase = cmd.material->base;
-
-			// Bind pipeline if changed
-			if (matBase->pipeline != lastPipeline) {
-				vkCmdBindPipeline(frame.cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, matBase->pipeline);
-				lastPipeline = matBase->pipeline;
-
-				// Bind descriptor sets
-				vkCmdBindDescriptorSets(
-					frame.cmdBuffer,
-					VK_PIPELINE_BIND_POINT_GRAPHICS,
-					matBase->pipelineLayout,
-					0, // firstSet
-					matBase->sets.size(),
-					matBase->sets.data(),
-					0, nullptr);
-
-				// Optional: Bind push constants
-				if (cmd.material->base->pushConstantSize > 0) {
-					vkCmdPushConstants(
-						frame.cmdBuffer,
-						matBase->pipelineLayout,
-						matBase->pushShaderFlags,
-						0,
-						matBase->pushConstantSize,
-						cmd.material->pushDataPtr());
-				}
-			}
-
-			// Issue draw command — use data from drawContextPtr or dispatch system based on DrawType
-			switch (cmd.type) {
-				case DrawType::Billboard:
-					// e.g. vkCmdDraw or vkCmdDrawIndexed based on the context
-					vkCmdDraw(frame.cmdBuffer, 3, 1, 0, 0);
-					break;
-
-					// Add other draw types here (Mesh, UI, etc.)
-			}
-		}
-
-		// Bind Pipeline
-		//vkCmdBindPipeline(frame.cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines[ctx->pipelineIndex]);
-
-		// Draw
-		//vkCmdDraw(frame.cmdBuffer, 3, 1, 0, 0);
-
-		// End Render Pass
-		vkCmdEndRenderPass(frame.cmdBuffer);
-
-		// End command buffer
-		if (vkEndCommandBuffer(frame.cmdBuffer) != VK_SUCCESS) {
-			throw std::runtime_error("failed to record command buffer!");
-		}
-
-		VkSubmitInfo submitInfo{};
-		submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-
-		VkSemaphore waitSemaphores[] = { frame.imageAvailable};
-		VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
-		submitInfo.waitSemaphoreCount = 1;
-		submitInfo.pWaitSemaphores = waitSemaphores;
-		submitInfo.pWaitDstStageMask = waitStages;
-		submitInfo.commandBufferCount = 1;
-		submitInfo.pCommandBuffers = &frame.cmdBuffer;
-		VkSemaphore signalSemaphores[] = { imageRenderDone[imageIndex]};
-		submitInfo.signalSemaphoreCount = 1;
-		submitInfo.pSignalSemaphores = signalSemaphores;
-
-		// Submit command buffer
-		if (vkQueueSubmit(m_graphicsQueue, 1, &submitInfo, frame.inFlight) != VK_SUCCESS)
-		{
-			throw std::runtime_error("failed to submit draw command buffer!");
-		}
-
-		// Present frame
-		VkPresentInfoKHR presentInfo{};
-		presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-		presentInfo.waitSemaphoreCount = 1;
-		presentInfo.pWaitSemaphores = signalSemaphores;
-
-		VkSwapchainKHR swapChains[] = { swapchain };
-		presentInfo.swapchainCount = 1;
-		presentInfo.pSwapchains = swapChains;
-		presentInfo.pImageIndices = &imageIndex;
-		presentInfo.pResults = nullptr; // Optional
-		auto presentResult = vkQueuePresentKHR(m_graphicsQueue, &presentInfo);
-		if (presentResult == VK_ERROR_OUT_OF_DATE_KHR || presentResult == VK_SUBOPTIMAL_KHR || pendingResize) {
-			recreateSwapchain();
-		}
-
-		// rotate frame sync /semaphores
-		currentFrame = (currentFrame + 1) % VULKAN_MAX_FRAMES_IN_FLIGHT;
-	}
+	void draw(void* rendCtx);
 
 	inline void notifyViewResized(void* ctx, uint16_t width, uint16_t height) {
 		pendingResize = true;

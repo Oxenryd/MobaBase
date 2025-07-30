@@ -21,22 +21,15 @@ public:
     void start() {
         
         m_go = gameObjectSystem().createGameObject<GameObject>(m_name);
-        uint32_t meshIndex{};
-        auto ec = sceneRender().loadModel("H:\\Dev\\Projects\\MobaBase\\Assets\\Cube\\cube.obj", &meshIndex);
+        MeshDescription meshInfo{};
+        auto ec = sceneRender().loadModel("H:\\Dev\\Projects\\MobaBase\\Assets\\Cube\\cube.obj", &meshInfo);
         if (!EC_FAILED(ec)) {
             MeshComponent meshComp{};
-            meshComp.meshIndex = meshIndex;
+            meshComp.meshIndex = meshInfo.meshIndex;
             registry().emplace<MeshComponent>(m_go, meshComp);
         }
 
-        DrawCommand dCmd{};
-        dCmd.drawContextPtr = nullptr;
-        dCmd.instanceRequest = false;
-        dCmd.material = nullptr;
-        dCmd.priority = 0.5f;
-        dCmd.type = DrawType::Mesh;
-        dCmd.persistent = true;
-        m_drawHash = sceneRender().submitDraw(dCmd);
+        sceneRender().submitPersistent(m_go, meshInfo.meshIndex, 0, 512);
     }
 
     void update(float dt) {
@@ -48,7 +41,7 @@ public:
     }
 
     void lateUpdate(float dt) {
-        setUnload();
+        //setUnload();
     }
 
     void unload() {

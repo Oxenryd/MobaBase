@@ -36,8 +36,8 @@ public:
 		m_reg->on_destroy<TransformComponent>()
 			.disconnect<&TransformSystem::_onDestroy>(this);
 	}
-	TransformSystem(ArenaRegistry* const registry, Arena* const arena)
-		: SystemECS_ModelTransformsProvider{registry},
+	TransformSystem(ArenaRegistry* const registry, uint16_t sceneIndex, Arena* const arena)
+		: SystemECS_ModelTransformsProvider{registry, sceneIndex},
 		m_modelTransforms{ ArenaAllocator<ModelTransform>(arena) },
 		m_parentOf{ ArenaAllocator<entt::entity>(arena) },
 		m_childrenOf{ ArenaAllocator<entt::entity>(arena) }
