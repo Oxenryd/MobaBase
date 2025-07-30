@@ -45,7 +45,7 @@ struct BaseMaterialInstance
 
 // Globals
 [[vk::binding(0, 0)]]
-cbuffer globalData : register(b0)
+cbuffer globalData : register(b0, space0)
 {
     float4x4 worldToView;
     float4x4 projection;
