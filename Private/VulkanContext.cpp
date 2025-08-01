@@ -101,6 +101,13 @@ void VulkanContext::draw(void* rendCtx) {
 	size_t setCount = 0;
 	bool pendingRebind = false;
 
+
+	// Update GlobalData cBuffer
+	void* mappedData = nullptr;
+	vkMapMemory(m_vkDevice, matDevMem_globalData, 0, sizeof(GlobalData), 0, &mappedData);
+	memcpy(mappedData, &matData_globalData, sizeof(GlobalData));
+	vkUnmapMemory(m_vkDevice, matDevMem_globalData);
+
 	// Check the draw commands and issue binds and draw calls
 	for (const auto& cmd : drawCmds) {
 		Material* matBase = RenderManager::getInstance()->getMaterial(cmd.materialIndex);
@@ -157,6 +164,13 @@ void VulkanContext::draw(void* rendCtx) {
 										0, nullptr);
 			}
 		}
+
+		// Push
+		BaseMatPush push{};
+		push.matrixIndex = UINT32_INVALID;
+		push.modelToWorld = cmd.registry->get<TransformComponent>(cmd.entityId).trs();
+		vkCmdPushConstants(frame.cmdBuffer, matBase->pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT,
+						   0, sizeof(BaseMatPush), &push);
 
 		vkCmdDraw(frame.cmdBuffer, vertices.size(), 1, 0, 0);
 	}

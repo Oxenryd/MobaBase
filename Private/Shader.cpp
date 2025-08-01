@@ -60,17 +60,20 @@ std::tuple<
         attrib.type = parseReflectedTypeDesc(var->type_description, nullptr);
         attrib.offset = static_cast<uint16_t>(iaOffset);
 
-        size_t paramSize = SizeOfTypeBase(attrib.type);
+        iaOffset += SizeOfTypeBase(attrib.type);
+
+        //size_t paramSize = SizeOfTypeBase(attrib.type);
+        
         //size_t paramAlign = AlignOfTypeBase(attrib.type);      
 
-        size_t vkAlignment = 0;
-        size_t alignTest = 2;
-        size_t counter = 1;
-        do {
-            alignTest *= 2;
-            vkAlignment = alignTest;
-        } while (paramSize > vkAlignment);
-        iaOffset += vkAlignment;
+        //size_t vkAlignment = 0;
+        //size_t alignTest = 2;
+        //size_t counter = 1;
+        //do {
+        //    alignTest *= 2;
+        //    vkAlignment = alignTest;
+        //} while (paramSize > vkAlignment);
+        //iaOffset += vkAlignment;
 
         if (var->name) {
             std::string s{ var->name };

@@ -1,7 +1,7 @@
 #ifndef DRAWCOMMAND_HPP
 #define DRAWCOMMAND_HPP
 
-#include <entt/entt.hpp>
+#include "ArenaAllocator.hpp"
 
 class MaterialInstance;
 
@@ -37,18 +37,20 @@ struct DrawCommand
 
 struct MeshDrawCommand
 {
+	ArenaRegistry* registry;
 	uint32_t submeshOffset;
-	entt::entity entityId;
 	uint32_t materialIndex;
-	uint16_t instanceIndex;
+	entt::entity entityId;
+	uint32_t instanceIndex;
 	uint16_t priority;
+
 	
 	uint64_t hash() {
 		uint64_t seed = 0;
 		seed ^= std::hash<uint64_t>{}(submeshOffset + 0x9e3779b9 + (seed << 6) + (seed >> 2));
 		seed ^= std::hash<uint64_t>{}(static_cast<uint32_t>(entityId) + 0x9e3779b9 + (seed << 6) + (seed >> 2));
 		seed ^= std::hash<uint64_t>{}(materialIndex)+0x9e3779b9 + (seed << 6) + (seed >> 2);
-		seed ^= std::hash<uint64_t>{}(priority) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+		seed ^= std::hash<uint64_t>{}(instanceIndex) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
 		return seed;
 	}
 

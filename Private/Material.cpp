@@ -2,6 +2,7 @@
 #include "Shader.h"
 #include "RenderManager.h"
 #include "Hashes.hpp"
+#include "VulkanContext.hpp"
 
 #include <iostream>
 #include <format>
@@ -89,9 +90,14 @@ void Material::addShaderParams(
 	}
 }
 
-Material& Material::initFromShaders(const std::string& newName, Shader& vertex, Shader& fragment) {
-	Material material{};
-	auto& this_ = *RenderManager::getInstance()->registerMaterial(newName, material);
+void Material::_setInstanceMaterialBufferIndex(MaterialInstance& instance, BaseMaterialInstance* const defaultsPtr) {
+	
+	instance.m_instanceIndex = RenderManager::getInstance()->vkContext()->registerBaseMaterialInstance(defaultsPtr);
+
+}
+
+Material& Material::initFromShaders(Material& thisMat, const std::string& newName, Shader& vertex, Shader& fragment) {
+	auto& this_ = thisMat;
 	this_.vShaderName = vertex.name();
 	this_.pShaderName = fragment.name();
 
@@ -167,14 +173,23 @@ Material& Material::initFromShaders(const std::string& newName, Shader& vertex, 
 
 		// Skip push constants
 		if (param.type != TypeBase::PushConstStruct) {
-			auto& descSetKey = this_.descriptorSetLayoutKeys[param.setIndex];
+			DescriptorSetLayoutKey& descSetKey = this_.descriptorSetLayoutKeys[param.setIndex];
 			descSetKey.setIndex = param.setIndex;
 			descSetKey.bindings.push_back(param.bindingIndex);
 			descSetKey.types.push_back(param.descriptorType);
 			descSetKey.nameIndices.push_back(param.nameIndex);
 			descSetKey.counts.push_back(param.count);
 			descSetKey.stageFlags.push_back(MatParamStageToVkShaderStageFlagBits(param.stage));
+
+			if (param.descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER || param.descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC)
+				descSetKey.flags = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT |
+				VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT |
+				VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT;
+			else
+				descSetKey.flags = 0;
 		}
+
+
 
 		switch (param.type)
 		{
@@ -230,7 +245,7 @@ void Material::debugPrintMaterialInfo() {
 	auto* ps = RenderManager::getInstance()->getShader(pShaderName);
 
 
-	std::cout << "* Material Info - " << name();
+	std::cout << "\n* Material Info - " << name();
 	std::cout << std::format("\n\nVertex Shader - {}, Entry: {}\n  Input:", vs->name(), vs->entryPoint);
 	auto& vsAttribs = RenderManager::getInstance()->getShader(vShaderName)->input.attributes;
 	for (auto& attrib : vsAttribs) {
@@ -288,6 +303,12 @@ void Material::debugPrintParameters(size_t& depth, std::vector<MatParam>& params
 	depth--;
 }
 
+Material& Material::createMaterial(const std::string& name, Shader& vs, Shader& ps) {
+	return RenderManager::getInstance()->createMaterial(name, vs, ps);
+}
+
+
+
 
 std::string& Material::name() {
 	return RenderManager::getInstance()->getMaterialName(*this);
@@ -295,6 +316,8 @@ std::string& Material::name() {
 std::string& Material::name() const {
 	return RenderManager::getInstance()->getMaterialName(*this);
 }
+
+
 MaterialBuffer* Material::getBuffer(const std::string& bufferName) {
 	auto nameIndex = RenderManager::getInstance()->getParamNameIndex(bufferName);
 	if (nameIndex != SIZE_INVALID) {
@@ -304,12 +327,6 @@ MaterialBuffer* Material::getBuffer(const std::string& bufferName) {
 	}
 	return nullptr;
 }
-
-
-
-
-
-
 
 
 

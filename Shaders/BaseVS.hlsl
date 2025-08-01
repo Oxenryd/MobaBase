@@ -7,14 +7,11 @@
 // Basic Vertex Shader
 //-----------------------------------------------------------------------------------------
 
-[[vk::binding(1, 0)]]
-cbuffer modelData : register(b1, space0)
-{
-    float4x4 modelToWorld;
-};
 
 BasePSIn main(BaseVSIn input)
-{
+{    
+    float4x4 modelToWorld = basePush.modelToWorld;
+    
     BasePSIn output = (BasePSIn) 0;
         
 	// Model->View transformation
@@ -25,7 +22,7 @@ BasePSIn main(BaseVSIn input)
     matrix MVP = mul(projection, MV);
 	
 	// Perform transformations and send to output
-    output.localPos = input.pos;
+    output.localPos = input.pos + RetainGlobals().aaa;
 	
     output.pos = mul(MVP, float4(input.pos, 1));
     output.worldPos = mul(modelToWorld, float4(input.pos, 1.0)).xyz;

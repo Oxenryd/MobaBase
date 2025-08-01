@@ -7,7 +7,10 @@
 class Texture2D
 {
 private:
+
+
 public:
+	void* m_pixelData = nullptr;
 	uint32_t nameIndex;
 	uint16_t width;
 	uint16_t height;
@@ -18,8 +21,8 @@ public:
 	VkImageLayout imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 	VkImageTiling tiling = VK_IMAGE_TILING_OPTIMAL;
 	VkImageUsageFlags usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
-	void* pixelData() { return nullptr; }
-	void* pixelData() const { return nullptr; }
+	void* pixelData() { return m_pixelData; }
+	void* pixelData() const { return m_pixelData; }
 };
 
 

@@ -60,6 +60,8 @@ private:
 	// Memory
 	Arena m_paramArena;
 	
+	// Materials
+	INLINE Material* registerMaterial(const std::string& name, Material& material);
 
 public:
 	RenderManager() = delete;
@@ -86,6 +88,7 @@ public:
 
 
 	std::vector<Material>& materials() { return m_materials; }
+	Material& createMaterial(const std::string& name, Shader& vertex, Shader& fragment);
 	Material* getMaterial(const std::string& name);
 	Material* getMaterial(const size_t& index);
 	std::string& getMaterialName(const Material& mat);
@@ -107,7 +110,7 @@ public:
 		return index;
 	}
 	std::vector<std::string>& paramNames() { return m_paramNames; }
-	Material* registerMaterial(const std::string& name, Material& material);
+	
 
 	Event<void*> onShaderHotReloaded;
 

@@ -94,6 +94,13 @@ const std::string& RenderManager::getShaderName(const Shader& shader) {
 //	}
 //}
 
+Material& RenderManager::createMaterial(const std::string& name, Shader& vertex, Shader& fragment) {
+	Material newMaterial{};
+	auto matPtr = registerMaterial(name, newMaterial);
+	auto actualMat = Material{ *matPtr, name, vertex, fragment };
+	return *matPtr;
+}
+
 Material* RenderManager::getMaterial(const std::string& name) {
 	auto it = m_mat_NameIndexMap.find(name);
 	if (it != m_mat_NameIndexMap.end()) {

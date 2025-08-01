@@ -137,16 +137,21 @@ ErrorCode Engine::_initBaseShaders() {
 	}
 
 	// Create Base Materials
-	auto* baseVs = getRenderManager()->getShader("BaseVS");
-	auto* basePs = getRenderManager()->getShader("BasePS");
-	auto baseMat = Material{ "BaseMaterialUnlit", *baseVs, *basePs };
-	getRenderManager()->getMaterial(0)->createInstance();
-	m_vkCtx->createPipelineFromMaterial(m_renderMan, *getRenderManager()->getMaterial(0));
-	auto* spriteVs = getRenderManager()->getShader("SpriteBatchVS");
-	auto* spritePs = getRenderManager()->getShader("SpriteBatchPS");
-	auto spriteMat = Material{ "SpriteMaterialUnlit", *spriteVs, *spritePs };
-	getRenderManager()->getMaterial(1)->createInstance();
-	m_vkCtx->createPipelineFromMaterial(m_renderMan, *getRenderManager()->getMaterial(1));
+	auto* baseVs = getRenderManager()->getShader(MAT_BASE_VS);
+	auto* basePs = getRenderManager()->getShader(MAT_BASE_PS);
+	auto& baseMat = Material::createMaterial("BaseMaterialUnlit", *baseVs, *basePs);//Material{ "BaseMaterialUnlit", *baseVs, *basePs };
+	baseMat.createInstance();
+	m_vkCtx->createPipelineFromMaterial(m_renderMan, baseMat);
+	std::cout << "\n";
+	baseMat.debugPrintMaterialInfo();
+
+	//auto* spriteVs = getRenderManager()->getShader("SpriteBatchVS");
+	//auto* spritePs = getRenderManager()->getShader("SpriteBatchPS");
+	//auto& spriteMat = Material::createMaterial( "SpriteMaterialUnlit", *spriteVs, *spritePs );
+	//spriteMat.createInstance();
+	//m_vkCtx->createPipelineFromMaterial(m_renderMan, spriteMat);
+	//std::cout << "\n";
+	//spriteMat.debugPrintMaterialInfo();
 
 
 	// DEBUG! ////////////////////////////////////////////////////////////////////////////
@@ -155,14 +160,9 @@ ErrorCode Engine::_initBaseShaders() {
 	//matInstance.setParameter("spriteInstances", "size", &size);
 	//auto checkedSize = matInstance.getParameter<glm::vec2>("spriteInstances", "size");
 
-	std::cout << "\n";
-	baseMat.debugPrintMaterialInfo();
-	std::cout << "\n";
-	spriteMat.debugPrintMaterialInfo();
+
 	std::cout << "\n";
 	//////////////////////////////////////////////////////////////////////////////////////
-
-	//m_vkCtx->createPipelineFromMaterial(m_renderMan, spriteMat);
 	
 
 	

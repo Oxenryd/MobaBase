@@ -95,6 +95,7 @@ public:
 			dCmd.entityId = entity;
 			dCmd.priority = prio;
 			dCmd.instanceIndex = matInstancecIndex;
+			dCmd.registry = m_reg;
 			dCmd.submeshOffset = m_meshes[mesh.meshIndex].firstSubMeshIndex + i;
 			dCmd.materialIndex = m_subMeshes[dCmd.submeshOffset].materialIndex;
 			s_threadPresistentDrawBuffers[m_sceneIndex].push_back(dCmd);

@@ -9,7 +9,7 @@
 
 #include "ErrorCodes.hpp"
 #include "MaterialParams.h"
-
+#include "HlslTypes.h"
 
 #include "Texture.hpp"
 #include "MaterialStates.h"
@@ -51,6 +51,7 @@ struct DescriptorSetLayoutKey
 	std::vector<uint32_t> counts;
 	std::vector<VkDescriptorType> types;
 	std::vector<uint32_t> nameIndices;
+	VkFlags flags;
 	bool operator==(const DescriptorSetLayoutKey& other) const = default;
 
 
@@ -119,19 +120,19 @@ struct PipelineLayoutKeyHash
 
 class MaterialInstance
 {
+	friend Material;
 private:
-	uint32_t m_instanceIndex;
-	//std::vector<ResourceBinding> m_resourceBindings;
-	std::vector<std::pair<uint8_t, VkDescriptorSet>>* m_descriptorSets = nullptr;
+	uint32_t m_instanceIndex = UINT32_INVALID;
+	uint32_t m_MaterialBufferIndex = UINT32_INVALID;
+	std::optional<std::vector<std::pair<uint8_t, VkDescriptorSet>>> m_descriptorSets;
 
 public:
-	~MaterialInstance() {
-		delete m_descriptorSets;
-	}
+	~MaterialInstance() {}
 	MaterialInstance(Material* const base, size_t index) :
 		base{ base },
 		m_instanceIndex{static_cast<uint32_t>(index)}
 	{}
+	MaterialInstance(const MaterialInstance& other) = default;
 	Material* const base;
 	MaterialBuffer* getBuffer(const std::string& bufferName);
 	void setParameter(const std::string& bufferName, const std::string& paramName, void* value);
@@ -145,11 +146,8 @@ public:
 	}
 	void* const pushDataPtr() { return nullptr; }
 
-	//std::vector<ResourceBinding> resourceBindings() const {
-	//	return m_resourceBindings;
-	//}
 	std::vector<std::pair<uint8_t, VkDescriptorSet>>* descriptorSets() {
-		return m_descriptorSets;
+		return m_descriptorSets.has_value() ? &m_descriptorSets.value() : nullptr;
 	}
 };
 
@@ -164,7 +162,37 @@ class Material
 private:
 	friend RenderManager;
 	friend VulkanContext;
+
+
+	//template<typename T, typename Alloc>
+	//friend class std::vector;
+
+	//template<typename T>
+	//friend class std::allocator;
+
+	//template<typename T>
+	//friend struct std::allocator_traits;
+
+	//template<typename T, typename... Args>
+	//friend constexpr T* std::construct_at(T* location, Args&&... args);
+
 	
+	Material() {
+		blendModes.push_back(BlendMode::Premultiplied);
+		blendModeCustomPtrs.push_back(nullptr);
+	}
+	//Material(const json& j) { fromJson(j); }
+	Material(Material& thisMat, const std::string& name, Shader& vertex, Shader& fragment) :
+		Material{ initFromShaders(thisMat, name, vertex, fragment) } {
+
+		//DEBUG
+		//createInstance();
+	}
+
+	void _setInstanceMaterialBufferIndex(MaterialInstance& instance, BaseMaterialInstance* const defaultsPtr = nullptr);
+
+	static Material& initFromShaders(Material& thisMat, const std::string& newName, Shader& vertex, Shader& fragment);
+
 	//void fromJson(const json& j);
 	void addShaderParams(
 		std::vector<MatParam>& params,
@@ -219,19 +247,8 @@ public:
 	MaterialCallback postDraw = nullptr;
 
 	~Material() = default;
-	Material()
-	{
-		blendModes.push_back(BlendMode::Premultiplied);
-		blendModeCustomPtrs.push_back(nullptr);
-	};
-	//Material(const json& j) { fromJson(j); }
-	Material(const std::string& name, Shader& vertex, Shader& fragment) : 
-		Material{ initFromShaders(name, vertex, fragment) } {
-	
-		//DEBUG
-		createInstance();
-	}
-
+	Material(const Material& other) = default;
+	Material(Material&& other) = default;
 
 	std::string& name();
 	std::string& name() const;
@@ -242,11 +259,13 @@ public:
 			pipeline && pipelineLayout;
 	}
 
+
 	//json toJson();
 	
-	MaterialInstance& createInstance() {
+	MaterialInstance& createInstance(BaseMaterialInstance* const defaultMaterialParameters = nullptr) {
 		auto index = instances.size();
 		instances.emplace_back(MaterialInstance{ this, index });
+		_setInstanceMaterialBufferIndex(instances.back(), defaultMaterialParameters);
 		for (auto& buffer : buffers) {
 			uint32_t pushedIndex = buffer.push_new();
 			assert(pushedIndex == index && "createInstance(): index mismatch between instance index and buffer index.");
@@ -257,8 +276,8 @@ public:
 
 	MaterialBuffer* getBuffer(const std::string& bufferName);
 	
-
-	static Material& initFromShaders(const std::string& newName, Shader& vertex, Shader& fragment);
+	static Material& createMaterial(const std::string& name, Shader& vs, Shader& ps);
+	
 
 	bool operator==(const Material& other);
 	bool operator!=(const Material& other) { return !(*this == other); }

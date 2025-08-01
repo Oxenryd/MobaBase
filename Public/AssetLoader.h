@@ -17,6 +17,8 @@
 
 
 class RenderManager;
+class Material;
+struct aiMaterial;
 
 INLINE glm::vec3 toVec3(const aiVector3D& aiVec) {
 	return { aiVec.x, aiVec.y, aiVec.z };
@@ -49,6 +51,10 @@ public:
 		ArenaVector<uint32_t>& indexBuffer,
 		RenderManager& render,
 		MeshDescription* outMeshInfo);
+
+	static Material& createMaterial(const aiMaterial* aiMat);
+
+	static BaseMaterialInstance aiMaterialToBaseMaterialData(const aiMaterial* const aiMat);
 };
 
 #endif

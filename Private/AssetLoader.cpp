@@ -1,5 +1,6 @@
 #include "AssetLoader.h"
-#include "RenderManager.h"
+//#include "RenderManager.h"
+#include "Engine.h"
 #include <format>
 
 ErrorCode AssetLoader::loadModel(
@@ -33,6 +34,8 @@ ErrorCode AssetLoader::loadModel(
 	mesh.subMeshCount = scene->mNumMeshes;
 	size_t vertCount = 0;
 	size_t indexCount = 0;
+	uint32_t newMats = 0;
+	uint32_t parsedMats = 0;
 
 	for (unsigned int i = 0; i < scene->mNumMeshes; ++i) {
 		const aiMesh* aiMesh = scene->mMeshes[i];
@@ -76,10 +79,18 @@ ErrorCode AssetLoader::loadModel(
 		if (aiMat) {
 			auto material = render.getMaterial(aiMat->GetName().C_Str());
 			if (!material) {
-				/* TODO: CREATE NEW MATERIAL HERE!! and remove ->*/ subMesh.materialIndex = 0;
+				auto& newMat = createMaterial(aiMat);
+				subMesh.materialIndex = newMat.matIndex;
+				newMats++;
+				
+				auto matData = aiMaterialToBaseMaterialData(aiMat);
+				newMat.createInstance(&matData);
+				RenderManager::getInstance()->vkContext()->createPipelineFromMaterial(RenderManager::getInstance(), newMat);
+
 			} else {
 				subMesh.materialIndex = material->matIndex;
 			}
+			parsedMats++;
 		} else {
 			subMesh.materialIndex = UINT32_INVALID;
 		}
@@ -96,8 +107,96 @@ ErrorCode AssetLoader::loadModel(
 	meshes.push_back(mesh);
 
 	
-	LOGLINE(LogType::Info, LogMod::Assets, std::format("\t{} meshes, {} materials, {} total vertices... ",
-													   mesh.subMeshCount, scene->mNumMaterials, vertCount));
+	LOGLINE(LogType::Info, LogMod::Assets, std::format("\t{} meshes, {}/{} materials/new, {} total vertices... ",
+													   mesh.subMeshCount, parsedMats, newMats, vertCount));
 	LOG(LogType::Success, "Done.");
 	return ErrorCode::OK;
+}
+
+Material& AssetLoader::createMaterial(const aiMaterial* aiMat) {
+	auto* baseVs = Engine::getInstance()->getRenderManager()->getShader(MAT_BASE_VS);
+	auto* basePs = Engine::getInstance()->getRenderManager()->getShader(MAT_BASE_PS);
+	std::string matName = aiMat->GetName().C_Str();
+	auto& mat = Material::createMaterial(matName, *baseVs, *basePs );
+	mat.debugPrintMaterialInfo();
+	return mat;
+}
+
+BaseMaterialInstance AssetLoader::aiMaterialToBaseMaterialData(const aiMaterial* const aiMat) {
+	BaseMaterialInstance base{};
+	const aiMaterial& ai = *aiMat;
+	char ptr[32]{ 0 };
+	
+	//TODO:
+	// check textures -> load textures from filename -> bind indices
+	
+	if (ai.Get(AI_MATKEY_COLOR_AMBIENT, *reinterpret_cast<aiColor3D*>(ptr)) == AI_SUCCESS) {
+		auto aiCol = *reinterpret_cast<aiColor3D*>(ptr);
+		base.ambient = {aiCol.r, aiCol.g, aiCol.b};
+	}
+	if (ai.Get(AI_MATKEY_COLOR_DIFFUSE, *reinterpret_cast<aiColor3D*>(ptr)) == AI_SUCCESS) {
+		auto aiCol = *reinterpret_cast<aiColor3D*>(ptr);
+		base.baseColor = { aiCol.r, aiCol.g, aiCol.b };
+	}
+	if (ai.Get(AI_MATKEY_COLOR_SPECULAR, *reinterpret_cast<aiColor3D*>(ptr)) == AI_SUCCESS) {
+		auto aiCol = *reinterpret_cast<aiColor3D*>(ptr);
+		base.specular = { aiCol.r, aiCol.g, aiCol.b };
+	}
+	if (ai.Get(AI_MATKEY_COLOR_EMISSIVE, *reinterpret_cast<aiColor3D*>(ptr)) == AI_SUCCESS) {
+		auto aiCol = *reinterpret_cast<aiColor3D*>(ptr);
+		base.emissive = { aiCol.r, aiCol.g, aiCol.b };
+	}
+	if (ai.Get(AI_MATKEY_BASE_COLOR, *reinterpret_cast<aiColor3D*>(ptr)) == AI_SUCCESS) {
+		auto aiCol = *reinterpret_cast<aiColor4D*>(ptr);
+		base.baseColor = { aiCol.r, aiCol.g, aiCol.b };
+		base.transparency = aiCol.a;
+	}
+	if (ai.Get(AI_MATKEY_COLOR_TRANSPARENT, *reinterpret_cast<aiColor3D*>(ptr)) == AI_SUCCESS) {
+		auto aiCol = reinterpret_cast<aiColor3D*>(ptr);
+		base.transparentColor = { aiCol->r, aiCol->g, aiCol->b };
+	}
+
+	if (ai.Get(AI_MATKEY_SHININESS, *reinterpret_cast<ai_real*>(ptr)) == AI_SUCCESS) {
+		auto ai = reinterpret_cast<ai_real*>(ptr);
+		base.shininess = *ai;
+	}
+	if (ai.Get(AI_MATKEY_SHININESS_STRENGTH, *reinterpret_cast<ai_real*>(ptr)) == AI_SUCCESS) {
+		auto ai = reinterpret_cast<ai_real*>(ptr);
+		base.specularStrength = *ai;
+	}
+	if (ai.Get(AI_MATKEY_OPACITY, *reinterpret_cast<ai_real*>(ptr)) == AI_SUCCESS) {
+		auto ai = reinterpret_cast<ai_real*>(ptr);
+		base.transparency = *ai;
+	}
+	if (ai.Get(AI_MATKEY_REFRACTI, *reinterpret_cast<ai_real*>(ptr)) == AI_SUCCESS) {
+		auto ai = reinterpret_cast<ai_real*>(ptr);
+		base.refraction = *ai;
+	}
+	if (ai.Get(AI_MATKEY_METALLIC_FACTOR, *reinterpret_cast<ai_real*>(ptr)) == AI_SUCCESS) {
+		auto ai = reinterpret_cast<ai_real*>(ptr);
+		base.metallic = *ai;
+	}
+	if (ai.Get(AI_MATKEY_ROUGHNESS_FACTOR, *reinterpret_cast<ai_real*>(ptr)) == AI_SUCCESS) {
+		auto ai = reinterpret_cast<ai_real*>(ptr);
+		base.roughness = *ai;
+	}
+	if (ai.Get(AI_MATKEY_REFLECTIVITY, *reinterpret_cast<ai_real*>(ptr)) == AI_SUCCESS) {
+		auto ai = reinterpret_cast<ai_real*>(ptr);
+		base.reflectivity = *ai;
+	}
+	if (ai.Get(AI_MATKEY_TRANSMISSION_FACTOR, *reinterpret_cast<ai_real*>(ptr)) == AI_SUCCESS) {
+		auto ai = reinterpret_cast<ai_real*>(ptr);
+		base.transmission = *ai;
+	}
+	if (ai.Get(AI_MATKEY_EMISSIVE_INTENSITY, *reinterpret_cast<ai_real*>(ptr)) == AI_SUCCESS) {
+		auto ai = reinterpret_cast<ai_real*>(ptr);
+		base.emissiveStrength = *ai;
+	}
+	if (ai.Get(AI_MATKEY_CLEARCOAT_FACTOR, *reinterpret_cast<ai_real*>(ptr)) == AI_SUCCESS) {
+		auto ai = reinterpret_cast<ai_real*>(ptr);
+		base.clearcoatStrength = *ai;
+	}
+
+
+	return base;
 }

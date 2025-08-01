@@ -3,16 +3,19 @@
 
 #include <cstdint>
 #include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+
 #include "GlobalMacros.h"
 
 
 struct BaseVSIn
 {
-	alignas (16) glm::vec3 pos;
-	alignas (16) glm::vec3 normal;
-	alignas (16) glm::vec3 tangent;
-	alignas (16) glm::vec3 binormal;
-	alignas (16) glm::vec2 texCoord;
+	glm::vec3 pos;
+	glm::vec3 normal;
+	glm::vec3 tangent;
+	glm::vec3 binormal;
+	glm::vec2 texCoord;
+	//uint32_t instanceID;
 };
 
 struct ModelTransform
@@ -65,26 +68,42 @@ struct VSOuput
 	glm::vec2 uv;
 };
 
-struct ObjectPush
+struct BaseMatPush
 {
-	alignas (16) glm::mat4x4 model;
-	alignas (4) uint32_t g_boneOffset;
-	alignas (4) uint32_t g_boneCount;
-	alignas (8) uint64_t _pad;
+	glm::mat4x4 modelToWorld;
+	uint32_t matrixIndex;
+	uint32_t boneOffset;
+	uint32_t boneCount;
 };
 
 struct GlobalData
 {
+	GlobalData() {
+		view = glm::lookAt(
+			glm::vec3(0.0f, 0.0f, 5.0f), // Camera position
+			glm::vec3(0.0f, 0.0f, 0.0f), // Target (look at)
+			glm::vec3(0.0f, 1.0f, 0.0f)  // Up vector
+		);
+		cameraPosition = { 0,0, 5.0f, 1.0f };
+		proj = glm::perspective(
+			glm::radians(60.0f), // Field of view
+			16.0f / 9.0f,        // Aspect ratio
+			0.1f,                // Near plane
+			100.0f               // Far plane
+		);
+		proj[1][1] *= -1;
+
+	}
 	alignas (16) glm::mat4x4 view;
 	alignas (16) glm::mat4x4 proj;
 	alignas (16) glm::vec4 cameraPosition;
-	alignas (16) float time;
+	alignas (16) double time{ 0 };
 };
 
 struct alignas (16) SpriteInstance
 {
-	float position[2];
-	float size[2];
+	glm::vec2 position;
+	glm::vec2 size;
 	float origin[2];
 	float rotation;
 	float layerDepth;
@@ -93,23 +112,45 @@ struct alignas (16) SpriteInstance
 	uint32_t _pad;
 };
 
-struct TexturePack
+struct alignas (16) TexturePack
 {
 	uint32_t albedoId = UINT32_INVALID;
 	uint32_t normalId = UINT32_INVALID;
 	uint32_t specularId = UINT32_INVALID;
 	uint32_t roughnessId = UINT32_INVALID;
+	uint32_t emissiveId = UINT32_INVALID;
+	uint32_t metallicId = UINT32_INVALID;
+	uint32_t aoId = UINT32_INVALID;
+	uint32_t _pad;
 };
 
-struct BaseMaterialInstance
+struct alignas (16) BaseMaterialInstance
 {
-	TexturePack textures;
-	glm::vec3	ia;
-	float		ka;
-	glm::vec3	id;
-	float		kd;
-	glm::vec3	is;
-	float		ks;
+    TexturePack textures;
+	glm::vec3	ambient{1, 1, 1};
+	float		ambientIntensity{ 1 };
+    
+	glm::vec3	baseColor{ 1, 0, 1 };
+	float		albedoStrength{ 1 };
+    
+	glm::vec3	specular{ 0, 0, 0 };
+	float		specularStrength{ 1 };
+    
+	glm::vec3	emissive{ 0.05f, 0.05f, 0.05f };
+	float		shininess{ 0.15f };
+    
+	float		refraction{ 1.5f };
+	float		transparency{ 1.0f };
+	float		roughness{ 0.05f };
+	float		metallic{ 0 };
+    
+	glm::vec3	transparentColor{ 1, 1, 1 };
+	float		ao{ 0 };
+
+	float		reflectivity{ 0 };
+	float		transmission{ 0 };
+	float		emissiveStrength{ 0.15f };
+	float		clearcoatStrength{ 0 };
 };
 
 #endif

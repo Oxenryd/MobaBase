@@ -225,7 +225,7 @@ enum class MatBufferType : uint8_t
 class MaterialBuffer
 {
 private:
-	uint8_t* m_memory;
+	uint8_t* m_memory = nullptr;
 	uint32_t m_size;
 	uint32_t m_capacity;
 	uint32_t m_entrySize;
