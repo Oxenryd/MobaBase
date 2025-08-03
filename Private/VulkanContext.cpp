@@ -35,17 +35,23 @@ void VulkanContext::draw(void* rendCtx) {
 
 
 	// Begin Render Pass
-	VkClearValue clearColor{};
-	clearColor.color.float32[0] = ctx->clearColor[0];
-	clearColor.color.float32[1] = ctx->clearColor[1];
-	clearColor.color.float32[2] = ctx->clearColor[2];
-	clearColor.color.float32[3] = ctx->clearColor[3];
-	VkClearValue stencilClear{};
-	stencilClear.depthStencil.depth = 0.0f;
-	VkClearValue clearValues[] = {
-		clearColor,
-		stencilClear
-	};
+	VkClearValue clearValues[2] = {};
+	clearValues[0].color = { ctx->clearColor[0], ctx->clearColor[1], ctx->clearColor[2], ctx->clearColor[3] };
+	clearValues[1].depthStencil = { 1.0f, 0 };
+
+
+
+	//VkClearValue clearColor{};
+	//clearColor.color.float32[0] = ctx->clearColor[0];
+	//clearColor.color.float32[1] = ctx->clearColor[1];
+	//clearColor.color.float32[2] = ctx->clearColor[2];
+	//clearColor.color.float32[3] = ctx->clearColor[3];
+	//VkClearValue stencilClear{ 1.0f, 0 };
+	//stencilClear.
+	//VkClearValue clearValues[] = {
+	//	clearColor,
+	//	stencilClear
+	//};
 
 	VkRenderPassBeginInfo renderPassInfo{};
 	renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -54,7 +60,7 @@ void VulkanContext::draw(void* rendCtx) {
 	renderPassInfo.renderArea.offset = { 0, 0 };
 	renderPassInfo.renderArea.extent = swapchainExtent;
 	renderPassInfo.clearValueCount = 2;
-	renderPassInfo.pClearValues = &clearValues[0];
+	renderPassInfo.pClearValues = clearValues;
 	vkCmdBeginRenderPass(frame.cmdBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
 	// Set Dynamic state
@@ -165,15 +171,22 @@ void VulkanContext::draw(void* rendCtx) {
 			}
 		}
 
+		auto scene = Engine::getInstance()->getScene(cmd.sceneIndex);
+
 		// Push
 		BaseMatPush push{};
 		push.matrixIndex = UINT32_INVALID;
-		push.modelToWorld = cmd.registry->get<TransformComponent>(cmd.entityId).trs();
+		push.modelToWorld = scene->registry().get<TransformComponent>(cmd.entityId).trs();
 		vkCmdPushConstants(frame.cmdBuffer, matBase->pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT,
 						   0, sizeof(BaseMatPush), &push);
 
-		//vkCmdDraw(frame.cmdBuffer, vertices.size(), 1, 0, 0);
-		vkCmdDrawIndexed(frame.cmdBuffer, 36, 1, 0, 0, 0);
+		
+		auto& submesh = scene->sceneRender().getSubMeshes()[cmd.submeshOffset];
+		auto vertexOffset = submesh.vertexOffset;
+		auto indexOffset = submesh.indexOffset;
+		auto indexCount = submesh.indexCount;
+
+		vkCmdDrawIndexed(frame.cmdBuffer, indexCount, 1, indexOffset, vertexOffset, 0);
 	}
 
 	// Bind Pipeline

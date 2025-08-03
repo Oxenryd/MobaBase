@@ -11,9 +11,22 @@ ErrorCode SceneRenderSystem::loadModel(const std::string& filename, MeshDescript
 
 	if (!EC_FAILED(ec)) {
 		
-		RenderManager::getInstance()->vkContext()->registerMesh(
-			&m_vertices[mInfo.vertexOffset], mInfo.vertexCount,
-			&m_indices[mInfo.indexOffset], mInfo.indexCount);
+		for (size_t i = 0; i < mInfo.subMeshCount; ++i) {
+
+			auto& subMesh = m_subMeshes[mInfo.subMeshOffset + i];
+
+			auto vOffset = subMesh.vertexOffset;
+			auto vCount = subMesh.vertexCount;
+			auto iOffset = subMesh.indexOffset;
+			auto iCount = subMesh.indexCount;
+
+			RenderManager::getInstance()->vkContext()->registerMesh(
+				&m_vertices[vOffset], vCount,
+				&m_indices[iOffset], iCount);
+
+		}
+
+
 	}
 
 	return ec;

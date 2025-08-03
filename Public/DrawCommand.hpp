@@ -37,12 +37,13 @@ struct DrawCommand
 
 struct MeshDrawCommand
 {
-	ArenaRegistry* registry;
 	uint32_t submeshOffset;
 	uint32_t materialIndex;
 	entt::entity entityId;
 	uint32_t instanceIndex;
+	uint16_t sceneIndex;
 	uint16_t priority;
+	
 
 	
 	uint64_t hash() {
@@ -51,6 +52,7 @@ struct MeshDrawCommand
 		seed ^= std::hash<uint64_t>{}(static_cast<uint32_t>(entityId) + 0x9e3779b9 + (seed << 6) + (seed >> 2));
 		seed ^= std::hash<uint64_t>{}(materialIndex)+0x9e3779b9 + (seed << 6) + (seed >> 2);
 		seed ^= std::hash<uint64_t>{}(instanceIndex) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+		seed ^= std::hash<uint64_t>{}(sceneIndex)+0x9e3779b9 + (seed << 6) + (seed >> 2);
 		return seed;
 	}
 

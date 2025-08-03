@@ -17,10 +17,10 @@ ErrorCode AssetLoader::loadModel(
 	Assimp::Importer importer;
 
 	const aiScene* scene = importer.ReadFile(filename,
-											 aiProcess_Triangulate |
-											 aiProcess_JoinIdenticalVertices |
-											 aiProcess_GenNormals |
-											 aiProcess_CalcTangentSpace
+											 aiProcess_Triangulate 
+											 | aiProcess_JoinIdenticalVertices
+											 | aiProcess_GenNormals
+											 | aiProcess_CalcTangentSpace
 	);
 	if (!scene)
 		return _logReturnError(ErrorCode::ASSETS_IMPORT_ERROR, std::format("Assimp Error:  {}", importer.GetErrorString()));
@@ -44,6 +44,7 @@ ErrorCode AssetLoader::loadModel(
 		subMesh.vertexOffset = vertexBuffer.size();
 
 		// Vertices
+		uint32_t submeshVertices = 0;
 		for (size_t j = 0; j < aiMesh->mNumVertices; ++j) {
 			BaseVSIn vertex{};
 			vertex.pos = toVec3(aiMesh->mVertices[j]);
@@ -54,8 +55,10 @@ ErrorCode AssetLoader::loadModel(
 				vertex.binormal = toVec3(aiMesh->mBitangents[j]);
 			}
 			vertexBuffer.push_back(vertex);
+			submeshVertices++;
 			vertCount++;
 		}
+		subMesh.vertexCount = submeshVertices;
 
 		// Indices
 		subMesh.indexOffset = indexBuffer.size();
@@ -99,10 +102,12 @@ ErrorCode AssetLoader::loadModel(
 	}
 	if (outMeshInfo) {
 		outMeshInfo->meshIndex = meshes.size();
-		outMeshInfo->vertexOffset = subMeshBuffer[mesh.firstSubMeshIndex].vertexOffset;
-		outMeshInfo->vertexCount = vertCount;
-		outMeshInfo->indexOffset = subMeshBuffer[mesh.firstSubMeshIndex].indexOffset;
-		outMeshInfo->indexCount = indexCount;
+		outMeshInfo->subMeshCount = subMeshBuffer.size() - mesh.firstSubMeshIndex;
+		outMeshInfo->subMeshOffset = mesh.firstSubMeshIndex;
+		//outMeshInfo->vertexOffset = subMeshBuffer[mesh.firstSubMeshIndex].vertexOffset;
+		//outMeshInfo->vertexCount = vertCount;
+		//outMeshInfo->indexOffset = subMeshBuffer[mesh.firstSubMeshIndex].indexOffset;
+		//outMeshInfo->indexCount = indexCount;
 	}
 	meshes.push_back(mesh);
 

@@ -141,6 +141,7 @@ add_executable (MobaBase
 	"Public/DrawCommand.hpp"
 	"Public/MeshComponent.hpp"
 	"Public/AssetLoader.h"
+	"Public/InputTypes.h"
 
 	"Private/Engine.cpp"
 	"Private/Timer.cpp"
@@ -155,7 +156,8 @@ add_executable (MobaBase
 	"Private/GameObjectSystem.cpp"
 	"Private/Transform.cpp"
 	"Private/AssetLoader.cpp"
-	"Private/VulkanContext.cpp" "Private/RenderingSystem.cpp")
+	"Private/VulkanContext.cpp"
+	"Private/RenderingSystem.cpp" )
 
 
 

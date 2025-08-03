@@ -1,65 +1,70 @@
 #ifndef INPUTMANAGER_HPP
 #define INPUTMANAGER_HPP
 
+
+
 #include "WindowSurface.h"
+#include "Delegate.hpp"
+//#include "GlobalMacros.h"
 
-static void handleRawInput(HRAWINPUT hRawInput) {
-    UINT dataSize = 0;
 
-    // First, query required size
-    GetRawInputData(hRawInput, RID_INPUT, nullptr, &dataSize, sizeof(RAWINPUTHEADER));
 
-    std::vector<BYTE> rawData(dataSize);
-
-    if (GetRawInputData(hRawInput, RID_INPUT, rawData.data(), &dataSize, sizeof(RAWINPUTHEADER)) != dataSize) {
-        // Handle error here
-        return;
-    }
-
-    RAWINPUT* raw = reinterpret_cast<RAWINPUT*>(rawData.data());
-
-    if (raw->header.dwType == RIM_TYPEMOUSE) {
-        const RAWMOUSE& mouse = raw->data.mouse;
-
-        if (mouse.usFlags == MOUSE_MOVE_RELATIVE) {
-            LONG deltaX = mouse.lLastX;
-            LONG deltaY = mouse.lLastY;
-
-            // This is your raw high-precision delta:
-            // deltaX = horizontal movement since last WM_INPUT
-            // deltaY = vertical movement since last WM_INPUT
-
-            // Dispatch into your InputManager, etc:
-            //handleRawMouseDelta(deltaX, deltaY);
-        }
-
-        // Optional: handle raw mouse buttons
-        if (mouse.usButtonFlags & RI_MOUSE_LEFT_BUTTON_DOWN) { /* handle left down */ }
-        if (mouse.usButtonFlags & RI_MOUSE_LEFT_BUTTON_UP) { /* handle left up */ }
-        if (mouse.usButtonFlags & RI_MOUSE_RIGHT_BUTTON_DOWN) { /* handle right down */ }
-        if (mouse.usButtonFlags & RI_MOUSE_RIGHT_BUTTON_UP) { /* handle right up */ }
-    }
-}
+//Event<uint8_t, KeysBitfield> onKeyDown;
+//Event<uint8_t, KeysBitfield> onKeyUp;
 
 class InputManager
 {
 private:
 	WindowSurface* m_ws;
+	std::set<uint16_t> m_keyButtonDownMap;
+
 public:
     ~InputManager() {}
 	InputManager(WindowSurface* surface) :
 		m_ws{surface} {
-	
-        m_ws->onRawInput.subscribe(&handleRawInput);
+#ifdef BUILD_WIN
+        m_ws->onRawInput.subscribe(&HandleRawInputWin32);
+		m_ws->onKeyEvent.subscribe(&handleKeyEvent);
+#endif
 	}
 
-	void pollEvents() {
+	INLINE void update() {
+#ifdef BUILD_WIN
 		MSG msg{};
 		while (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE)) {
 			TranslateMessage(&msg);
 			DispatchMessage(&msg);
 		}
+#endif
 	}
+
+	void handleKeyEvent(KeyEvent event) {
+
+		onKeyEvent.notify(event); // for manual handling
+
+		auto it = m_keyButtonDownMap.find(static_cast<uint16_t>(event.code));
+		if (event.action == KeyAction::Release) {
+			if (it != m_keyButtonDownMap.end()) {
+				m_keyButtonDownMap.erase(it);
+				onKeyUp.notify(event);
+			}
+		} else {
+			if (it == m_keyButtonDownMap.end()) {
+				m_keyButtonDownMap.insert(static_cast<uint16_t>(event.code));
+				onKeyDown.notify(event);
+			} else {
+				event.action = KeyAction::Hold;
+				onKeyHeld.notify(event);
+			}
+		}
+		
+	}
+
+	// EVENTS
+	Event<KeyEvent> onKeyEvent;
+	Event<KeyEvent> onKeyDown;
+	Event<KeyEvent> onKeyHeld;
+	Event<KeyEvent> onKeyUp;
 };
 
 

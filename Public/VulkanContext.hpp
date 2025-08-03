@@ -27,7 +27,6 @@
 #include "Log.hpp"
 
 #include "Material.hpp"
-//#include "IRenderProvider.h"
 #include "RenderManager.h"
 #include "HlslTypes.h"
 #include <variant>
@@ -1311,7 +1310,7 @@ public:
 		refs.push_back(colorAttachmentRef);
 
 		VkAttachmentDescription depthAttachment{};
-		depthAttachment.format = VK_FORMAT_D24_UNORM_S8_UINT;//VK_FORMAT_D32_SFLOAT;
+		depthAttachment.format = VK_FORMAT_D24_UNORM_S8_UINT;//VK_FORMAT_D32_SFLOAT; VK_FORMAT_D24_UNORM_S8_UINT
 		depthAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
 		depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
 		depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
@@ -1324,6 +1323,7 @@ public:
 		VkAttachmentReference depthAttachmentRef{};
 		depthAttachmentRef.attachment = 1;
 		depthAttachmentRef.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+		//refs.push_back(depthAttachmentRef);
 		
 
 		VkSubpassDescription subpass{};
@@ -1339,6 +1339,7 @@ public:
 		renderPassInfo.pAttachments = attachments.data();
 		renderPassInfo.subpassCount = 1;
 		renderPassInfo.pSubpasses = &subpass;
+		
 
 		Vk_CHECK(vkResult, vkCreateRenderPass(m_vkDevice, &renderPassInfo, nullptr, &renderPass));
 

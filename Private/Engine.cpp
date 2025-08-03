@@ -266,7 +266,7 @@ inline void Engine::_run() {
 		//	}
 		//}
 
-		m_inputMan->pollEvents();
+		m_inputMan->update();
 		_updateEarly(dt);
 		_updateLate(dt);
 

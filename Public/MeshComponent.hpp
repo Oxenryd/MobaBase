@@ -7,10 +7,8 @@
 struct MeshDescription
 {
 	uint32_t meshIndex;
-	uint32_t vertexOffset;
-	uint32_t vertexCount;
-	uint32_t indexOffset;
-	uint32_t indexCount;
+	uint32_t subMeshOffset;
+	uint32_t subMeshCount;
 };
 
 struct MeshComponent
@@ -27,6 +25,7 @@ struct MeshData
 struct SubMesh
 {
 	uint32_t vertexOffset;
+	uint32_t vertexCount;
 	uint32_t indexOffset;
 	uint32_t indexCount;
 	uint32_t materialIndex;

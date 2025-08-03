@@ -226,7 +226,7 @@ public:
 	void* depthModeCustomPtr = nullptr;
 	void* rasterModeCustomPtr = nullptr;
 	void* msaaModeCustomPtr = nullptr;
-	DepthMode depthMode = DepthMode::None;
+	DepthMode depthMode = DepthMode::DepthDefault;
 	RasterMode rasterMode = RasterMode::RasterDefault;
 	MultiSamplingMode msaaMode = MultiSamplingMode::MSAA_None;
 	uint32_t pipelineId = UINT32_INVALID;
