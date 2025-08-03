@@ -650,6 +650,32 @@ public:
 		memcpy(data, this->vertices.data(), (size_t)vertexBufferSize);
 		vkUnmapMemory(m_vkDevice, vertexMemory);
 
+		// IndexBuffer
+		VkDeviceSize indexBufferSize = sizeof(uint32_t) * this->indices.size();
+		VkBufferCreateInfo iBufferInfo{};
+		iBufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+		iBufferInfo.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
+		iBufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+		iBufferInfo.size = indexBufferSize;
+		Vk_CHECK(vkResult, vkCreateBuffer(m_vkDevice, &iBufferInfo, nullptr, &indexBuffer));
+		VkMemoryRequirements iBufferMemReq{};
+		vkGetBufferMemoryRequirements(m_vkDevice, indexBuffer, &iBufferMemReq);
+		VkMemoryAllocateInfo indexAllocInfo{};
+		indexAllocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+		indexAllocInfo.allocationSize = iBufferMemReq.size;
+		indexAllocInfo.memoryTypeIndex = findMemoryType(
+			iBufferMemReq.memoryTypeBits,
+			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+			m_phyDevice
+		);
+		Vk_CHECK(vkResult, vkAllocateMemory(m_vkDevice, &indexAllocInfo, nullptr, &indexMemory));
+		Vk_CHECK(vkResult, vkBindBufferMemory(m_vkDevice, indexBuffer, indexMemory, 0));
+
+		//void* data;
+		vkMapMemory(m_vkDevice, indexMemory, 0, indexBufferSize, 0, &data);
+		memcpy(data, this->indices.data(), (size_t)indexBufferSize);
+		vkUnmapMemory(m_vkDevice, indexMemory);
+
 
 		return VK_SUCCESS;
 	}

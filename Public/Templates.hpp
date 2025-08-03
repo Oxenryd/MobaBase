@@ -36,12 +36,16 @@ public:
     void update(float dt) {
         m_time += dt;
 
+        auto cos = std::cos(m_time);
+        auto sin = std::sin(m_time);
+
         float rotSize = 1.75f;
         auto transform = m_go.transform();
-        transform.modifyPosition() = glm::vec3{ rotSize * std::cos(m_time), rotSize * std::sin(m_time), 0.0};
-        auto rotation = glm::vec3{ m_time, 0, 0 };
-        auto quatRot = glm::quatLookAt(rotation, glm::vec3{0, 1, 0});
-        transform.modifyRotation() = quatRot;
+        transform.modifyPosition() = glm::vec3{ rotSize * cos, rotSize * sin, 0.0};
+
+        transform.modifyRotation() = glm::quat( glm::vec3{0.0f, cos, 0.5f * sin });
+
+        transform.modifyScale() = glm::vec3{0.5f * cos + 0.55f};
     }
 
     void lateUpdate(float dt) {

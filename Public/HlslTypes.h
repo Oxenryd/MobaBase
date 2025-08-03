@@ -84,8 +84,8 @@ struct GlobalData
 			glm::vec3(0.0f, 0.0f, 0.0f), // Target (look at)
 			glm::vec3(0.0f, 1.0f, 0.0f)  // Up vector
 		);
-		cameraPosition = { 0,0, 5.0f, 1.0f };
-		proj = glm::perspective(
+		cameraPosition = { 0.0f, 0.0f, 5.0f, 1.0f };
+		proj = glm::perspectiveRH_ZO(
 			glm::radians(60.0f), // Field of view
 			16.0f / 9.0f,        // Aspect ratio
 			0.1f,                // Near plane

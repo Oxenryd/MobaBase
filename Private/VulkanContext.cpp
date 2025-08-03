@@ -76,7 +76,7 @@ void VulkanContext::draw(void* rendCtx) {
 	// bind vertex buffer
 	VkDeviceSize offsets[] = { 0 };
 	vkCmdBindVertexBuffers(frame.cmdBuffer, 0, 1, &vertexBuffer, offsets);
-	//vkCmdBindIndexBuffer(cmdBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT32);
+	vkCmdBindIndexBuffer(frame.cmdBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT32);
 
 
 	static std::vector<MeshDrawCommand> drawCmds;
@@ -172,7 +172,8 @@ void VulkanContext::draw(void* rendCtx) {
 		vkCmdPushConstants(frame.cmdBuffer, matBase->pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT,
 						   0, sizeof(BaseMatPush), &push);
 
-		vkCmdDraw(frame.cmdBuffer, vertices.size(), 1, 0, 0);
+		//vkCmdDraw(frame.cmdBuffer, vertices.size(), 1, 0, 0);
+		vkCmdDrawIndexed(frame.cmdBuffer, 36, 1, 0, 0, 0);
 	}
 
 	// Bind Pipeline
