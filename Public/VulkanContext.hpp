@@ -788,13 +788,13 @@ public:
 		VkResult vkResult;
 		LOGLINE(LogType::Info, LogMod::Vulkan, "Creating and binding global buffers... ");
 
-		// GlobalData
-		VkBufferCreateInfo globalDatabufferInfo{};
-		globalDatabufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-		globalDatabufferInfo.size = sizeof(CameraData);
-		globalDatabufferInfo.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
-		globalDatabufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-		Vk_CHECK(vkResult, vkCreateBuffer(m_vkDevice, &globalDatabufferInfo, nullptr, &camDataBuffer));
+		// cameraData
+		VkBufferCreateInfo camDatabufferInfo{};
+		camDatabufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+		camDatabufferInfo.size = sizeof(CameraData);
+		camDatabufferInfo.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+		camDatabufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+		Vk_CHECK(vkResult, vkCreateBuffer(m_vkDevice, &camDatabufferInfo, nullptr, &camDataBuffer));
 
 		VkMemoryRequirements memRequirements;
 		vkGetBufferMemoryRequirements(m_vkDevice, camDataBuffer, &memRequirements);
@@ -1540,15 +1540,17 @@ public:
 				layout = layoutIt->second;
 
 
-			//struct PendingWrite
-			//{
-			//	VkWriteDescriptorSet write{};
-			//	VkDescriptorBufferInfo bufferInfo{};
-			//	VkDescriptorImageInfo imageInfo{};
-			//};
+			struct PendingWrite
+			{
+				VkWriteDescriptorSet write{};
+				VkDescriptorBufferInfo bufferInfo{};
+				VkDescriptorImageInfo imageInfo{};
+			};
 
-			std::vector<VkWriteDescriptorSet> pendingWrites;
+			std::vector<PendingWrite> pendingWrites;
+			pendingWrites.reserve(key.bindings.size());
 			std::vector< VkDescriptorSetVariableDescriptorCountAllocateInfo> pendingCounts;
+			pendingCounts.reserve(key.bindings.size());
 			VkDescriptorSet descriptorSet;
 			BoundDescriptorKey descSetKey{};
 			descSetKey.layout = layout;
@@ -1561,21 +1563,22 @@ public:
 				if (set == MAT_CAMERADATA_SET && renderMan->getParamName(key.nameIndices[i]) == MAT_CAMERADATA_NAME) {
 					rBind.handle = reinterpret_cast<uint64_t>(&camDataBuffer);
 
-					VkDescriptorBufferInfo bufferInfo{};
-					bufferInfo.buffer = camDataBuffer;
-					bufferInfo.offset = 0;
-					bufferInfo.range = sizeof(CameraData);
+					PendingWrite pw{};
 
-					VkWriteDescriptorSet write{};
-					write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-					write.dstSet = nullptr;
-					write.dstBinding = key.bindings[i];
-					write.dstArrayElement = 0;
-					write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-					write.descriptorCount = 1;
-					write.pBufferInfo = &bufferInfo;
+					pw.bufferInfo.buffer = camDataBuffer;
+					pw.bufferInfo.offset = 0;
+					pw.bufferInfo.range = sizeof(CameraData);
 
-					pendingWrites.push_back(write);
+					pw.write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+					pw.write.dstSet = nullptr;
+					pw.write.dstBinding = key.bindings[i];
+					pw.write.dstArrayElement = 0;
+					pw.write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+					pw.write.descriptorCount = 1;
+					//pw.write.pBufferInfo = &pw.bufferInfo;
+
+					pendingWrites.push_back(pw);
+					pendingWrites.back().write.pBufferInfo = &pendingWrites.back().bufferInfo;
 
 				} else if (set == MAT_TEXTURES_SET && renderMan->getParamName(key.nameIndices[i]) == MAT_TEXTURES_NAME) {
 					rBind.handle = reinterpret_cast<uint64_t>(&textures);
@@ -1590,45 +1593,49 @@ public:
 				} else if (set == MAT_BASE_MAT_INSTANCES_SET && renderMan->getParamName(key.nameIndices[i]) == MAT_BASE_MAT_INSTANCES_NAME) {
 					rBind.handle = reinterpret_cast<uint64_t>(&matBuf_baseMatInstances);
 
-					VkDescriptorBufferInfo bufferInfo{};
-					bufferInfo.buffer = matBuf_baseMatInstances;
-					bufferInfo.offset = 0;
-					bufferInfo.range = sizeof(BaseMaterialInstance);
+					PendingWrite pw{};
 
-					VkWriteDescriptorSet write{};
-					write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-					write.dstSet = nullptr;
-					write.dstBinding = key.bindings[i];
-					write.dstArrayElement = 0;
-					write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-					write.descriptorCount = 1;
-					write.pBufferInfo = &bufferInfo;
+					
+					pw.bufferInfo.buffer = matBuf_baseMatInstances;
+					pw.bufferInfo.offset = 0;
+					pw.bufferInfo.range = sizeof(BaseMaterialInstance);
 
-					pendingWrites.push_back(write);
+					
+					pw.write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+					pw.write.dstSet = nullptr;
+					pw.write.dstBinding = key.bindings[i];
+					pw.write.dstArrayElement = 0;
+					pw.write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+					pw.write.descriptorCount = 1;
+					//pw.write.pBufferInfo = &pw.bufferInfo;
+
+					pendingWrites.push_back(pw);
+					pendingWrites.back().write.pBufferInfo = &pendingWrites.back().bufferInfo;
 
 				} else if (set == MAT_MODELMATRICES_SET && renderMan->getParamName(key.nameIndices[i]) == MAT_MODELMATRICES_NAME) {
 					rBind.handle = reinterpret_cast<uint64_t>(&matBuf_modelTransforms);
 
-					VkDescriptorBufferInfo bufferInfo{};
-					bufferInfo.buffer = matBuf_modelTransforms;
-					bufferInfo.offset = 0;
-					bufferInfo.range = sizeof(ModelTransform);
+					PendingWrite pw{};
 
-					VkWriteDescriptorSet write{};
-					write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-					write.dstSet = nullptr;
-					write.dstBinding = key.bindings[i];
-					write.dstArrayElement = 0;
-					write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-					write.descriptorCount = 1;
-					write.pBufferInfo = &bufferInfo;
+					pw.bufferInfo.buffer = matBuf_modelTransforms;
+					pw.bufferInfo.offset = 0;
+					pw.bufferInfo.range = sizeof(ModelTransform);
 
-					pendingWrites.push_back(write);
+					pw.write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+					pw.write.dstSet = nullptr;
+					pw.write.dstBinding = key.bindings[i];
+					pw.write.dstArrayElement = 0;
+					pw.write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+					pw.write.descriptorCount = 1;
+					//pw.write.pBufferInfo = &pw.bufferInfo;
+
+					pendingWrites.push_back(pw);
+					pendingWrites.back().write.pBufferInfo = &pendingWrites.back().bufferInfo;
 
 				} else if (set == MAT_SAMPLER_SET && renderMan->getParamName(key.nameIndices[i]) == MAT_SAMPLER_NAME) {
 					rBind.handle = reinterpret_cast<uint64_t>(&baseSamplers);
 
-					
+					PendingWrite pw{};
 
 					for (int i = 0; i < 1; ++i) {
 						VkDescriptorImageInfo info{};
@@ -1638,36 +1645,37 @@ public:
 						imageInfos.push_back(info);
 					}
 
-					VkWriteDescriptorSet write{};
-					write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-					write.dstSet = nullptr;
-					write.dstBinding = key.bindings[i];
-					write.dstArrayElement = 0;
-					write.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
-					write.descriptorCount = 1;
-					write.pImageInfo = imageInfos.data();
+					//VkWriteDescriptorSet write{};
+					pw.write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+					pw.write.dstSet = nullptr;
+					pw.write.dstBinding = key.bindings[i];
+					pw.write.dstArrayElement = 0;
+					pw.write.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
+					pw.write.descriptorCount = 1;
+					pw.write.pImageInfo = imageInfos.data();
 
-					pendingWrites.push_back(write);
+					pendingWrites.push_back(pw);
 
 				} else if (set == MAT_BASE_MAT_INSTANCES_INDICES_SET && renderMan->getParamName(key.nameIndices[i]) == MAT_BASE_MAT_INSTANCES_INDICES_NAME) {
 					
 					rBind.handle = reinterpret_cast<uint64_t>(&instanceIndexStage);
 
-					VkDescriptorBufferInfo bufferInfo{};
-					bufferInfo.buffer = instanceIndexStageBuffer;
-					bufferInfo.offset = 0;
-					bufferInfo.range = VK_WHOLE_SIZE;//sizeof(uint32_t) * instanceIndexStage.size();
+					PendingWrite pw{};
 
-					VkWriteDescriptorSet write{};
-					write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-					write.dstSet = nullptr;
-					write.dstBinding = key.bindings[i];
-					write.dstArrayElement = 0;
-					write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-					write.descriptorCount = 1;
-					write.pBufferInfo = &bufferInfo;
+					pw.bufferInfo.buffer = instanceIndexStageBuffer;
+					pw.bufferInfo.offset = 0;
+					pw.bufferInfo.range = VK_WHOLE_SIZE;//sizeof(uint32_t) * instanceIndexStage.size();
 
-					pendingWrites.push_back(write);
+					pw.write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+					pw.write.dstSet = nullptr;
+					pw.write.dstBinding = key.bindings[i];
+					pw.write.dstArrayElement = 0;
+					pw.write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+					pw.write.descriptorCount = 1;
+					//pw.write.pBufferInfo = &pw.bufferInfo;
+
+					pendingWrites.push_back(pw);
+					pendingWrites.back().write.pBufferInfo = &pendingWrites.back().bufferInfo;
 				}
 
 				descSetKey.bindings.push_back(rBind);
@@ -1696,10 +1704,10 @@ public:
 				Vk_CHECK(vkResult, vkAllocateDescriptorSets(m_vkDevice, &allocInfo, &descriptorSet));
 
 				
-				for (auto& write : pendingWrites) {
-					write.dstSet = descriptorSet;
-					__debugbreak();
-					vkUpdateDescriptorSets(m_vkDevice, 1, &write, 0, nullptr);
+				for (auto& pw : pendingWrites) {
+					pw.write.dstSet = descriptorSet;
+					//__debugbreak();
+					vkUpdateDescriptorSets(m_vkDevice, 1, &pw.write, 0, nullptr);
 				}
 
 				descriptorSetCache.insert({ descSetKey, descriptorSet });
