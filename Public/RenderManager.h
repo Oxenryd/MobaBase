@@ -67,6 +67,10 @@ public:
 	RenderManager() = delete;
 	~RenderManager() {
 		delete m_hotreloadTimer;
+		if (this != s_instance) {
+			delete s_instance;
+			s_instance = nullptr;
+		}
 	}
 	RenderManager(VulkanContext* const vkContext, ShaderCompilerBase* compiler, size_t paramArenaSize);
 	RenderManager(RenderManager&& other) = default;

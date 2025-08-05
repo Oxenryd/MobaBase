@@ -28,6 +28,8 @@ public:
         m_go = gameObjectSystem().createGameObject<GameObject>(m_name);
         MeshDescription meshInfo{};
         const std::string path = std::format("{}{}", ASSETS_DIR, "crytek-sponza-hd/sponza.obj");
+        //const std::string path = std::format("{}{}", ASSETS_DIR, "Cube/cube.obj");
+
         auto ec = sceneRender().loadModel(path, &meshInfo);
         if (!EC_FAILED(ec)) {
             MeshComponent meshComp{};
@@ -73,14 +75,14 @@ public:
         
         auto& mState = Engine::getInstance()->getInputManager()->currentMouseState();
         auto cam = Camera::getCamera(m_sceneIndex, m_camIndex);
-        std::cout << std::format("\n mPos: {},{}\twhDelta: {},{}\tpDelta: {},{}\tbState: {}",
-                                 mState.relativePosition.x,
-                                 mState.relativePosition.y,
-                                 mState.wheel.x,
-                                 mState.wheel.y,
-                                 mState.lastPositionDelta.x,
-                                 mState.lastPositionDelta.y,
-                                 mState.buttonState.getField());
+        //std::cout << std::format("\n mPos: {},{}\twhDelta: {},{}\tpDelta: {},{}\tbState: {}",
+        //                         mState.relativePosition.x,
+        //                         mState.relativePosition.y,
+        //                         mState.wheel.x,
+        //                         mState.wheel.y,
+        //                         mState.lastPositionDelta.x,
+        //                         mState.lastPositionDelta.y,
+        //                         mState.buttonState.getField());
 
         if (mState.buttonState.hasFlag(MouseButton::Right)) {
             

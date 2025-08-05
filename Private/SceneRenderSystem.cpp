@@ -26,7 +26,7 @@ ErrorCode SceneRenderSystem::loadModel(const std::string& filename, MeshDescript
 				&m_indices[iOffset], iCount);
 
 		}
-
+		RenderManager::getInstance()->vkContext()->reallocateVertexIndexBuffers();
 
 	}
 

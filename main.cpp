@@ -10,12 +10,13 @@
 
 
 	#ifdef DEBUGGING
-		#define _CRTDBG_MAP_ALLOC
-		#include <stdlib.h>
-		#include <crtdbg.h>		
+		#include "MemDebugFilter.hpp"
+		#include <stdlib.h>	
 
 		void finalBreak() {
 			Log::deInit();
+			//_CrtSetDumpClient(MyDumpClient);
+			//DumpFilteredLeaksManual();
 			_CrtDumpMemoryLeaks();
 			//__debugbreak();
 		}
@@ -38,8 +39,9 @@ void finalCleanup() {
 int __stdcall main(HINSTANCE hInstance, HINSTANCE instance, LPSTR str, int nCmdShow) {
 	
 #ifdef DEBUGGING
-	_CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
-	//_CrtSetBreakAlloc(175);
+	_CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF);
+	//_CrtSetReportHook(MyReportHook);
+	//_CrtSetBreakAlloc(14722);
 	atexit(finalBreak);
 #else
 	atexit(finalCleanup);

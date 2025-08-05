@@ -21,6 +21,14 @@ if(MSVC AND CMAKE_BUILD_TYPE STREQUAL "Release")
     set(CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} /LTCG")
     set(CMAKE_STATIC_LINKER_FLAGS_RELEASE "${CMAKE_STATIC_LINKER_FLAGS_RELEASE} /LTCG")
     set(CMAKE_SHARED_LINKER_FLAGS_RELEASE "${CMAKE_SHARED_LINKER_FLAGS_RELEASE} /LTCG")
+
+
+	## Make sure release build still generates PDBs
+    #add_compile_options("$<$<CONFIG:Release>:/Zi>")
+    #add_link_options("$<$<CONFIG:Release>:/DEBUG:FULL>")
+	#
+    ## Optional: keep function names and source info in optimised code
+    #add_compile_options("$<$<CONFIG:Release>:/Zo>")
 endif()
 
 # FETCHES -----------------------------------------------------------------------------
@@ -147,6 +155,7 @@ add_executable (MobaBase
 	"Public/GlobalComponents.hpp"
 	"Public/GlobalSystem.hpp"
 	"Public/Timing.h"
+	"Public/MemDebugFilter.hpp"
 
 	"Private/Engine.cpp"
 	"Private/Timer.cpp"
@@ -191,16 +200,19 @@ target_include_directories(MobaBase PRIVATE
 target_compile_definitions(MobaBase PRIVATE 
 	DEBUGGING
 	BUILD_WIN
+	#$<$<CONFIG:Debug>:LOGGING>
 	LOGGING
 	#IGPU_PRIO	
 	SHADER_HOTRELOAD
 
 	# VULKAN SPECIFICS
 	VULKAN_GLOBAL_DESCRIPTOR_SETS=2
+	#$<$<CONFIG:Debug>:VULKAN_VALIDATION>
 	VULKAN_VALIDATION
 	VULKAN_MAX_FRAMES_IN_FLIGHT=3
 	VULKAN_MAX_RUNTIMEARRAY_INSTANCES=1048576
 	VULKAN_MAX_TEXTURE_SSBO=512
+	VULKAN_INSTANCE_INDEX_STAGE_SIZE=16777216
 	
 	# Built In Mat Properties
 	MAT_BASE_VS=\"BaseVS\"
@@ -236,6 +248,7 @@ target_compile_definitions(MobaBase PRIVATE
 	RENDER_SCENE_MAX_THREADS=128
 
 	# Directories
+	SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/\"
 	ASSETS_DIR=\"${CMAKE_SOURCE_DIR}/Assets/\"
 	SHADER_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/Shaders\"
 	SHADER_TARGET_DIR=\"${CMAKE_BINARY_DIR}/Shaders/Build\"

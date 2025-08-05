@@ -177,24 +177,6 @@ public:
 	INLINE void rotate(const glm::vec3& rotationDelta) {
 		auto& comp = _markDirty();
 		comp.rotation = glm::normalize(glm::quat(rotationDelta) * comp.rotation);
-
-
-		//float pitch = rotationDelta.x;  // X = pitch (around X-axis)
-		//float yaw = rotationDelta.y;  // Y = yaw   (around Y-axis) 
-		//float roll = rotationDelta.z;  // Z = roll  (around Z-axis)
-
-		//// Create individual rotations
-		//glm::quat pitchRot = glm::angleAxis(pitch, glm::vec3(1, 0, 0));
-		//glm::quat yawRot = glm::angleAxis(yaw, glm::vec3(0, 1, 0));
-		//glm::quat rollRot = glm::angleAxis(roll, glm::vec3(0, 0, 1));
-
-		//// Combine in desired order (try different orders):
-		//glm::quat deltaRot = yawRot * pitchRot * rollRot;  // YXZ order
-		//// glm::quat deltaRot = rollRot * pitchRot * yawRot;  // ZXY order
-		//// glm::quat deltaRot = pitchRot * yawRot * rollRot;  // XYZ order
-
-		//comp.rotation = glm::normalize(deltaRot * comp.rotation);
-
 	}
 	INLINE void rotateLocal(const glm::vec3& rotDelta) {
 		auto& comp = _markDirty();

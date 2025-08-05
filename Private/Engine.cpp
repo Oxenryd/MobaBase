@@ -288,6 +288,7 @@ inline void Engine::_run() {
 
 	for (auto scene : m_scenes) {
 		scene->unloadDispatch();
+		delete scene;
 	}
 	m_scenes.clear();
 

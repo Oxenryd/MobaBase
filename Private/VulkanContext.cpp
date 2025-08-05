@@ -176,12 +176,6 @@ void VulkanContext::draw(void* rendCtx) {
 		vkCmdDrawIndexed(frame.cmdBuffer, indexCount, 1, indexOffset, vertexOffset, 0);
 	}
 
-	// Bind Pipeline
-	//vkCmdBindPipeline(frame.cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines[ctx->pipelineIndex]);
-
-	// Draw
-	//vkCmdDraw(frame.cmdBuffer, 3, 1, 0, 0);
-
 	// End Render Pass
 	vkCmdEndRenderPass(frame.cmdBuffer);
 

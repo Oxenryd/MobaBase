@@ -51,7 +51,11 @@ private:
 	//ArenaVector<Camera> m_cameras;
 
 public:
-	~SceneRenderSystem() {}
+	~SceneRenderSystem() {
+		s_threadIndex.clear();
+		s_threadIndex.~unordered_map();
+		new (&s_threadIndex) std::unordered_map<uint16_t, size_t>();
+	}
 	SceneRenderSystem(const SceneRenderSystem&) = delete;
 	SceneRenderSystem& operator=(const SceneRenderSystem&) = delete;
 	SceneRenderSystem(SceneRenderSystem&&) = delete;

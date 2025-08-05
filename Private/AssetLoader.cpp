@@ -108,7 +108,6 @@ ErrorCode AssetLoader::loadModel(
 	}
 	meshes.push_back(mesh);
 
-	
 	LOGLINE(LogType::Info, LogMod::Assets, std::format("\t{} meshes, {}/{} materials/new, {} total vertices... ",
 													   mesh.subMeshCount, scene->mNumMaterials, newMats, vertCount));
 	LOG(LogType::Success, "Done.");

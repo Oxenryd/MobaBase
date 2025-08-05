@@ -4,7 +4,13 @@
 #pragma warning(push)
 #pragma warning(disable : 28251)
 
+//#include <csignal>
+//#ifndef SIGTRAP
+//#define SIGTRAP 5 // works for GCC/Clang, but not meaningful in MSVC
+//#endif
+
 #ifdef BUILD_WIN
+
 	#ifndef _INC_WINAPIFAMILY
 		#define WIN32_LEAN_AND_MEAN
 		#define NOMINMAX
@@ -557,6 +563,10 @@ public:
 
 	std::vector<VkTextureResource> textures;
 
+	std::vector<uint32_t> instanceIndexStage;
+	VkBuffer instanceIndexStageBuffer = nullptr;
+	VkDeviceMemory instanceIndexStageMemory = nullptr;
+
 	std::vector<BaseMaterialInstance> matData_baseMatInstances;
 	VkBuffer matBuf_baseMatInstances = nullptr;
 	VkDeviceMemory matDevMem_baseMatInstances = nullptr;
@@ -602,8 +612,7 @@ public:
 		//pipelines.reserve(2048);
 	}
 
-	INLINE VkResult registerMesh(BaseVSIn* vertices, uint32_t vertexCount, uint32_t* indices, uint32_t indexCount) {
-		VkResult vkResult{};
+	INLINE void registerMesh(BaseVSIn* vertices, uint32_t vertexCount, uint32_t* indices, uint32_t indexCount) {
 		
 		auto vertStartId = this->vertices.size();
 		this->vertices.resize(vertStartId + vertexCount);
@@ -613,14 +622,24 @@ public:
 		this->indices.resize(indexStartId + indexCount);
 		std::memcpy(&this->indices[indexStartId], indices, indexCount * sizeof(uint32_t));
 
-		//for (size_t i = 0; i < vertexCount; ++i) {
-		//	this->vertices.push_back(vertices[i]);
-		//}
-		//for (size_t i = 0; i < indexCount; ++i) {
-		//	this->indices.push_back(indices[i]);
-		//}
+		
+	}
+
+	INLINE VkResult reallocateVertexIndexBuffers() {
+		VkResult vkResult{};
 
 		// Vertexbuffer
+		bool destroyedVertex = false;
+		if (vertexBuffer) {
+			vkDestroyBuffer(m_vkDevice, vertexBuffer, nullptr);
+			vertexBuffer = VK_NULL_HANDLE;
+			destroyedVertex = true;
+		}
+		if (vertexMemory) {
+			vkFreeMemory(m_vkDevice, vertexMemory, nullptr);
+			vertexMemory = VK_NULL_HANDLE;
+			destroyedVertex = true;
+		}
 		VkDeviceSize vertexBufferSize = sizeof(BaseVSIn) * this->vertices.size();
 		VkBufferCreateInfo vBufferInfo{};
 		vBufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -647,6 +666,14 @@ public:
 		vkUnmapMemory(m_vkDevice, vertexMemory);
 
 		// IndexBuffer
+		if (indexBuffer) {
+			vkDestroyBuffer(m_vkDevice, indexBuffer, nullptr);
+			indexBuffer = VK_NULL_HANDLE;
+		}
+		if (indexMemory) {
+			vkFreeMemory(m_vkDevice, indexMemory, nullptr);
+			indexMemory = VK_NULL_HANDLE;
+		}
 		VkDeviceSize indexBufferSize = sizeof(uint32_t) * this->indices.size();
 		VkBufferCreateInfo iBufferInfo{};
 		iBufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -676,7 +703,7 @@ public:
 		return VK_SUCCESS;
 	}
 
-	inline VkResult initVulkan(const VkPresentModeKHR mode, bool prioIGpu = false) {
+	INLINE VkResult initVulkan(const VkPresentModeKHR mode, bool prioIGpu = false) {
 		VkResult vk{};
 
 		for (size_t i = 0; i < VULKAN_MAX_FRAMES_IN_FLIGHT; ++i) {
@@ -825,15 +852,16 @@ public:
 		Vk_CHECK(vkResult, vkBindBufferMemory(m_vkDevice, matBuf_modelTransforms, matDevMem_modelTransforms, 0));
 
 
-		// Indices
+		// Instance Stage Indices
+		instanceIndexStage.resize(VULKAN_INSTANCE_INDEX_STAGE_SIZE);
 		VkBufferCreateInfo indicesBufferInfo{};
 		indicesBufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-		indicesBufferInfo.size = sizeof(BaseMaterialInstance);
+		indicesBufferInfo.size = sizeof(uint32_t) * instanceIndexStage.size();
 		indicesBufferInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
 		indicesBufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-		Vk_CHECK(vkResult, vkCreateBuffer(m_vkDevice, &indicesBufferInfo, nullptr, &indexBuffer));
+		Vk_CHECK(vkResult, vkCreateBuffer(m_vkDevice, &indicesBufferInfo, nullptr, &instanceIndexStageBuffer));
 
-		vkGetBufferMemoryRequirements(m_vkDevice, indexBuffer, &memRequirements);
+		vkGetBufferMemoryRequirements(m_vkDevice, instanceIndexStageBuffer, &memRequirements);
 
 		VkMemoryAllocateInfo indexAllocInfo{};
 		indexAllocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
@@ -842,8 +870,8 @@ public:
 														 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
 														 m_phyDevice);
 
-		Vk_CHECK(vkResult, vkAllocateMemory(m_vkDevice, &indexAllocInfo, nullptr, &indexMemory));
-		Vk_CHECK(vkResult, vkBindBufferMemory(m_vkDevice, indexBuffer, indexMemory, 0));
+		Vk_CHECK(vkResult, vkAllocateMemory(m_vkDevice, &indexAllocInfo, nullptr, &instanceIndexStageMemory));
+		Vk_CHECK(vkResult, vkBindBufferMemory(m_vkDevice, instanceIndexStageBuffer, instanceIndexStageMemory, 0));
 
 
 		// Dummy texture
@@ -1346,8 +1374,7 @@ public:
 		return VK_SUCCESS;
 	}
 
-
-	inline VkResult createPipelineFromMaterial(RenderManager* const renderMan, Material& material)
+	VkResult createPipelineFromMaterial(RenderManager* const renderMan, Material& material)
 	{
 		LOGLINE(LogType::Info, LogMod::Vulkan, std::string{ "Creating Pipeline for " + material.name() + "... "});
 		VkResult vkResult{};
@@ -1513,6 +1540,13 @@ public:
 				layout = layoutIt->second;
 
 
+			//struct PendingWrite
+			//{
+			//	VkWriteDescriptorSet write{};
+			//	VkDescriptorBufferInfo bufferInfo{};
+			//	VkDescriptorImageInfo imageInfo{};
+			//};
+
 			std::vector<VkWriteDescriptorSet> pendingWrites;
 			std::vector< VkDescriptorSetVariableDescriptorCountAllocateInfo> pendingCounts;
 			VkDescriptorSet descriptorSet;
@@ -1617,12 +1651,12 @@ public:
 
 				} else if (set == MAT_BASE_MAT_INSTANCES_INDICES_SET && renderMan->getParamName(key.nameIndices[i]) == MAT_BASE_MAT_INSTANCES_INDICES_NAME) {
 					
-					rBind.handle = reinterpret_cast<uint64_t>(&indexBuffer);
+					rBind.handle = reinterpret_cast<uint64_t>(&instanceIndexStage);
 
 					VkDescriptorBufferInfo bufferInfo{};
-					bufferInfo.buffer = indexBuffer;
+					bufferInfo.buffer = instanceIndexStageBuffer;
 					bufferInfo.offset = 0;
-					bufferInfo.range = sizeof(uint32_t);
+					bufferInfo.range = VK_WHOLE_SIZE;//sizeof(uint32_t) * instanceIndexStage.size();
 
 					VkWriteDescriptorSet write{};
 					write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -1664,6 +1698,7 @@ public:
 				
 				for (auto& write : pendingWrites) {
 					write.dstSet = descriptorSet;
+					__debugbreak();
 					vkUpdateDescriptorSets(m_vkDevice, 1, &write, 0, nullptr);
 				}
 
@@ -1734,7 +1769,6 @@ public:
 		LOG(LogType::Success, "Done.");
 		return VK_SUCCESS;
 	}
-
 
 	inline VkResult createFramebuffers() {
 		LOGLINE(LogType::Info, LogMod::Vulkan, "Creating Framebuffers... ");
