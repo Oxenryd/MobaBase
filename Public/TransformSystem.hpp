@@ -54,14 +54,14 @@ public:
 			auto& transform = view.get<TransformComponent>(entity);
 			auto id = entt::to_integral(entity);
 
-			if (!transform.state.isSet(ObjectState::DirtyTransform))
+			if (!transform.state.hasFlag(ObjectState::DirtyTransform))
 				continue;
 
 			// Build local matrix
 			glm::mat4 local = transform.trs();
 
 			// Combine with parent
-			if (!(transform.state.isSet(ObjectState::IgnoreParentTransform))) {
+			if (!(transform.state.hasFlag(ObjectState::IgnoreParentTransform))) {
 				entt::entity parent = m_parentOf.empty() ? entt::null : m_parentOf[id];
 				if (parent != entt::null && m_reg->valid(parent) && m_reg->all_of<TransformComponent>(parent)) {
 					const auto& parentTransform = m_reg->get<TransformComponent>(parent);

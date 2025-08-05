@@ -37,7 +37,7 @@ template <DerivedFromHeapArenaAllocator Alloc>
 struct FrameData
 {
 	std::vector<RenderCommand> renderCommands;
-	GlobalData globals;
+	CameraData globals;
 	std::vector<glm::mat4, Alloc<VSInput>> modelMatrices
 };
 

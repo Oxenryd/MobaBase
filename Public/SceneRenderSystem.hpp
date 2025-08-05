@@ -1,5 +1,5 @@
-#ifndef RENDERING_SYSTEM_HPP
-#define RENDERING_SYSTEM_HPP
+#ifndef SCENERENDER_SYSTEM_HPP
+#define SCENERENDER_SYSTEM_HPP
 
 #include <SystemECS.h>
 #include <entt/entt.hpp>
@@ -12,6 +12,7 @@
 #include "MeshComponent.hpp"
 #include "DrawCommand.hpp"
 #include "AssetLoader.h"
+#include "Camera.hpp"
 
 
 #include "RenderManager.h" // WARNING!!
@@ -47,6 +48,7 @@ private:
 	ArenaVector<SubMesh> m_subMeshes;
 	ArenaVector<BaseVSIn> m_vertices;
 	ArenaVector<uint32_t> m_indices;
+	//ArenaVector<Camera> m_cameras;
 
 public:
 	~SceneRenderSystem() {}
@@ -64,6 +66,7 @@ public:
 		m_pendingDrawCommands{ ArenaAllocator<DrawCommand>{arena} },
 		m_persistentDrawCommands{ ArenaAllocator<DrawCommand>{arena} },
 		m_persistentDcmdHashIndexMap{ ArenaAllocator<std::pair<const uint64_t, size_t>>(arena) },
+		//m_cameras { ArenaAllocator<Camera>{arena} },
 		//s_pendingDrawCommands{ SCENE_MAX_SCENES, ArenaVector<DrawCommand>{RENDER_SCENE_MAX_THREADS, ArenaAllocator<DrawCommand>{arena} } },
 		s_threadPresistentDrawBuffers{ SCENE_MAX_SCENES, ArenaVector<MeshDrawCommand>{ArenaAllocator<MeshDrawCommand>{arena} } },
 		s_persistentDcmdHashIndexMap{ SCENE_MAX_SCENES, ArenaUMap<uint64_t, size_t>{RENDER_SCENE_MAX_THREADS, ArenaAllocator<std::pair<const uint64_t, size_t>>(arena) } }
@@ -138,11 +141,14 @@ public:
 		cancelPersistentDraw(drawCmd.hash());
 	}
 
+	uint32_t addCamera(CameraData* initData = nullptr);
+
 	std::span<MeshDrawCommand> persistentDrawCommands() { 
 		return std::span<MeshDrawCommand>(s_threadPresistentDrawBuffers[m_sceneIndex]); }
 
 	std::span<BaseVSIn> getVertices() { return std::span<BaseVSIn>(m_vertices); }
 	std::span<SubMesh> getSubMeshes() { return std::span<SubMesh>(m_subMeshes); }
+	//std::span<Camera> getCameras() { return std::span<Camera>(m_cameras); }
 };
 
 #endif

@@ -4,10 +4,11 @@
 #include <concepts>
 #include <glm/glm.hpp>
 #include <glm/gtx/quaternion.hpp>
+#include "GlobalMacros.h"
 
 namespace MMath
 {
-	static inline glm::mat4x4 composeTRS(const glm::vec3& position, const glm::quat& rotation, const glm::vec3& scale) {
+	INLINE static glm::mat4x4 composeTRS(const glm::vec3& position, const glm::quat& rotation, const glm::vec3& scale) {
 
         glm::mat4 rot = glm::mat4_cast(rotation);
         rot[0] *= scale.x;
@@ -17,6 +18,15 @@ namespace MMath
         rot[3] = glm::vec4(position, 1.0f);
         return rot;
 	}
+
+    INLINE static glm::mat4x4 composeTRS_Inverse(const glm::vec3& position, const glm::quat& rotation, const glm::vec3& scale) {
+
+        glm::vec3 invScale = 1.0f / scale;
+        glm::quat invRotation = glm::conjugate(rotation);
+        glm::vec3 invTranslation = -(invRotation * (position * invScale));
+
+        return composeTRS(invTranslation, invRotation, invScale);
+    }
 }
 
 

@@ -2,7 +2,7 @@
 #define TEMPLATES_HPP
 
 #include "Scene.h"
-
+#include "Timing.h"
 #include "Engine.h" // DELETE DELETE
 
 class GameScene : public Scene<GameScene>
@@ -12,9 +12,9 @@ private:
     uint64_t m_drawHash{ 0 };
     std::string m_name{ "TestObject" };
     GameObject m_go;
+    uint32_t m_camIndex;
+    float m_camSpeed = 7.5f;
 
-    glm::vec3 m_camPos;
-    glm::quat m_camRot;
 
 public:
     GameScene(size_t arenaSize, uint32_t sceneIndex)
@@ -36,6 +36,29 @@ public:
         }
 
         sceneRender().submitPersistent(m_go, meshInfo.meshIndex, 0, 512);
+        m_camIndex = sceneRender().addCamera();
+        Engine::getInstance()->setMainCamera(m_sceneIndex, m_camIndex);
+
+        Engine::getInstance()->getInputManager()->onKeyHold.subscribe( [this](KeyCode code) -> void
+                                                                    {
+                                                                           auto cam = Camera::getCamera(m_sceneIndex, m_camIndex);
+                                                                           auto dt = Timing::deltaTimeF();
+                                                                           switch (code) {
+                                                                               case KeyCode::W:
+                                                                                   cam->translate(cam->transform().forward() * m_camSpeed * dt); break;
+                                                                               case KeyCode::S:
+                                                                                   cam->translate(-cam->transform().forward() * m_camSpeed * dt); break;
+                                                                               case KeyCode::A:
+                                                                                   cam->translate(-cam->transform().right() * m_camSpeed * dt); break;
+                                                                               case KeyCode::D:
+                                                                                   cam->translate(cam->transform().right() * m_camSpeed * dt); break;
+                                                                               case KeyCode::Q:
+                                                                                   cam->translate(cam->transform().up() * m_camSpeed * dt); break;
+                                                                               case KeyCode::E:
+                                                                                   cam->translate(-cam->transform().up() * m_camSpeed * dt); break;
+                                                                           }
+                                                                           
+                                                                       });
     }
 
     void update(float dt) {
@@ -46,13 +69,24 @@ public:
 
         float rotSize = 1.75f;
         auto transform = m_go.transform();
-        //transform.modifyPosition() = glm::vec3{ rotSize * cos, rotSize * sin, 0.0};
-        //
-        //transform.modifyRotation() = glm::quat( glm::vec3{0.0f, cos, 0.5f * sin });
-        //
-        //transform.modifyScale() = glm::vec3{0.5f * cos + 0.55f};
 
         
+        auto& mState = Engine::getInstance()->getInputManager()->currentMouseState();
+        auto cam = Camera::getCamera(m_sceneIndex, m_camIndex);
+        std::cout << std::format("\n mPos: {},{}\twhDelta: {},{}\tpDelta: {},{}\tbState: {}",
+                                 mState.relativePosition.x,
+                                 mState.relativePosition.y,
+                                 mState.wheel.x,
+                                 mState.wheel.y,
+                                 mState.lastPositionDelta.x,
+                                 mState.lastPositionDelta.y,
+                                 mState.buttonState.getField());
+
+        if (mState.buttonState.hasFlag(MouseButton::Right)) {
+            
+            glm::vec3 rotation{};
+            cam->rotateLocal({ -(float)mState.lastPositionDelta.x * dt, -(float)mState.lastPositionDelta.y * dt, 0.0f });
+        }        
     }
 
     void lateUpdate(float dt) {

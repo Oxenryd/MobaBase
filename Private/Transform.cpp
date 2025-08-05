@@ -2,10 +2,23 @@
 #include "TransformSystem.hpp"
 #include "Engine.h"
 
+const glm::mat4x4& Transform::localToWorld() const {
+	auto& comp = m_reg->get<TransformComponent>(m_entity);
+	return Engine::getInstance()->getScene(comp.sceneIndex)->transformSystem().modelTransforms().at(comp.matrixIndex);
+}
+
+const glm::mat4x4 Transform::worldToLocal() const {
+	auto& comp = m_reg->get<TransformComponent>(m_entity);
+	return glm::inverse(
+		static_cast<glm::mat4x4>(
+			Engine::getInstance()->getScene(comp.sceneIndex)->transformSystem().modelTransforms().at(comp.matrixIndex)
+			)
+	); // MIGHT CACHE THIS IN THE FUTURE TOO INSIDE THE SYSTEM LIKE LOCALTOWORLD
+}
+
 std::span<entt::entity> Transform::getChildren() {
 	auto& comp = m_reg->get<TransformComponent>(m_entity);
 	return Engine::getInstance()->getScene(comp.sceneIndex)->transformSystem().getChildren(m_entity);
-	//return result ? std::optional<std::vector<entt::entity>&>{*result} : std::nullopt;
 }
 
 std::optional<Transform> Transform::getParent() {
@@ -37,7 +50,6 @@ std::span<entt::entity> Transform::getChildren(ArenaRegistry* registry, entt::en
 		return std::span<entt::entity>();
 
 	return Engine::getInstance()->getScene(comp->sceneIndex)->transformSystem().getChildren(ofEntity);
-	//return result ? std::optional<std::vector<entt::entity>&>{*result} : std::nullopt;
 }
 
 std::optional<Transform> Transform::getParent(ArenaRegistry* registry, entt::entity ofEntity) {

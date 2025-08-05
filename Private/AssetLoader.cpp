@@ -35,7 +35,6 @@ ErrorCode AssetLoader::loadModel(
 	size_t vertCount = 0;
 	size_t indexCount = 0;
 	uint32_t newMats = 0;
-	uint32_t parsedMats = 0;
 
 	for (unsigned int i = 0; i < scene->mNumMeshes; ++i) {
 		const aiMesh* aiMesh = scene->mMeshes[i];
@@ -78,8 +77,10 @@ ErrorCode AssetLoader::loadModel(
 		
 
 		// Material
+		std::set<uint32_t> matIndices;
 		const aiMaterial* aiMat = scene->mMaterials[aiMesh->mMaterialIndex];
 		if (aiMat) {
+
 			auto material = render.getMaterial(aiMat->GetName().C_Str());
 			if (!material) {
 				auto& newMat = createMaterial(aiMat);
@@ -93,7 +94,7 @@ ErrorCode AssetLoader::loadModel(
 			} else {
 				subMesh.materialIndex = material->matIndex;
 			}
-			parsedMats++;
+
 		} else {
 			subMesh.materialIndex = UINT32_INVALID;
 		}
@@ -104,16 +105,12 @@ ErrorCode AssetLoader::loadModel(
 		outMeshInfo->meshIndex = meshes.size();
 		outMeshInfo->subMeshCount = subMeshBuffer.size() - mesh.firstSubMeshIndex;
 		outMeshInfo->subMeshOffset = mesh.firstSubMeshIndex;
-		//outMeshInfo->vertexOffset = subMeshBuffer[mesh.firstSubMeshIndex].vertexOffset;
-		//outMeshInfo->vertexCount = vertCount;
-		//outMeshInfo->indexOffset = subMeshBuffer[mesh.firstSubMeshIndex].indexOffset;
-		//outMeshInfo->indexCount = indexCount;
 	}
 	meshes.push_back(mesh);
 
 	
 	LOGLINE(LogType::Info, LogMod::Assets, std::format("\t{} meshes, {}/{} materials/new, {} total vertices... ",
-													   mesh.subMeshCount, parsedMats, newMats, vertCount));
+													   mesh.subMeshCount, scene->mNumMaterials, newMats, vertCount));
 	LOG(LogType::Success, "Done.");
 	return ErrorCode::OK;
 }

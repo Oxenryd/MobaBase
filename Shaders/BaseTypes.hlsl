@@ -69,12 +69,15 @@ struct BaseMaterialInstance
 
 // Globals
 [[vk::binding(0, 0)]]
-cbuffer globalData : register(b0, space0)
+cbuffer cameraData : register(b0, space0)
 {
     float4x4 worldToView;
     float4x4 projection;
     float4 cameraPosition;
-    double time;
+    float vFov;
+    float nearPlane;
+    float farPlane;
+    float aspectRatio;
 };
 
 
@@ -133,8 +136,8 @@ struct BasePSIn
 
 float4 RetainGlobals()
 {
-    double dummy = time * time;
-    if (dummy == -9999.0)
+    double dummy = cameraPosition.x * cameraPosition.x;
+    if (dummy == -9999999.0)
     {
         double4 dummy2 = dummy.xxxx + textures[0].SampleLevel(smp, float2(0, 0), 0.0);
         double4 dummy3 = dummy2 + baseMatInstances[0].ambient.xyzx;

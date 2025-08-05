@@ -11,18 +11,27 @@
 #include "ObjectState.hpp"
 #include "GlobalMacros.h"
 
+constexpr glm::vec3 DIR_FORWARD{ 0.0f, 0.0f, -1.0f };
+constexpr glm::vec3 DIR_RIGHT{ 1.0f, 0.0f, 0.0f };
+constexpr glm::vec3 DIR_UP{ 0.0f, 1.0f, 0.0f };
+
 struct TransformComponent
 {
-	
 	uint32_t matrixIndex{ UINT32_INVALID };
-	glm::vec3 position{};
-	glm::quat rotation{};
+	glm::vec3 position{0, 0, 0};
+	glm::quat rotation{1, 0, 0, 0};
 	glm::vec3 scale{1,1,1};
 	uint16_t sceneIndex{ UINT16_INVALID };
 	StateField state{0};
+	void* callbackUserData = nullptr;
+	void (*onDirtyCallback)(void* userData) = nullptr;
 
-	glm::mat4x4 trs() {
+	INLINE glm::mat4x4 trs() {
 		return MMath::composeTRS(position, rotation, scale);
+	}
+
+	INLINE glm::mat4x4 trs_inv() {
+		return MMath::composeTRS_Inverse(position, rotation, scale);
 	}
 };
 
@@ -36,6 +45,9 @@ private:
 	INLINE TransformComponent& _markDirty() {
 		auto& comp = m_reg->get<TransformComponent>(m_entity);
 		comp.state.setByEnum(ObjectState::DirtyTransform);
+		if (comp.onDirtyCallback) {
+			comp.onDirtyCallback(comp.callbackUserData);
+		}
 		return comp;
 	}
 
@@ -84,7 +96,9 @@ public:
 		return _markDirty().position;
 	}
 	INLINE glm::quat& modifyRotation() {
-		return _markDirty().rotation;
+		auto& rot = _markDirty().rotation;
+		rot = glm::normalize(rot);
+		return rot;
 	}
 	INLINE glm::vec3& modifyScale() {
 		return _markDirty().scale;
@@ -92,17 +106,153 @@ public:
 	INLINE StateField& modifyState() {
 		return _markDirty().state;
 	}
+	INLINE glm::quat& setFromEuler(const glm::vec3& anglesDeg) {
+		return modifyRotation() = glm::quat{ glm::radians(anglesDeg) };
+	}
 
 	INLINE const glm::vec3& position() const { return m_reg->get<TransformComponent>(m_entity).position; }
 	INLINE const glm::vec3& scale() const { return m_reg->get<TransformComponent>(m_entity).scale; }
 	INLINE const glm::quat& rotation() const { return m_reg->get<TransformComponent>(m_entity).rotation; }
 	INLINE const StateField& state() const { return m_reg->get<TransformComponent>(m_entity).state; }
+	INLINE const glm::vec3 eulerAngles() const { return glm::eulerAngles(m_reg->get<TransformComponent>(m_entity).rotation); }
 
-	INLINE const glm::mat4x4 trs() const { return m_reg->get<TransformComponent>(m_entity).trs(); }
+	INLINE const glm::mat4x4& localToWorld() const;
+	INLINE const glm::mat4x4 worldToLocal() const;
+	INLINE glm::mat3 normalMatrix() const {
+
+		glm::mat3 rotScale = glm::mat3_cast(rotation());
+		auto& s = scale();
+		rotScale[0] /= (s.x * s.x);
+		rotScale[1] /= (s.y * s.y);
+		rotScale[2] /= (s.z * s.z);
+		return rotScale;
+	}
+	INLINE glm::mat4x4 translationMatrix() const {
+		return glm::translate(glm::mat4(1.0f), position());
+	}
+	INLINE glm::mat4x4 scaleMatrix() const {
+		return glm::scale(glm::mat4(1.0f), scale());
+	}
+	INLINE glm::mat4x4 rotationMatrix() const {
+		return glm::mat4_cast(rotation());
+	}
+	INLINE glm::mat4 translationRotationMatrix() const {
+		return MMath::composeTRS(position(), rotation(), glm::vec3(1.0f));
+	}
 
 	bool isValid() const {
 		return m_reg && m_reg->valid(m_entity) && m_reg->all_of<TransformComponent>(m_entity);
 	}
+
+	INLINE Transform& lerpBetween(const Transform& a, const Transform& b, float t) {
+		auto& comp = _markDirty();
+		const TransformComponent& A = a;
+		const TransformComponent& B = b;
+		comp.position = glm::mix(A.position, B.position, t);
+		comp.rotation = glm::slerp(A.rotation, B.rotation, t);
+		comp.scale = glm::mix(A.scale, B.scale, t);
+		return *this;
+	}
+
+	INLINE glm::vec3& lerpPosition(const glm::vec3& a, const glm::vec3& b, float t) {
+		return modifyPosition() = glm::mix(a, b, t);
+	}
+
+	INLINE glm::quat& lerpRotation(const glm::quat& a, const glm::quat& b, float t) {
+		return modifyRotation() = glm::slerp(a, b, t);
+	}
+
+	INLINE glm::vec3& lerpScale(const glm::vec3& a, const glm::vec3& b, float t) {
+		return modifyScale() = glm::mix(a, b, t);
+	}
+
+	INLINE glm::vec3 forward() { return rotation() * DIR_FORWARD; }
+	INLINE glm::vec3 right() { return rotation() * DIR_RIGHT; }
+	INLINE glm::vec3 up() { return rotation() * DIR_UP; }
+
+	INLINE void translate(const glm::vec3& direction) {
+		auto& comp = _markDirty();
+		comp.position += direction;
+	}
+	INLINE void rotate(const glm::vec3& rotationDelta) {
+		auto& comp = _markDirty();
+		comp.rotation = glm::normalize(glm::quat(rotationDelta) * comp.rotation);
+
+
+		//float pitch = rotationDelta.x;  // X = pitch (around X-axis)
+		//float yaw = rotationDelta.y;  // Y = yaw   (around Y-axis) 
+		//float roll = rotationDelta.z;  // Z = roll  (around Z-axis)
+
+		//// Create individual rotations
+		//glm::quat pitchRot = glm::angleAxis(pitch, glm::vec3(1, 0, 0));
+		//glm::quat yawRot = glm::angleAxis(yaw, glm::vec3(0, 1, 0));
+		//glm::quat rollRot = glm::angleAxis(roll, glm::vec3(0, 0, 1));
+
+		//// Combine in desired order (try different orders):
+		//glm::quat deltaRot = yawRot * pitchRot * rollRot;  // YXZ order
+		//// glm::quat deltaRot = rollRot * pitchRot * yawRot;  // ZXY order
+		//// glm::quat deltaRot = pitchRot * yawRot * rollRot;  // XYZ order
+
+		//comp.rotation = glm::normalize(deltaRot * comp.rotation);
+
+	}
+	INLINE void rotateLocal(const glm::vec3& rotDelta) {
+		auto& comp = _markDirty();
+
+		float yaw = rotDelta.x;
+		float pitch = rotDelta.y;
+		float roll = rotDelta.z;
+
+		comp.rotation = glm::normalize(comp.rotation);
+
+		// Get current pitch for clamping
+		glm::vec3 forward = comp.rotation * DIR_FORWARD;
+		float currentPitch = asin(glm::clamp(forward.y, -1.0f, 1.0f));
+
+		// Clamp pitch
+		const float maxPitch = glm::radians(89.0f);
+		float newPitch = glm::clamp(currentPitch + pitch, -maxPitch, maxPitch);
+		pitch = newPitch - currentPitch;
+
+		// Apply rotations
+		glm::quat yawRotation = glm::angleAxis(yaw, DIR_UP);
+		glm::vec3 rightVector = comp.rotation * DIR_RIGHT;
+		glm::quat pitchRotation = glm::angleAxis(pitch, rightVector);
+
+		// Only apply roll if explicitly requested
+		if (abs(roll) > 1e-6f) {
+			glm::vec3 forwardVector = comp.rotation * DIR_FORWARD;
+			glm::quat rollRotation = glm::angleAxis(roll, forwardVector);
+			comp.rotation = glm::normalize(rollRotation * pitchRotation * yawRotation * comp.rotation);
+		} else {
+			comp.rotation = glm::normalize(yawRotation * pitchRotation * comp.rotation);
+		}
+	}
+
+	INLINE void rotateAroundWorldAxis(const glm::vec3& axis, float angle) {
+		auto& comp = _markDirty();
+		glm::quat deltaRot = glm::angleAxis(angle, axis);
+		comp.rotation = glm::normalize(deltaRot * comp.rotation);
+	}
+	INLINE void lookAt(const glm::vec3& target, const glm::vec3& up = DIR_UP) {
+		glm::vec3 forward = glm::normalize(target - position());
+		auto& rot = modifyRotation();
+		rot = glm::quatLookAt(forward, up);
+	}
+
+	INLINE glm::vec3 transformPoint(const glm::vec3& localPoint) const {
+		glm::vec4 worldPoint = localToWorld() * glm::vec4(localPoint, 1.0f);
+		return glm::vec3(worldPoint);
+	}
+	INLINE glm::vec3 transformDirection(const glm::vec3& localDirection) const {
+		auto& comp = m_reg->get<TransformComponent>(m_entity);
+		return comp.rotation * (localDirection * comp.scale);
+	}
+	INLINE glm::vec3 transformNormal(const glm::vec3& localNormal) const {
+		return normalMatrix() * localNormal;
+	}
+
+
 
 	std::span<entt::entity> getChildren();
 	std::optional<Transform> getParent();
@@ -124,6 +274,7 @@ public:
 	INLINE static StateField& state(ArenaRegistry* registry, entt::entity entity) {
 		return registry->get<TransformComponent>(entity).state;
 	}
+
 	static std::span<entt::entity> getChildren(ArenaRegistry* registry, entt::entity ofEntity);
 	static std::optional<Transform> getParent(ArenaRegistry* registry, entt::entity ofEntity);
 };

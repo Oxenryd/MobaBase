@@ -68,7 +68,7 @@ public:
 
 		auto transform = m_reg->try_get<TransformComponent>(m_entity);
 		if (transform) {
-			if (transform->state.isSet(ObjectState::LocalEnableOverride))
+			if (transform->state.hasFlag(ObjectState::LocalEnableOverride))
 				return;
 
 			std::span<entt::entity> children = Transform::getChildren(m_reg, m_entity);

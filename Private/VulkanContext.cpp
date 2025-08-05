@@ -40,19 +40,6 @@ void VulkanContext::draw(void* rendCtx) {
 	clearValues[1].depthStencil = { 1.0f, 0 };
 
 
-
-	//VkClearValue clearColor{};
-	//clearColor.color.float32[0] = ctx->clearColor[0];
-	//clearColor.color.float32[1] = ctx->clearColor[1];
-	//clearColor.color.float32[2] = ctx->clearColor[2];
-	//clearColor.color.float32[3] = ctx->clearColor[3];
-	//VkClearValue stencilClear{ 1.0f, 0 };
-	//stencilClear.
-	//VkClearValue clearValues[] = {
-	//	clearColor,
-	//	stencilClear
-	//};
-
 	VkRenderPassBeginInfo renderPassInfo{};
 	renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
 	renderPassInfo.renderPass = rendPasses[ctx->renderPassIndex];
@@ -108,11 +95,11 @@ void VulkanContext::draw(void* rendCtx) {
 	bool pendingRebind = false;
 
 
-	// Update GlobalData cBuffer
+	// Update CameraData cBuffer
 	void* mappedData = nullptr;
-	vkMapMemory(m_vkDevice, matDevMem_globalData, 0, sizeof(GlobalData), 0, &mappedData);
-	memcpy(mappedData, &matData_globalData, sizeof(GlobalData));
-	vkUnmapMemory(m_vkDevice, matDevMem_globalData);
+	vkMapMemory(m_vkDevice, camDataMemory, 0, sizeof(CameraData), 0, &mappedData);
+	memcpy(mappedData, &Engine::getInstance()->mainCamera()->cameraData(), sizeof(CameraData)); //memcpy(mappedData, &camData, sizeof(CameraData));
+	vkUnmapMemory(m_vkDevice, camDataMemory);
 
 	// Check the draw commands and issue binds and draw calls
 	for (const auto& cmd : drawCmds) {

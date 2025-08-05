@@ -10,7 +10,7 @@
 #include <algorithm>
 
 #ifndef FIXED_STRINGS_MAX_LENGTH
-	#define FIXED_STRINGS_MAX_LENGTH 64
+	#define FIXED_STRINGS_MAX_LENGTH 63
 #endif
 
 #if FIXED_STRINGS_MAX_LENGTH <= 0xfe

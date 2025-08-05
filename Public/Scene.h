@@ -10,7 +10,7 @@
 #include "TransformSystem.hpp"
 #include "GameObjectSystem.hpp"
 #include "TagSystem.hpp"
-#include "RenderingSystem.hpp"
+#include "SceneRenderSystem.hpp"
 
 enum class SceneTransitionStatus
 {
@@ -42,7 +42,7 @@ protected:
     bool m_pendingUnload = false;
     ArenaRegistry m_reg;
     SceneRenderSystem m_renderSys;
-    TagSystem m_nameTagSys;
+    //TagSystem m_nameTagSys;
     TransformSystem m_transformSys;
     GameObjectSystem m_gameObjectSys;
     
@@ -67,12 +67,12 @@ public:
         m_transformSys{&m_reg, sceneIndex, &m_arena},
         m_gameObjectSys{ m_sceneIndex, &m_reg},
         m_renderSys{ &m_reg, &m_arena, m_sceneIndex },
-        m_nameTagSys{&m_reg, sceneIndex },
+        //m_nameTagSys{&m_reg, sceneIndex },
         m_sceneIndex{sceneIndex}
     {
         m_reg.storage<TransformComponent>().reserve(ECS_BASE_COMPONENTS_RESERVATION_COUNT);
         m_reg.storage<EnabledTag>().reserve(ECS_BASE_COMPONENTS_RESERVATION_COUNT);
-        m_reg.storage<TagComponent>().reserve(ECS_BASE_COMPONENTS_RESERVATION_COUNT);
+        //m_reg.storage<TagComponent>().reserve(ECS_BASE_COMPONENTS_RESERVATION_COUNT);
         m_reg.storage<MeshComponent>().reserve(ECS_BASE_COMPONENTS_RESERVATION_COUNT);
     }
     //SceneBase() : SceneBase(DEFAULT_HEAP_SIZE) {}
@@ -93,7 +93,7 @@ public:
     ArenaRegistry& registry() { return m_reg; }
     TransformSystem& transformSystem() { return m_transformSys; }
     GameObjectSystem& gameObjectSystem() { return m_gameObjectSys; }  
-    TagSystem& nameTagSystem() { return m_nameTagSys; }
+    //TagSystem& nameTagSystem() { return m_nameTagSys; }
     SceneRenderSystem& sceneRender() { return m_renderSys; }
     void setUnload() { m_pendingUnload = true; }
     uint32_t sceneIndex() const { return m_sceneIndex; }

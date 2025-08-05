@@ -28,6 +28,7 @@
 
 #include "Material.hpp"
 #include "RenderManager.h"
+#include "RenderTarget.hpp"
 #include "HlslTypes.h"
 #include <variant>
 
@@ -107,13 +108,7 @@ struct BoundDescriptorKeyHash
 	}
 };
 
-struct VkTextureResource
-{
-	VkDescriptorImageInfo imageInfo;
-	VkImageView imageView;
-	VkImage image;
-	VkDeviceMemory memory;
-};
+
 
 
 class SamplerStatesPresets
@@ -495,6 +490,8 @@ private:
 		memcpy(data, this->matData_baseMatInstances.data(), (size_t)bufferSize);
 		vkUnmapMemory(m_vkDevice, matDevMem_baseMatInstances);
 
+
+		return VK_SUCCESS;
 	}
 
 public:
@@ -550,13 +547,13 @@ public:
 	VkBuffer indexBuffer = nullptr;
 	VkDeviceMemory indexMemory = nullptr;
 
-	GlobalData matData_globalData{};
-	VkBuffer matBuf_globalData = nullptr;
-	VkDeviceMemory matDevMem_globalData = nullptr;
+	CameraData camData{};
+	VkBuffer camDataBuffer = nullptr;
+	VkDeviceMemory camDataMemory = nullptr;
 
 	std::vector<ModelTransform> moddelTransforms;
-	VkBuffer matBuf_modelTransforms;
-	VkDeviceMemory matDevMem_modelTransforms;
+	VkBuffer matBuf_modelTransforms = nullptr;
+	VkDeviceMemory matDevMem_modelTransforms = nullptr;
 
 	std::vector<VkTextureResource> textures;
 
@@ -598,7 +595,7 @@ public:
 		surfaceFormat{},
 		presentMode{},
 		renderPassIndex{},
-		matData_globalData{}
+		camData{}
 	{
 		//pipelineLayouts.reserve(2048);
 		rendPasses.reserve(2048);
@@ -767,13 +764,13 @@ public:
 		// GlobalData
 		VkBufferCreateInfo globalDatabufferInfo{};
 		globalDatabufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-		globalDatabufferInfo.size = sizeof(GlobalData);
+		globalDatabufferInfo.size = sizeof(CameraData);
 		globalDatabufferInfo.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
 		globalDatabufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-		Vk_CHECK(vkResult, vkCreateBuffer(m_vkDevice, &globalDatabufferInfo, nullptr, &matBuf_globalData));
+		Vk_CHECK(vkResult, vkCreateBuffer(m_vkDevice, &globalDatabufferInfo, nullptr, &camDataBuffer));
 
 		VkMemoryRequirements memRequirements;
-		vkGetBufferMemoryRequirements(m_vkDevice, matBuf_globalData, &memRequirements);
+		vkGetBufferMemoryRequirements(m_vkDevice, camDataBuffer, &memRequirements);
 
 		VkMemoryAllocateInfo globalDataAllocInfo{};
 		globalDataAllocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
@@ -782,8 +779,8 @@ public:
 												   VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
 												   m_phyDevice);
 
-		Vk_CHECK(vkResult, vkAllocateMemory(m_vkDevice, &globalDataAllocInfo, nullptr, &matDevMem_globalData));
-		Vk_CHECK(vkResult, vkBindBufferMemory(m_vkDevice, matBuf_globalData, matDevMem_globalData, 0));
+		Vk_CHECK(vkResult, vkAllocateMemory(m_vkDevice, &globalDataAllocInfo, nullptr, &camDataMemory));
+		Vk_CHECK(vkResult, vkBindBufferMemory(m_vkDevice, camDataBuffer, camDataMemory, 0));
 
 		// BaseMaterialInstances
 		VkBufferCreateInfo baseMatInstanceBufferInfo{};
@@ -1323,7 +1320,7 @@ public:
 		VkAttachmentReference depthAttachmentRef{};
 		depthAttachmentRef.attachment = 1;
 		depthAttachmentRef.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-		//refs.push_back(depthAttachmentRef);
+		
 		
 
 		VkSubpassDescription subpass{};
@@ -1527,13 +1524,13 @@ public:
 				rBind.binding = key.bindings[i];
 				rBind.type = key.types[i];
 
-				if (set == MAT_GLOBALDATA_SET && renderMan->getParamName(key.nameIndices[i]) == MAT_GLOBALDATA_NAME) {
-					rBind.handle = reinterpret_cast<uint64_t>(&matBuf_globalData);
+				if (set == MAT_CAMERADATA_SET && renderMan->getParamName(key.nameIndices[i]) == MAT_CAMERADATA_NAME) {
+					rBind.handle = reinterpret_cast<uint64_t>(&camDataBuffer);
 
 					VkDescriptorBufferInfo bufferInfo{};
-					bufferInfo.buffer = matBuf_globalData;
+					bufferInfo.buffer = camDataBuffer;
 					bufferInfo.offset = 0;
-					bufferInfo.range = sizeof(GlobalData);
+					bufferInfo.range = sizeof(CameraData);
 
 					VkWriteDescriptorSet write{};
 					write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;

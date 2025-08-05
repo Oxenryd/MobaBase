@@ -136,19 +136,23 @@ add_executable (MobaBase
 	"Public/Tag.hpp"
 	"Public/TagSystem.hpp"
 	"Public/EnabledTag.hpp"
-	"Public/RenderingSystem.hpp"
+	"Public/SceneRenderSystem.hpp"
 	"Public/FixedString.hpp"
 	"Public/DrawCommand.hpp"
 	"Public/MeshComponent.hpp"
 	"Public/AssetLoader.h"
 	"Public/InputTypes.h"
+	"Public/Camera.hpp"
+	"Public/RenderTarget.hpp"
+	"Public/GlobalComponents.hpp"
+	"Public/GlobalSystem.hpp"
+	"Public/Timing.h"
 
 	"Private/Engine.cpp"
 	"Private/Timer.cpp"
 	"Private/TimerSystem.cpp"
 	"Private/RenderManager.cpp"
 	"Private/FileSys.cpp"
-    "Private/Scene.cpp"
 	"Private/Shader.cpp"
     "Private/Material.cpp"
 	"Private/MaterialParams.cpp"
@@ -157,7 +161,10 @@ add_executable (MobaBase
 	"Private/Transform.cpp"
 	"Private/AssetLoader.cpp"
 	"Private/VulkanContext.cpp"
-	"Private/RenderingSystem.cpp" )
+	"Private/SceneRenderSystem.cpp"
+	"Private/GlobalComponents.cpp"
+	"Private/Camera.cpp"
+	"Private/Timing.cpp")
 
 
 
@@ -199,8 +206,8 @@ target_compile_definitions(MobaBase PRIVATE
 	MAT_BASE_VS=\"BaseVS\"
 	MAT_BASE_PS=\"BasePS\"
 
-	MAT_GLOBALDATA_NAME=\"globalData\"
-	MAT_GLOBALDATA_SET=0
+	MAT_CAMERADATA_NAME=\"cameraData\"
+	MAT_CAMERADATA_SET=0
 
 	MAT_SAMPLER_NAME=\"smp\"
 	MAT_SAMPLER_SET=1
@@ -224,6 +231,7 @@ target_compile_definitions(MobaBase PRIVATE
 	ECS_BASE_COMPONENTS_RESERVATION_COUNT=2048
 	
 	# System
+	LAYERS_FIELD_TYPE=uint32_t
 	SCENE_MAX_SCENES=512
 	RENDER_SCENE_MAX_THREADS=128
 

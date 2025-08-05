@@ -29,6 +29,7 @@
 #include "TimerSystem.h"
 #include "RenderManager.h"
 #include "Scene.h"
+#include "GlobalSystem.hpp"
 
 
 constexpr const double			DEFAULT_DELTATIME_JITTER_SETTING = 0.002;
@@ -45,6 +46,41 @@ enum class EngineStatus : uint8_t
 	PendingRun,
 	Running,
 	PendingStop,
+};
+
+struct CamIndex
+{
+	union
+	{
+	public:
+		uint64_t _raw;
+		struct
+		{
+			uint16_t sceneIndex;
+			uint32_t camIndex;
+
+		};
+	};
+	CamIndex(uint64_t raw) :
+		_raw{raw} {}
+	CamIndex(uint16_t scene, uint32_t cameraIndex) :
+		sceneIndex{scene},
+		camIndex{cameraIndex}
+	{}
+
+
+
+	bool invalid() const {
+		return sceneIndex == UINT16_INVALID || camIndex == UINT32_INVALID;
+	}
+
+	operator bool() {
+		return !invalid();
+	}
+
+	bool operator==(const CamIndex& rhs) {
+		return sceneIndex == rhs.sceneIndex && camIndex == rhs.camIndex;
+	}
 };
 
 class Engine
@@ -67,8 +103,10 @@ private:
 	bool m_sceneTransitionRequested = false;
 	size_t m_requestedSceneIndex = SIZE_INVALID;
 	SceneTransitionMode m_sceneTransitMode = SceneTransitionMode::WaitForDone;
-	uint64_t m_totalFrames = 0;
+	size_t m_totalFrames = 0;
+	double m_totalTime = 0.0;
 	std::chrono::steady_clock::time_point m_lastUpdateTime;
+	CamIndex m_mainCamIndex{ UINT16_INVALID, UINT32_INVALID };
 
 
 	INLINE double _tickDt();
@@ -88,6 +126,8 @@ private:
 	InputManager* m_inputMan = nullptr;;
 	VulkanContext* m_vkCtx = nullptr;;
 
+	GlobalSystem m_globalSystem;
+
 	TimerSystem m_baseTimers;
 	Timer m_fpsCountTimer;
 
@@ -95,6 +135,8 @@ public:
 	~Engine();
 	Engine(const std::string& appName, size_t heapSize);
 	
+	Camera* mainCamera();
+
 	// EVENTS
 	Event<Engine*> onStartInitiated;
 	Event<Engine*> onStarted;
@@ -138,8 +180,12 @@ public:
 	}
 
 
+	INLINE GlobalSystem& getGlobalSystem() { return m_globalSystem; }
 	INLINE HeapArena& baseArena() { return m_baseArena; }
-	INLINE const double& deltaTime() { return m_updateDeltaTime; }
+	INLINE double deltaTime() const { return m_updateDeltaTime; }
+	INLINE double fixedDeltaTime() const { return m_targetFixedDeltaTime; }
+	INLINE double totalTime() const { return m_totalTime; }
+	INLINE size_t totalFrames() const { return m_totalFrames; }
 	INLINE void setTargetUpdateDeltaTime(const double targetDt) { m_targetUpdateDeltaTime = targetDt; }
 	INLINE RenderManager* getRenderManager() { return m_renderMan; }
 	void start();
@@ -161,6 +207,7 @@ public:
 		}
 	}
 
+	void setMainCamera(uint16_t sceneIndex, uint32_t camIndex);
 	ErrorCode init();
 	INLINE WindowSurface* const getWndSurface() { return m_wnd; }
 	INLINE InputManager* const getInputManager() { return m_inputMan; }

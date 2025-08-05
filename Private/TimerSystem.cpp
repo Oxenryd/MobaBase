@@ -57,10 +57,10 @@ void TimerSystem::_processTimers(std::vector<double>& counters,
 
         // Load states into scalar
         double mask_vals[4] = {
-            static_cast<double>(states[i + 0].isSet(TimerState::Running)),
-            static_cast<double>(states[i + 1].isSet(TimerState::Running)),
-            static_cast<double>(states[i + 2].isSet(TimerState::Running)),
-            static_cast<double>(states[i + 3].isSet(TimerState::Running)),
+            static_cast<double>(states[i + 0].hasFlag(TimerState::Running)),
+            static_cast<double>(states[i + 1].hasFlag(TimerState::Running)),
+            static_cast<double>(states[i + 2].hasFlag(TimerState::Running)),
+            static_cast<double>(states[i + 3].hasFlag(TimerState::Running)),
         };
 
         __m256d stateMask = _mm256_loadu_pd(mask_vals);
@@ -98,9 +98,9 @@ void TimerSystem::_processTimers(std::vector<double>& counters,
     for (; i < end; ++i) {
 
         if (is_inc) {
-            if (!(m_incStates[i].isSet(TimerState::Running))) continue;
+            if (!(m_incStates[i].hasFlag(TimerState::Running))) continue;
         } else
-            if (!(m_decStates[i].isSet(TimerState::Running))) continue;
+            if (!(m_decStates[i].hasFlag(TimerState::Running))) continue;
 
         counters[i] += (is_inc ? deltaTime : -deltaTime);
 
@@ -143,7 +143,7 @@ void TimerSystem::update(double deltaTime) {
     for (size_t i = 0; i < m_num_threads; ++i) {
         for (auto& index : m_timedIncIndices[i]) {
             m_incOnTimes[index].notify();
-            if (m_incStates[index].isSet(TimerState::AutoReset)) {
+            if (m_incStates[index].hasFlag(TimerState::AutoReset)) {
                 m_incCounters[index] = 0.0;
             } else {
                 m_incStates[index].clearByEnum(TimerState::Running);
@@ -153,7 +153,7 @@ void TimerSystem::update(double deltaTime) {
         }
         for (auto& index : m_timedDecIndices[i]) {
             m_decOnTimes[index].notify();
-            if (m_decStates[index].isSet(TimerState::AutoReset)) {
+            if (m_decStates[index].hasFlag(TimerState::AutoReset)) {
                 m_decCounters[index] = m_decResets[index];
             } else {
                 m_decStates[index].clearByEnum(TimerState::Running);

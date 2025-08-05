@@ -101,7 +101,7 @@ private:
 		return *static_cast<std::vector<T>*>(m_typeVectors[typeId].ptr);
 	}
 
-	void _emplaceBaseSystems(entt::entity entity, std::string& name);
+	void _emplaceBaseSystems(GameObject& gObject, std::string& name);
 
 public:
 	using iterator = GameObjectSystemIterator;
@@ -125,13 +125,13 @@ public:
 		T& obj = vec.back();
 		obj.m_entity = m_reg->create();
 		obj.m_reg = m_reg;
-		_emplaceBaseSystems(obj.m_entity, name);
+		_emplaceBaseSystems(obj, name);
 		return obj;
 	}
 
 	template<typename T>
 	std::vector<T>& getAllOfType() {
-		return getVectorForType<T>();
+		return _getVectorForType<T>();
 	}
 
 

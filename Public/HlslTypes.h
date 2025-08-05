@@ -76,28 +76,38 @@ struct BaseMatPush
 	uint32_t boneCount;
 };
 
-struct GlobalData
+struct CameraData
 {
-	GlobalData() {
+	CameraData() {
+		vFov = 60.f;
+		nearPlane = 0.1f;
+		farPlane = 1000.0f;
+		aspectRatio = 16.0f / 9.0f;
+		cameraPosition = { 0.0f, 0.0f, 5.0f, 1.0f };
 		view = glm::lookAt(
 			glm::vec3(0.0f, 0.0f, 5.0f), // Camera position
 			glm::vec3(0.0f, 0.0f, 0.0f), // Target (look at)
 			glm::vec3(0.0f, 1.0f, 0.0f)  // Up vector
 		);
-		cameraPosition = { 0.0f, 0.0f, 5.0f, 1.0f };
+		
 		proj = glm::perspectiveRH_ZO(
-			glm::radians(60.0f), // Field of view
-			16.0f / 9.0f,        // Aspect ratio
-			0.1f,                // Near plane
-			100.0f               // Far plane
+			glm::radians(vFov),
+			aspectRatio,
+			nearPlane,
+			farPlane
 		);
 		proj[1][1] *= -1;
 
 	}
+	CameraData(const CameraData& other) = default;
+
 	alignas (16) glm::mat4x4 view;
 	alignas (16) glm::mat4x4 proj;
 	alignas (16) glm::vec4 cameraPosition;
-	alignas (16) double time{ 0 };
+	float vFov;
+	float nearPlane;
+	float farPlane;
+	float aspectRatio;
 };
 
 struct alignas (16) SpriteInstance

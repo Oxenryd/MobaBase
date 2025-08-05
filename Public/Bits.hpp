@@ -85,8 +85,8 @@ public:
         requires requires(ENUM e) {
             { static_cast<uint32_t>(e) };
     }
-    bool isSet(ENUM index) const {
-        return (m_field & (T(1) << ((uint32_t)index % WordBits))) != 0;
+    bool hasFlag(ENUM flag) const {
+        return (m_field & static_cast<T>(flag)) != 0;
     }
 
     bool isSet(uint32_t index) const {

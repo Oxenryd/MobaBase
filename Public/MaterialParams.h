@@ -262,7 +262,10 @@ public:
 		m_entrySize = other.m_entrySize;
 		if (other.m_capacity > 0) {
 			_resize(other.m_capacity);
+#pragma warning(push)
+#pragma warning(disable : 6387)
 			std::memcpy(m_memory, other.m_memory, other.m_size * other.m_entrySize);
+#pragma warning(pop)
 		} else {
 			m_memory = nullptr;
 			m_capacity = 0;

@@ -1,5 +1,6 @@
 #include "Engine.h"
 #include "RenderManager.h"
+#include "GameObjectSystem.hpp"
 #include <immintrin.h>
 
 thread_local std::unordered_map<uint16_t, size_t> SceneRenderSystem::s_threadIndex;
@@ -23,7 +24,7 @@ Engine::Engine(const std::string& appName, size_t baseSize) :
 	s_instance = this;
 
 	m_wnd = m_baseArena.construct<WindowSurface>();
-	m_wnd->enableRawInput();
+	
 
 	m_baseTimers.m_incOnTimes[m_fpsCountTimer.m_timerIndex].subscribe([this]()
 		{
@@ -92,7 +93,7 @@ ErrorCode Engine::_initShaderManager() {
 
 ErrorCode Engine::_initInputManager() {
 	m_inputMan = baseArena().construct<InputManager>(m_wnd);
-
+	m_wnd->enableRawInput();
 	return ErrorCode::OK;
 }
 
@@ -226,7 +227,7 @@ inline void Engine::_run() {
 	while (m_status != EngineStatus::PendingStop) {
 		auto dt = _tickDt();
 		m_fixedAccu += dt;
-
+		m_totalTime += dt;
 		while (m_fixedAccu >= m_targetFixedDeltaTime) {
 			_updateFixed();
 			m_fixedAccu -= m_targetFixedDeltaTime;
@@ -301,6 +302,27 @@ void Engine::stop() {
 	LOGLINE(LogType::Info, LogMod::Engine, "Stopping... ");
 	m_status = EngineStatus::PendingStop;
 	onPendingStop.notify(this);
+}
+
+Camera* Engine::mainCamera() {
+
+	if (m_mainCamIndex.invalid())
+		return nullptr;
+
+	return &getScene(m_mainCamIndex.sceneIndex)->gameObjectSystem().getAllOfType<Camera>()[m_mainCamIndex.camIndex];
+}
+
+void Engine::setMainCamera(uint16_t sceneIndex, uint32_t camIndex) {
+	auto scene = getScene(sceneIndex);
+	if (!scene)
+		throw std::invalid_argument("No Such scene!");
+
+	auto& cams = scene->gameObjectSystem().getAllOfType<Camera>();
+	if (cams.empty() || camIndex >= cams.size())
+		throw std::invalid_argument("Scene has no cameras!");
+
+	m_mainCamIndex = CamIndex{ sceneIndex, camIndex };
+	
 }
 
 ErrorCode Engine::init() {
