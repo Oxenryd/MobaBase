@@ -12,6 +12,9 @@ void VulkanContext::draw(void* rendCtx) {
 	auto* ctx = static_cast<RenderContext*>(rendCtx);
 	auto& frame = frameSync[currentFrame];
 
+	VkResult fenceStatus = vkGetFenceStatus(m_vkDevice, frame.inFlight);
+	printf("Frame %d: Fence status before wait: %d (VK_SUCCESS=%d, VK_NOT_READY=%d)\n",
+		   currentFrame, fenceStatus, VK_SUCCESS, VK_NOT_READY);
 
 
 	// Acquire swapchain image
@@ -26,16 +29,25 @@ void VulkanContext::draw(void* rendCtx) {
 		return;
 	}
 
-	// Wait for previous frame fence 
-	vkWaitForFences(m_vkDevice, 1, &frame.inFlight, VK_TRUE, UINT64_MAX);
 
-	// Release the fence
+	// Wait for previous frame fence 
+	VkResult waitResult = vkWaitForFences(m_vkDevice, 1, &frame.inFlight, VK_TRUE, UINT64_MAX);
+	printf("Frame %d: Fence wait result: %d\n", currentFrame, waitResult);
+	if (waitResult != VK_SUCCESS) {
+		printf("ERROR: Fence wait failed!\n");
+		return;
+	}
 	vkResetFences(m_vkDevice, 1, &frame.inFlight);
 
 	//Begin command buffer
 	vkResetCommandBuffer(frame.cmdBuffer, 0);
 	recordCommandBuffer(frame.cmdBuffer, currentFrame);
 
+	//VkCommandBufferBeginInfo beginInfo{};
+	//beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+	//beginInfo.flags = 0;
+	//beginInfo.pInheritanceInfo = nullptr;
+	//vkBeginCommandBuffer(frame.cmdBuffer, &beginInfo);
 
 	// Begin Render Pass
 	VkClearValue clearValues[2] = {};
@@ -172,7 +184,9 @@ void VulkanContext::draw(void* rendCtx) {
 	submitInfo.pWaitDstStageMask = waitStages;
 	submitInfo.commandBufferCount = 1;
 	submitInfo.pCommandBuffers = &frame.cmdBuffer;
-	VkSemaphore signalSemaphores[] = { imageRenderDone[currentFrame] };
+
+	// Signal done
+	VkSemaphore signalSemaphores[] = { frame.renderFinished };
 	submitInfo.signalSemaphoreCount = 1;
 	submitInfo.pSignalSemaphores = signalSemaphores;
 
@@ -180,6 +194,7 @@ void VulkanContext::draw(void* rendCtx) {
 	auto submitResult = vkQueueSubmit(m_graphicsQueue, 1, &submitInfo, frame.inFlight);
 	if (submitResult != VK_SUCCESS) {
 		LOGLINE(LogType::Error, LogMod::Vulkan, "failed to submit draw command buffer!");
+		vkDeviceWaitIdle(m_vkDevice);
 		throw std::runtime_error("failed to submit draw command buffer!");
 	}
 
@@ -194,6 +209,8 @@ void VulkanContext::draw(void* rendCtx) {
 	presentInfo.pSwapchains = swapChains;
 	presentInfo.pImageIndices = &imageIndex;
 	presentInfo.pResults = nullptr; // Optional
+
+
 	auto presentResult = vkQueuePresentKHR(m_graphicsQueue, &presentInfo);
 	if (presentResult == VK_ERROR_OUT_OF_DATE_KHR || presentResult == VK_SUBOPTIMAL_KHR || pendingResize) {
 		recreateSwapchain();

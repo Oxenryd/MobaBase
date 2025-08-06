@@ -516,7 +516,7 @@ public:
 	std::vector<VkRenderPass> rendPasses;
 	std::vector<VkFramebuffer> swapChainFramebuffers;	
 	std::array<FrameSync, VULKAN_MAX_FRAMES_IN_FLIGHT> frameSync;
-	std::vector<VkSemaphore> imageRenderDone;
+	//std::vector<VkSemaphore> imageRenderDone;
 
 	// Global Material Buffers
 	std::vector<BaseVSIn> vertices;
@@ -1897,12 +1897,13 @@ public:
 
 		for (size_t i = 0; i < VULKAN_MAX_FRAMES_IN_FLIGHT; ++i) {
 			Vk_CHECK(vkResult, vkCreateSemaphore(m_vkDevice, &semaphoreInfo, nullptr, &frameSync[i].imageAvailable));
+			Vk_CHECK(vkResult, vkCreateSemaphore(m_vkDevice, &semaphoreInfo, nullptr, &frameSync[i].renderFinished));
 			Vk_CHECK(vkResult, vkCreateFence(m_vkDevice, &fenceInfo, nullptr, &frameSync[i].inFlight));
 		}
-		for (size_t i = 0; i < swapchainImages.size(); i++) {
-			imageRenderDone.push_back(VkSemaphore{});
-			Vk_CHECK(vkResult, vkCreateSemaphore(m_vkDevice, &semaphoreInfo, nullptr, &imageRenderDone.back()));
-		}
+		//for (size_t i = 0; i < swapchainImages.size(); i++) {
+		//	imageRenderDone.push_back(VkSemaphore{});
+		//	Vk_CHECK(vkResult, vkCreateSemaphore(m_vkDevice, &semaphoreInfo, nullptr, &imageRenderDone.back()));
+		//}
 		
 		LOG(LogType::Success, "Done.");
 		return VK_SUCCESS;
@@ -2063,9 +2064,9 @@ public:
 			vkDestroyFence(m_vkDevice, sync.inFlight, nullptr);
 		}
 
-		for (auto& s : imageRenderDone)
-			vkDestroySemaphore(m_vkDevice, s, nullptr);
-		imageRenderDone.clear();
+		//for (auto& s : imageRenderDone)
+		//	vkDestroySemaphore(m_vkDevice, s, nullptr);
+		//imageRenderDone.clear();
 	}
 	
 	inline VkResult resetPipeline(size_t pipelineIndex, Shader& vs, Shader& ps) {
