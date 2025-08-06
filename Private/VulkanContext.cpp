@@ -12,42 +12,27 @@ void VulkanContext::draw(void* rendCtx) {
 	auto* ctx = static_cast<RenderContext*>(rendCtx);
 	auto& frame = frameSync[currentFrame];
 
-	VkResult fenceStatus = vkGetFenceStatus(m_vkDevice, frame.inFlight);
-	printf("Frame %d: Fence status before wait: %d (VK_SUCCESS=%d, VK_NOT_READY=%d)\n",
-		   currentFrame, fenceStatus, VK_SUCCESS, VK_NOT_READY);
 
+	// Wait for previous frame fence 
+	vkWaitForFences(m_vkDevice, 1, &frame.inFlight, VK_TRUE, UINT64_MAX);
+	vkResetFences(m_vkDevice, 1, &frame.inFlight);
 
-	// Acquire swapchain image
+	// Acquire swapchain image	 
 	uint32_t imageIndex = 0;
 	auto acquireResult = vkAcquireNextImageKHR(
 		m_vkDevice, swapchain,
 		UINT64_MAX, frame.imageAvailable,
 		VK_NULL_HANDLE, &imageIndex);
 
+
 	if (acquireResult == VK_ERROR_OUT_OF_DATE_KHR || pendingResize) {
 		recreateSwapchain();
 		return;
 	}
 
-
-	// Wait for previous frame fence 
-	VkResult waitResult = vkWaitForFences(m_vkDevice, 1, &frame.inFlight, VK_TRUE, UINT64_MAX);
-	printf("Frame %d: Fence wait result: %d\n", currentFrame, waitResult);
-	if (waitResult != VK_SUCCESS) {
-		printf("ERROR: Fence wait failed!\n");
-		return;
-	}
-	vkResetFences(m_vkDevice, 1, &frame.inFlight);
-
 	//Begin command buffer
 	vkResetCommandBuffer(frame.cmdBuffer, 0);
 	recordCommandBuffer(frame.cmdBuffer, currentFrame);
-
-	//VkCommandBufferBeginInfo beginInfo{};
-	//beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-	//beginInfo.flags = 0;
-	//beginInfo.pInheritanceInfo = nullptr;
-	//vkBeginCommandBuffer(frame.cmdBuffer, &beginInfo);
 
 	// Begin Render Pass
 	VkClearValue clearValues[2] = {};
@@ -99,6 +84,7 @@ void VulkanContext::draw(void* rendCtx) {
 	VkPipeline lastPipeline = VK_NULL_HANDLE;
 	Material* lastMaterial = nullptr;
 	uint32_t lastDescCount = 0;
+	uint32_t lastMatIndex = UINT32_INVALID;
 	VkDescriptorSet lastSets[4]{ nullptr, nullptr, nullptr, nullptr };
 	size_t firstSet = 0;
 	size_t setCount = 0;
@@ -107,33 +93,39 @@ void VulkanContext::draw(void* rendCtx) {
 
 	// Update CameraData cBuffer
 	void* mappedData = nullptr;
-	vkMapMemory(m_vkDevice, camDataMemory, 0, sizeof(CameraData), 0, &mappedData);
-	memcpy(mappedData, &Engine::getInstance()->mainCamera()->cameraData(), sizeof(CameraData)); //memcpy(mappedData, &camData, sizeof(CameraData));
-	vkUnmapMemory(m_vkDevice, camDataMemory);
+	vkMapMemory(m_vkDevice, camDataMemory[currentFrame], 0, sizeof(CameraData), 0, &mappedData);
+	memcpy(mappedData, &Engine::getInstance()->mainCamera()->cameraData(), sizeof(CameraData));
+	vkUnmapMemory(m_vkDevice, camDataMemory[currentFrame]);
 
 	// Check the draw commands and issue binds and draw calls
 	uint32_t drawCount = 0;
 	for (const auto& cmd : drawCmds) {
+
 		Material* matBase = RenderManager::getInstance()->getMaterial(cmd.materialIndex);
-		MaterialInstance& matInstance = matBase->instances[cmd.instanceIndex];
+		//MaterialInstance& matInstance = matBase->instances[cmd.instanceIndex];
 
-		// Bind pipeline if changed
-		if (matBase->pipeline != lastPipeline) {
-			vkCmdBindPipeline(frame.cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, matBase->pipeline);
-			lastPipeline = matBase->pipeline;
+		if (cmd.materialIndex != lastMatIndex) {
+			// Bind pipeline if changed
+			if (matBase->pipeline != lastPipeline) {
+				vkCmdBindPipeline(frame.cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, matBase->pipeline);
+				lastPipeline = matBase->pipeline;
+			}
 
-			auto& setList = matInstance.descriptorSets() != nullptr ? *matInstance.descriptorSets() : matBase->defaultDescriptors;
-			for (auto& set : setList) {
-				if (lastSets[set.first] != set.second) {
+			// check descriptor sets
+			auto& setList = matBase->dependentDescriptorBindings;
+			for (auto& combo : setList) {
+				auto& descSet = bindingToDescriptorSet[combo];
+				if (lastSets[combo.set] != descSet[currentFrame]) {
 					if (!pendingRebind) {
-						firstSet = set.first;
+						firstSet = combo.set;
 						setCount = 0;
 						pendingRebind = true;
 					}
-					lastSets[set.first] = set.second;
+					lastSets[combo.set] = descSet[currentFrame];
 					setCount++;
 				}
 			}
+
 
 			if (pendingRebind) {
 				vkCmdBindDescriptorSets(frame.cmdBuffer,
@@ -143,7 +135,9 @@ void VulkanContext::draw(void* rendCtx) {
 										setCount,
 										lastSets,
 										0, nullptr);
+				pendingRebind = false;
 			}
+			lastMatIndex = cmd.materialIndex;
 		}
 
 		auto scene = Engine::getInstance()->getScene(cmd.sceneIndex);
@@ -151,7 +145,7 @@ void VulkanContext::draw(void* rendCtx) {
 		// Push
 		BaseMatPush push{};
 		push.matrixIndex = UINT32_INVALID;
-		push.materialIndex = cmd.materialIndex;
+		push.matInstanceIndex = cmd.instanceIndex;
 		push.modelToWorld = scene->registry().get<TransformComponent>(cmd.entityId).trs();
 		vkCmdPushConstants(frame.cmdBuffer, matBase->pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
 						   0, sizeof(BaseMatPush), &push);
@@ -186,7 +180,7 @@ void VulkanContext::draw(void* rendCtx) {
 	submitInfo.pCommandBuffers = &frame.cmdBuffer;
 
 	// Signal done
-	VkSemaphore signalSemaphores[] = { frame.renderFinished };
+	VkSemaphore signalSemaphores[] = { imageRenderFinished[imageIndex] };
 	submitInfo.signalSemaphoreCount = 1;
 	submitInfo.pSignalSemaphores = signalSemaphores;
 
@@ -217,5 +211,5 @@ void VulkanContext::draw(void* rendCtx) {
 	}
 
 	// rotate frame sync /semaphores
-	currentFrame = (currentFrame + 1) % VULKAN_MAX_FRAMES_IN_FLIGHT;
+	currentFrame = (currentFrame + 1) % VULKAN_FRAMES_IN_FLIGHT;
 }

@@ -93,18 +93,20 @@ public:
 			s_threadIndex[m_sceneIndex] = m_threadCounter++;
 	}
 
-	void submitPersistent(entt::entity entity, uint32_t meshIndex, uint16_t matInstancecIndex, uint16_t prio) {
+	INLINE void submitPersistent(entt::entity entity, uint32_t meshIndex, uint16_t prio) {
 		setFrameThreadIndex();
 
-		auto& mesh = m_reg->get<MeshComponent>(entity);
-		for (size_t i = 0; i < m_meshes[mesh.meshIndex].subMeshCount; ++i) {
+		auto& meshComp = m_reg->get<MeshComponent>(entity);
+		auto& mesh = m_meshes[meshComp.meshIndex];
+		for (size_t i = 0; i < mesh.subMeshCount; ++i) {
+			auto& subMesh = m_subMeshes[mesh.firstSubMeshIndex + i];
 			MeshDrawCommand dCmd{};
 			dCmd.entityId = entity;
 			dCmd.priority = prio;
-			dCmd.instanceIndex = matInstancecIndex;
+			dCmd.instanceIndex = subMesh.instanceIndex;
 			dCmd.sceneIndex = m_sceneIndex;
-			dCmd.submeshOffset = m_meshes[mesh.meshIndex].firstSubMeshIndex + i;
-			dCmd.materialIndex = m_subMeshes[dCmd.submeshOffset].materialIndex;
+			dCmd.submeshOffset = mesh.firstSubMeshIndex + i;
+			dCmd.materialIndex = subMesh.materialIndex;
 			s_threadPresistentDrawBuffers[m_sceneIndex].push_back(dCmd);
 		}
 	}

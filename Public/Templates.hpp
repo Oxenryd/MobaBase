@@ -27,7 +27,7 @@ public:
         
         m_go = gameObjectSystem().createGameObject<GameObject>(m_name);
         MeshDescription meshInfo{};
-        const std::string path = std::format("{}{}", ASSETS_DIR, "crytek-sponza-hd/sponza.obj");
+        const std::string path = std::format("{}{}", ASSETS_DIR, "crytek-sponza-hd/sponza.obj"); //"Cube/cube.obj"
         //const std::string path = std::format("{}{}", ASSETS_DIR, "Cube/cube.obj");
 
         auto ec = sceneRender().loadModel(path, &meshInfo);
@@ -37,30 +37,30 @@ public:
             registry().emplace<MeshComponent>(m_go, meshComp);
         }
 
-        sceneRender().submitPersistent(m_go, meshInfo.meshIndex, 0, 512);
+        sceneRender().submitPersistent(m_go, meshInfo.meshIndex, 512);
         m_camIndex = sceneRender().addCamera();
         Engine::getInstance()->setMainCamera(m_sceneIndex, m_camIndex);
 
         Engine::getInstance()->getInputManager()->onKeyHold.subscribe( [this](KeyCode code) -> void
-                                                                    {
-                                                                           auto cam = Camera::getCamera(m_sceneIndex, m_camIndex);
-                                                                           auto dt = Timing::deltaTimeF();
-                                                                           switch (code) {
-                                                                               case KeyCode::W:
-                                                                                   cam->translate(cam->transform().forward() * m_camSpeed * dt); break;
-                                                                               case KeyCode::S:
-                                                                                   cam->translate(-cam->transform().forward() * m_camSpeed * dt); break;
-                                                                               case KeyCode::A:
-                                                                                   cam->translate(-cam->transform().right() * m_camSpeed * dt); break;
-                                                                               case KeyCode::D:
-                                                                                   cam->translate(cam->transform().right() * m_camSpeed * dt); break;
-                                                                               case KeyCode::Q:
-                                                                                   cam->translate(cam->transform().up() * m_camSpeed * dt); break;
-                                                                               case KeyCode::E:
-                                                                                   cam->translate(-cam->transform().up() * m_camSpeed * dt); break;
-                                                                           }
-                                                                           
-                                                                       });
+                       {
+                           auto cam = Camera::getCamera(m_sceneIndex, m_camIndex);
+                           auto dt = Timing::deltaTimeF();
+                           switch (code) {
+                               case KeyCode::W:
+                                   cam->translate(cam->transform().forward() * m_camSpeed * dt); break;
+                               case KeyCode::S:
+                                   cam->translate(-cam->transform().forward() * m_camSpeed * dt); break;
+                               case KeyCode::A:
+                                   cam->translate(-cam->transform().right() * m_camSpeed * dt); break;
+                               case KeyCode::D:
+                                   cam->translate(cam->transform().right() * m_camSpeed * dt); break;
+                               case KeyCode::Q:
+                                   cam->translate(cam->transform().up() * m_camSpeed * dt); break;
+                               case KeyCode::E:
+                                   cam->translate(-cam->transform().up() * m_camSpeed * dt); break;
+                           }
+                              
+                       });
     }
 
     void update(float dt) {

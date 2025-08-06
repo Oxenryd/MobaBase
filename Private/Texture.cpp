@@ -1,6 +1,9 @@
 #include "Texture.hpp"
 #include "Engine.h"
-
+#ifndef STB_IMAGE_WRITE_IMPLEMENTATION
+	#define STB_IMAGE_WRITE_IMPLEMENTATION
+#endif
+#include "stb_image_write.h"
 
 void* const Texture2D::texelData() {
 	if (texelCount() == 0)
@@ -83,5 +86,25 @@ TextureType Texture2D::typeFrom_aiTextureType(aiTextureType aiType) {
 
 		default:
 			return TextureType::Unknown;
+	}
+}
+
+void Texture2D::exportPNG(const std::string& filepath) {
+
+	if (!texelData() || width == 0 || height == 0) {
+		LOGLINE(LogType::Warning, LogMod::Assets, "exportPNG: No texture data available for export.. ");
+		return;
+	}
+
+	int channels = 4; // Assuming VK_FORMAT_R8G8B8A8_UNORM
+	if (stbi_write_png(filepath.c_str(),
+					   width,
+					   height,
+					   channels,
+					   texelData(),
+					   width * channels) == 0) {
+		LOGLINE(LogType::Error, LogMod::Assets, std::format("exportPNG: failed to write '{}'.. ", filepath));
+	} else {
+		LOGLINE(LogType::Success, LogMod::Assets, std::format("exportPNG: Saved '{}'. ", filepath));
 	}
 }

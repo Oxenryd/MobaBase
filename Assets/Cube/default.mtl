@@ -11,4 +11,6 @@ newmtl default
   Kd 1 1 1
   Ks 0.2 0.2 0.2
   Ke 0 0 0
-  map_Kd default.png
+  map_Kd cube_diffuse.png
+  map_Ks cube_specular.png
+  map_bump cube_normal.png

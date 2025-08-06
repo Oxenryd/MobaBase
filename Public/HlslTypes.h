@@ -7,6 +7,40 @@
 
 #include "GlobalMacros.h"
 
+//using BindSetPair = std::pair<uint8_t, uint8_t>;
+
+struct BindSetCombo
+{
+	~BindSetCombo() = default;
+	BindSetCombo() = default;
+	BindSetCombo(const BindSetCombo& other) = default;
+	BindSetCombo& operator=(const BindSetCombo& rhs) = default;
+	BindSetCombo(const uint8_t bind, const uint8_t set) :
+		binding{ bind }, set{ set }, layoutHandle{ 0 } {}
+	BindSetCombo(const uint8_t bind, const uint8_t set, const uint64_t layoutHandle) :
+		binding{ bind }, set{ set }, layoutHandle{ layoutHandle } {}
+	uint8_t binding{ UINT8_INVALID };
+	uint8_t set{ UINT8_INVALID };
+	uint64_t layoutHandle{ UINT64_INVALID };
+
+	bool operator==(const BindSetCombo& rhs) const {
+		return
+			binding == rhs.binding &&
+			set == rhs.set &&
+			layoutHandle == rhs.layoutHandle;
+	}
+};
+
+struct BindSetComboKeyHash
+{
+	size_t operator()(const BindSetCombo& key) const {
+		uint64_t seed = 0;
+		seed ^= std::hash<uint64_t>{}(static_cast<uint64_t>(key.binding))+0x9e3779b9 + (seed << 6) + (seed >> 2);
+		seed ^= std::hash<uint64_t>{}(static_cast<uint64_t>(key.set)) +0x9e3779b9 + (seed << 6) + (seed >> 2);
+		seed ^= std::hash<uint64_t>{}(static_cast<uint64_t>(key.layoutHandle)) +0x9e3779b9 + (seed << 6) + (seed >> 2);
+		return seed;
+	}
+};
 
 struct BaseVSIn
 {
@@ -40,15 +74,15 @@ struct ModelTransform
 struct InstanceData
 {
 	uint32_t matrixIndex{ UINT32_INVALID };
-	uint32_t materialIndex{ UINT32_INVALID };
+	uint32_t matInstanceIndex{ UINT32_INVALID };
 	uint32_t boneOffset{ UINT32_INVALID };
 	uint32_t boneCount{ 0 };
 
 	operator uint32_t() {
-		return materialIndex;
+		return matInstanceIndex;
 	}
 	bool isValid() {
-		return materialIndex != UINT32_INVALID;
+		return matInstanceIndex != UINT32_INVALID;
 	}
 };
 
@@ -75,7 +109,7 @@ struct BaseMatPush
 {
 	glm::mat4x4 modelToWorld{ 1 };
 	uint32_t matrixIndex{ UINT32_INVALID };
-	uint32_t materialIndex{ UINT32_INVALID };
+	uint32_t matInstanceIndex{ UINT32_INVALID };
 	uint32_t boneOffset{ UINT32_INVALID };
 	uint32_t boneCount{ 0 };
 };

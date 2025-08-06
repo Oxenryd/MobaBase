@@ -124,7 +124,7 @@ class MaterialInstance
 private:
 	uint32_t m_instanceIndex = UINT32_INVALID;
 	uint32_t m_MaterialBufferIndex = UINT32_INVALID;
-	std::optional<std::vector<std::pair<uint8_t, VkDescriptorSet>>> m_descriptorSets;
+	//std::optional<std::vector<std::pair<uint8_t, VkDescriptorSet>>> m_descriptorSets;
 
 public:
 	~MaterialInstance() {}
@@ -146,9 +146,12 @@ public:
 	}
 	void* const pushDataPtr() { return nullptr; }
 
-	std::vector<std::pair<uint8_t, VkDescriptorSet>>* descriptorSets() {
-		return m_descriptorSets.has_value() ? &m_descriptorSets.value() : nullptr;
-	}
+	uint32_t instanceIndex() const { return m_instanceIndex; }
+	uint32_t instanceIndex() { return m_instanceIndex; }
+	BaseMaterialInstance* getBaseMaterialInstanceData();
+	//std::vector<std::pair<uint8_t, VkDescriptorSet>>* descriptorSets() {
+	//	return m_descriptorSets.has_value() ? &m_descriptorSets.value() : nullptr;
+	//}
 };
 
 class Shader;
@@ -207,12 +210,12 @@ private:
 		}
 	}
 
-	void init(VkPipeline& pipeline, VkPipelineLayout& layout, uint32_t id, std::vector<std::pair<uint8_t, VkDescriptorSet>>& descriptors) {
+	void init(VkPipeline& pipeline, VkPipelineLayout& layout, uint32_t id, std::vector<BindSetCombo>& descriptors) {
 		this->pipeline = pipeline;
 		this->pipelineLayout = layout;
 		pipelineId = id;
-		defaultDescriptors.resize(descriptors.size());
-		std::memcpy(defaultDescriptors.data(), descriptors.data(), descriptors.size() * sizeof(std::pair<uint8_t, VkDescriptorSet>));
+		dependentDescriptorBindings.resize(descriptors.size());
+		std::memcpy(dependentDescriptorBindings.data(), descriptors.data(), descriptors.size() * sizeof(BindSetCombo));
 	}
 
 public:
@@ -236,7 +239,8 @@ public:
 	uint32_t pushConstantSize = 0;
 	VkShaderStageFlags pushShaderFlags{};
 	std::unordered_map<VkBindPair, SamplerState, VkBindPairHash> samplerStates;
-	std::vector<std::pair<uint8_t, VkDescriptorSet>> defaultDescriptors;
+	//std::vector<std::pair<uint8_t, VkDescriptorSet>> defaultDescriptors;
+	std::vector<BindSetCombo> dependentDescriptorBindings;
 	std::unordered_map<uint32_t, DescriptorSetLayoutKey> descriptorSetLayoutKeys;
 	std::vector<MaterialInstance> instances;
 	std::vector<MaterialBuffer> buffers;
@@ -261,7 +265,10 @@ public:
 
 
 	//json toJson();
-	
+	MaterialInstance& createCopyOfLastInstance() {
+		BaseMaterialInstance* lastMatData = instances.back().getBaseMaterialInstanceData();
+		return createInstance(lastMatData);
+	}
 	MaterialInstance& createInstance(BaseMaterialInstance* const defaultMaterialParameters = nullptr) {
 		auto index = instances.size();
 		instances.emplace_back(MaterialInstance{ this, index });

@@ -87,7 +87,7 @@ struct BaseMatPush
 {
     float4x4    modelToWorld;
     uint        matrixIndex;
-    uint        materialIndex;
+    uint        matInstanceIndex;
     uint        boneOffset;
     uint        boneCount;
 };
@@ -142,7 +142,7 @@ struct BasePSIn
 
 float4 RetainGlobals()
 {
-    double dummy = cameraPosition.x * cameraPosition.x;
+    double dummy = cameraPosition.x * basePush.boneOffset;
     if (dummy == -9999999.0)
     {
         double4 dummy2 = dummy.xxxx + textures[0].SampleLevel(smp, float2(0, 0), 0.0);

@@ -4,11 +4,14 @@
 
 ErrorCode SceneRenderSystem::loadModel(const std::string& filename, MeshDescription* outMeshInfo) {
 	
-	MeshDescription mInfo{};
+	uint32_t startTexIndex = RenderManager::getInstance()->textures().size();
 
+	MeshDescription mInfo{};
 	auto ec = AssetLoader::loadModel(filename,
 									 m_meshes, m_vertices, m_subMeshes, m_indices,
 									 *RenderManager::getInstance(), &mInfo);
+
+	uint32_t endTexIndex = RenderManager::getInstance()->textures().size();
 
 	if (!EC_FAILED(ec)) {
 		
@@ -27,7 +30,9 @@ ErrorCode SceneRenderSystem::loadModel(const std::string& filename, MeshDescript
 
 		}
 		RenderManager::getInstance()->vkContext()->reallocateVertexIndexBuffers();
-		for (auto& tex : RenderManager::getInstance()->textures()) {
+
+		for (size_t i = startTexIndex; i < endTexIndex; ++i) {
+			auto& tex = RenderManager::getInstance()->textures()[i];
 			tex.tryAllocate();
 		}
 		RenderManager::getInstance()->vkContext()->loadBaseMatData();

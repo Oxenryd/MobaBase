@@ -56,7 +56,8 @@ public:
 	uint32_t textureIndex = UINT32_INVALID;
 	uint16_t width{ 0 };
 	uint16_t height{ 0 };
-	uint8_t mipLevels = 1;
+	//uint8_t mipLevels = 4;
+	bool generateMips = true;
 	uint8_t depth = 1;
 	uint8_t arrayLayers = 1;
 	TextureType type = TextureType::Unknown;
@@ -94,6 +95,8 @@ public:
 		aiTextureType::aiTextureType_SPECULAR,
 		aiTextureType::aiTextureType_DIFFUSE_ROUGHNESS
 	};
+
+	void exportPNG(const std::string& filepath);
 };
 
 

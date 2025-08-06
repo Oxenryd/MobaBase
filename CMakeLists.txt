@@ -11,7 +11,7 @@ if (POLICY CMP0141)
 endif()
 
 # Only apply to MSVC and Release builds
-if(MSVC AND CMAKE_BUILD_TYPE STREQUAL "Release")
+if(MSVC)
     message(STATUS "Enabling /GL and /LTCG for MSVC Release build")
 
     # Enable /GL for compile step
@@ -22,13 +22,6 @@ if(MSVC AND CMAKE_BUILD_TYPE STREQUAL "Release")
     set(CMAKE_STATIC_LINKER_FLAGS_RELEASE "${CMAKE_STATIC_LINKER_FLAGS_RELEASE} /LTCG")
     set(CMAKE_SHARED_LINKER_FLAGS_RELEASE "${CMAKE_SHARED_LINKER_FLAGS_RELEASE} /LTCG")
 
-
-	## Make sure release build still generates PDBs
-    #add_compile_options("$<$<CONFIG:Release>:/Zi>")
-    #add_link_options("$<$<CONFIG:Release>:/DEBUG:FULL>")
-	#
-    ## Optional: keep function names and source info in optimised code
-    #add_compile_options("$<$<CONFIG:Release>:/Zo>")
 endif()
 
 # FETCHES -----------------------------------------------------------------------------
@@ -83,6 +76,7 @@ FetchContent_Declare(
   GIT_REPOSITORY https://github.com/assimp/assimp.git
   GIT_TAG v6.0.2
 )
+# set(ASSIMP_BUILD_EXPORT OFF CACHE BOOL "Disable Assimp export support")
 
 # FORCE STATIC BUILD
 set(ASSIMP_BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
@@ -113,7 +107,7 @@ add_executable (MobaBase
 	"Public/Timer.h"
 	"Public/Arena.hpp"
 	"Public/FSM.hpp"
-	"Public/GraphicContext.h"
+	
 	"Public/Material.hpp"
 	"Public/Shader.h"
 	"Public/ArenaAllocator.hpp"
@@ -158,6 +152,7 @@ add_executable (MobaBase
 	"Public/MemDebugFilter.hpp"
 	"Public/BasicTypes.hpp"
 	"Public/stb_image.h"
+	"Public/stb_image_write.h"
 
 	"Private/Engine.cpp"
 	"Private/Timer.cpp"
@@ -176,7 +171,7 @@ add_executable (MobaBase
 	"Private/GlobalComponents.cpp"
 	"Private/Camera.cpp"
 	"Private/Timing.cpp"
-	"Private/Texture.cpp" )
+	"Private/Texture.cpp"  )
 
 
 
@@ -203,16 +198,17 @@ target_include_directories(MobaBase PRIVATE
 target_compile_definitions(MobaBase PRIVATE 
 	DEBUGGING
 	BUILD_WIN
-	#$<$<CONFIG:Debug>:LOGGING>
+	# $<$<CONFIG:Debug>:LOGGING>
 	LOGGING
 	#IGPU_PRIO	
 	SHADER_HOTRELOAD
 
 	# VULKAN SPECIFICS
 	VULKAN_GLOBAL_DESCRIPTOR_SETS=2
-	#$<$<CONFIG:Debug>:VULKAN_VALIDATION>
+	# $<$<CONFIG:Debug>:VULKAN_VALIDATION>
 	VULKAN_VALIDATION
-	VULKAN_MAX_FRAMES_IN_FLIGHT=3
+	VULKAN_FRAMES_IN_FLIGHT=2
+	VULKAN_SWAPCHAINS=3
 	VULKAN_MAX_RUNTIMEARRAY_INSTANCES=1048576
 	VULKAN_MAX_TEXTURE_SSBO=512
 	VULKAN_INSTANCE_INDEX_STAGE_SIZE=16777216
@@ -226,15 +222,17 @@ target_compile_definitions(MobaBase PRIVATE
 
 	MAT_SAMPLER_NAME=\"smp\"
 	MAT_SAMPLER_SET=1
+	MAT_SAMPLER_BIND=1
 
 	MAT_MODELMATRICES_NAME=\"modelMatrices\"
 	MAT_MODELMATRICES_SET=0
 
 	MAT_TEXTURES_NAME=\"textures\"
-	MAT_TEXTURES_SET=0
+	MAT_TEXTURES_SET=1
+	MAT_TEXTURES_BIND=3
 
 	MAT_BASE_MAT_INSTANCES_INDICES_NAME=\"instanceData\"
-	MAT_BASE_MAT_INSTANCES_INDICES_SET=0;
+	MAT_BASE_MAT_INSTANCES_INDICES_SET=0
 
 	MAT_BASE_MAT_INSTANCES_NAME=\"baseMatInstances\"
 	MAT_BASE_MAT_INSTANCES_SET=1

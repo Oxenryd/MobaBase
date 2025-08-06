@@ -114,7 +114,12 @@ struct BoundDescriptorKeyHash
 	}
 };
 
-
+struct PendingWrite
+{
+	VkWriteDescriptorSet write{};
+	VkDescriptorBufferInfo bufferInfo{};
+	VkDescriptorImageInfo imageInfo{};
+};
 
 
 class SamplerStatesPresets
@@ -388,7 +393,6 @@ public:
 	struct FrameSync
 	{
 		VkSemaphore imageAvailable;
-		VkSemaphore renderFinished;
 		VkFence inFlight;
 		VkCommandBuffer cmdBuffer;
 	};
@@ -469,6 +473,289 @@ private:
 
 
 
+	VkResult _initDescLayoutAndSets(RenderManager* const renderMan, Material& material, VkResult& vkResult,
+									std::vector<VkDescriptorSetLayout>& layouts, std::vector<BindSetCombo>& descriptorSetsList) {
+		//std::vector<VkDescriptorSetLayout> layouts;
+		//std::vector<std::pair<uint8_t, VkDescriptorSet>> descriptorSetsList;
+		for (auto& [set, key] : material.descriptorSetLayoutKeys) {
+
+			VkDescriptorSetLayout layout;
+			auto layoutIt = descSetLayoutCache.find(key);
+			if (layoutIt == descSetLayoutCache.end()) {
+
+				// not found, create the descriptor set
+				std::unordered_map<uint32_t, std::vector<VkDescriptorSetLayoutBinding>> setBindings;
+				for (size_t i = 0; i < key.bindings.size(); ++i) {
+					VkDescriptorSetLayoutBinding binding{};
+					binding.binding = key.bindings[i];
+					binding.descriptorType = key.types[i];
+					binding.descriptorCount = key.counts[i];
+					binding.stageFlags = key.stageFlags[i];
+					binding.pImmutableSamplers = nullptr;
+					setBindings[set].push_back(binding);
+				}
+
+				VkDescriptorSetLayoutCreateInfo layoutInfo{};
+				layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+				layoutInfo.bindingCount = static_cast<uint32_t>(setBindings[set].size());
+				layoutInfo.pBindings = setBindings[set].data();
+				layoutInfo.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
+
+				Vk_CHECK(vkResult, vkCreateDescriptorSetLayout(m_vkDevice, &layoutInfo, nullptr, &layout));
+				descSetLayoutCache.insert({ key, layout });
+			} else
+				layout = layoutIt->second;
+
+			uint64_t layoutHandle = reinterpret_cast<uint64_t>(layout);
+
+			std::vector<PendingWrite> pendingWrites;
+			pendingWrites.reserve(key.bindings.size() * VULKAN_FRAMES_IN_FLIGHT);
+
+			std::vector< VkDescriptorSetVariableDescriptorCountAllocateInfo> pendingCounts;
+			pendingCounts.reserve(key.bindings.size() * VULKAN_FRAMES_IN_FLIGHT);
+			std::array<VkDescriptorSet, VULKAN_FRAMES_IN_FLIGHT> descriptorSet;
+			BoundDescriptorKey descSetKey{};
+			descSetKey.layout = layout;
+			for (size_t i = 0; i < key.bindings.size(); ++i) {
+				ResourceBinding rBind{};
+				rBind.binding = key.bindings[i];
+				rBind.type = key.types[i];
+
+				if (set == MAT_CAMERADATA_SET && renderMan->getParamName(key.nameIndices[i]) == MAT_CAMERADATA_NAME) {
+					rBind.handle = reinterpret_cast<uint64_t>(&camDataBuffer);
+					layoutHandle = 0;
+					for (size_t j = 0; j < VULKAN_FRAMES_IN_FLIGHT; j++) {
+						PendingWrite pw{};
+
+						pw.bufferInfo.buffer = camDataBuffer[j];
+						pw.bufferInfo.offset = 0;
+						pw.bufferInfo.range = sizeof(CameraData);
+
+						pw.write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+						pw.write.dstSet = reinterpret_cast<VkDescriptorSet>(j); //hacky workaround for init
+						pw.write.dstBinding = key.bindings[i];
+						pw.write.dstArrayElement = 0;
+						pw.write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+						pw.write.descriptorCount = 1;
+						//pw.write.pBufferInfo = &pw.bufferInfo;
+
+						pendingWrites.push_back(pw);
+						pendingWrites.back().write.pBufferInfo = &pendingWrites.back().bufferInfo;
+					}
+
+				} else if (set == MAT_TEXTURES_SET && renderMan->getParamName(key.nameIndices[i]) == MAT_TEXTURES_NAME) {
+					rBind.handle = reinterpret_cast<uint64_t>(&texResources);
+					layoutHandle = 0;
+
+					VkDescriptorSetVariableDescriptorCountAllocateInfo countInfo{};
+					uint32_t textures = 0;
+					countInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO;
+					countInfo.descriptorSetCount = 1;
+					countInfo.pDescriptorCounts = &textures;
+					pendingCounts.push_back(countInfo);
+
+				} else if (set == MAT_BASE_MAT_INSTANCES_SET && renderMan->getParamName(key.nameIndices[i]) == MAT_BASE_MAT_INSTANCES_NAME) {
+					rBind.handle = reinterpret_cast<uint64_t>(&matBuf_baseMatInstances);
+					layoutHandle = 0;
+					//for (size_t j = 0; j < VULKAN_FRAMES_IN_FLIGHT; j++) {
+					//	PendingWrite pw{};
+
+
+					//	pw.bufferInfo.buffer = matBuf_baseMatInstances[j];
+					//	pw.bufferInfo.offset = 0;
+					//	pw.bufferInfo.range = sizeof(BaseMaterialInstance);
+
+
+					//	pw.write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+					//	pw.write.dstSet = reinterpret_cast<VkDescriptorSet>(j); //hacky workaround for init
+					//	pw.write.dstBinding = key.bindings[i];
+					//	pw.write.dstArrayElement = 0;
+					//	pw.write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+					//	pw.write.descriptorCount = 1;
+					//	//pw.write.pBufferInfo = &pw.bufferInfo;
+
+					//	pendingWrites.push_back(pw);
+					//	pendingWrites.back().write.pBufferInfo = &pendingWrites.back().bufferInfo;
+					//}
+
+				} else if (set == MAT_MODELMATRICES_SET && renderMan->getParamName(key.nameIndices[i]) == MAT_MODELMATRICES_NAME) {
+					rBind.handle = reinterpret_cast<uint64_t>(&matBuf_modelTransforms);
+					layoutHandle = 0;
+					for (size_t j = 0; j < VULKAN_FRAMES_IN_FLIGHT; j++) {
+
+						PendingWrite pw{};
+
+						pw.bufferInfo.buffer = matBuf_modelTransforms[j];
+						pw.bufferInfo.offset = 0;
+						pw.bufferInfo.range = sizeof(ModelTransform);
+
+						pw.write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+						pw.write.dstSet = reinterpret_cast<VkDescriptorSet>(j); //hacky workaround for init
+						pw.write.dstBinding = key.bindings[i];
+						pw.write.dstArrayElement = 0;
+						pw.write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+						pw.write.descriptorCount = 1;
+						//pw.write.pBufferInfo = &pw.bufferInfo;
+
+						pendingWrites.push_back(pw);
+						pendingWrites.back().write.pBufferInfo = &pendingWrites.back().bufferInfo;
+					}
+
+				} else if (set == MAT_SAMPLER_SET && renderMan->getParamName(key.nameIndices[i]) == MAT_SAMPLER_NAME) {
+					rBind.handle = reinterpret_cast<uint64_t>(&baseSamplers);
+					layoutHandle = 0;
+					//for (size_t j = 0; j < VULKAN_FRAMES_IN_FLIGHT; j++) {
+
+					//	PendingWrite pw{};
+
+					//	if (!dummyTexCreated) {
+					//		if (texResources.empty())
+					//			texResources.push_back({});
+					//	}
+					//	for (int k = 0; k < 1; ++k) {
+					//		VkDescriptorImageInfo info{};
+					//		info.sampler = texResources[0].imageInfo.sampler;
+					//		info.imageView = texResources[0].imageView;
+					//		info.imageLayout = texResources[0].imageInfo.imageLayout;
+					//		imageInfos.push_back(info);
+					//	}
+
+					//	//VkWriteDescriptorSet write{};
+					//	pw.write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+					//	pw.write.dstSet = reinterpret_cast<VkDescriptorSet>(j); //hacky workaround for init
+					//	pw.write.dstBinding = key.bindings[i];
+					//	pw.write.dstArrayElement = 0;
+					//	pw.write.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
+					//	pw.write.descriptorCount = 1;
+					//	pw.write.pImageInfo = imageInfos.data();
+
+					//	pendingWrites.push_back(pw);
+					//}
+
+				} else if (set == MAT_BASE_MAT_INSTANCES_INDICES_SET && renderMan->getParamName(key.nameIndices[i]) == MAT_BASE_MAT_INSTANCES_INDICES_NAME) {
+
+					rBind.handle = reinterpret_cast<uint64_t>(&instanceIndexStage);
+					layoutHandle = 0;
+					for (size_t j = 0; j < VULKAN_FRAMES_IN_FLIGHT; j++) {
+
+						PendingWrite pw{};
+
+						pw.bufferInfo.buffer = instanceIndexStageBuffer[j];
+						pw.bufferInfo.offset = 0;
+						pw.bufferInfo.range = VK_WHOLE_SIZE;//sizeof(uint32_t) * instanceIndexStage.size();
+
+						pw.write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+						pw.write.dstSet = reinterpret_cast<VkDescriptorSet>(j); //hacky workaround for init
+						pw.write.dstBinding = key.bindings[i];
+						pw.write.dstArrayElement = 0;
+						pw.write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+						pw.write.descriptorCount = 1;
+						//pw.write.pBufferInfo = &pw.bufferInfo;
+
+						pendingWrites.push_back(pw);
+						pendingWrites.back().write.pBufferInfo = &pendingWrites.back().bufferInfo;
+
+					}
+				}
+
+				descSetKey.bindings.push_back(rBind);
+			}
+			auto descSetIt = descriptorSetCache.find(descSetKey);
+			if (descSetIt == descriptorSetCache.end()) {
+
+				// TODO TODO
+				void* allocPtr = nullptr;
+				if (!pendingCounts.empty()) {
+					allocPtr = &pendingCounts[0];
+
+					for (size_t i = 0; i < pendingCounts.size() - 1; ++i) {
+						pendingCounts[i].pNext = &pendingCounts[i + 1];
+					}
+				}
+
+				for (size_t j = 0; j < VULKAN_FRAMES_IN_FLIGHT; ++j) {
+					// allocate and update descriptor set
+					VkDescriptorSetAllocateInfo allocInfo{};
+					allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+					allocInfo.descriptorPool = currentDescPool;
+					allocInfo.descriptorSetCount = 1;
+					allocInfo.pSetLayouts = &layout;
+					allocInfo.pNext = allocPtr;
+					Vk_CHECK(vkResult, vkAllocateDescriptorSets(m_vkDevice, &allocInfo, &descriptorSet[j]));
+				}
+
+				for (auto& pw : pendingWrites) {
+					pw.write.dstSet = descriptorSet[reinterpret_cast<size_t>(pw.write.dstSet)]; // correcting back the hackywacky
+					//__debugbreak();
+					vkUpdateDescriptorSets(m_vkDevice, 1, &pw.write, 0, nullptr);
+				}
+
+
+
+
+				descriptorSetCache.insert({ descSetKey, descriptorSet });
+			} else
+				descriptorSet = descSetIt->second;
+
+			// TESTING TESTING
+			//descriptorSetsList.push_back({ static_cast<uint8_t>(set), descriptorSet[0] });
+
+			// for later mapping
+			for (auto& binding : key.bindings) {
+				BindSetCombo combo{ static_cast<uint8_t>(binding), static_cast<uint8_t>(set), layoutHandle };
+				bindingToDescriptorSet.insert({ combo, descriptorSet });
+				descriptorSetsList.push_back(combo);
+			}
+
+			layouts.resize(std::max(layouts.size(), static_cast<size_t>(set + 1)));
+			layouts[set] = layout;
+		}
+
+		// Dummy texture
+		if (!dummyTexCreated) {
+			dummyTexCreated = true;
+
+			Texture2D dummyTex{};
+			dummyTex.width = 1;
+			dummyTex.height = 1;
+			dummyTex.texelPtr = reinterpret_cast<void*>(&c_dummyPixel[0]);
+			dummyTex = renderMan->registerTexture("DummyTex", dummyTex);
+			uint32_t texIndex{};
+			loadTexture(dummyTex, &texIndex);
+			texResources[0].imageInfo.sampler = baseSamplers[{SamplerMode::Aniso8X, SamplerAddressMode::Repeat}];
+
+			std::vector<VkDescriptorImageInfo> imageInfos;
+			imageInfos.reserve(VULKAN_FRAMES_IN_FLIGHT * 3);
+			for (size_t j = 0; j < VULKAN_FRAMES_IN_FLIGHT; j++) {
+
+				
+				for (int k = 0; k < 1; ++k) {
+					VkDescriptorImageInfo info{};
+					info.sampler = texResources[0].imageInfo.sampler;
+					info.imageView = texResources[0].imageView;
+					info.imageLayout = texResources[0].imageInfo.imageLayout;
+					imageInfos.push_back(info);
+				}
+
+				VkDescriptorSet set = bindingToDescriptorSet[{MAT_SAMPLER_BIND, MAT_SAMPLER_SET, 0}][j];
+
+				VkWriteDescriptorSet write{};
+				write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+				write.dstSet = set;
+				write.dstBinding = MAT_SAMPLER_BIND;
+				write.dstArrayElement = 0;
+				write.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
+				write.descriptorCount = 1;
+				write.pImageInfo = imageInfos.data();
+
+				vkUpdateDescriptorSets(m_vkDevice, 1, &write, 0, nullptr);
+			}
+		}
+
+		return VK_SUCCESS;
+	}
+
+
 
 public:
 	WindowSurface* const windowSurface;
@@ -483,9 +770,9 @@ public:
 
 	// Descriptor Layouts & Sets
 	std::unordered_map<DescriptorSetLayoutKey, VkDescriptorSetLayout, DescriptorSetLayoutKeyHash> descSetLayoutCache;
-	std::unordered_map<BoundDescriptorKey, VkDescriptorSet, BoundDescriptorKeyHash> descriptorSetCache;
+	std::unordered_map<BoundDescriptorKey, std::array<VkDescriptorSet, VULKAN_FRAMES_IN_FLIGHT>, BoundDescriptorKeyHash> descriptorSetCache;
 
-	std::unordered_map<std::pair<uint8_t, uint8_t>, VkDescriptorSet, PairHash<uint8_t, uint8_t>> bindingToDescriptorSet;
+	std::unordered_map<BindSetCombo, std::array<VkDescriptorSet, VULKAN_FRAMES_IN_FLIGHT>, BindSetComboKeyHash> bindingToDescriptorSet;
 
 
 	BlendMode currentBlendMode = BlendMode::Opaque;
@@ -495,6 +782,7 @@ public:
 	bool isClean = true;
 	uint8_t currentFrame = 0;
 	bool pendingResize = false;
+	bool dummyTexCreated = false;
 
 	VkPresentModeKHR presentMode;
 	VkSwapchainKHR swapchain = nullptr;
@@ -515,8 +803,8 @@ public:
 	
 	std::vector<VkRenderPass> rendPasses;
 	std::vector<VkFramebuffer> swapChainFramebuffers;	
-	std::array<FrameSync, VULKAN_MAX_FRAMES_IN_FLIGHT> frameSync;
-	//std::vector<VkSemaphore> imageRenderDone;
+	std::array<FrameSync, VULKAN_FRAMES_IN_FLIGHT> frameSync;
+	std::vector<VkSemaphore> imageRenderFinished;
 
 	// Global Material Buffers
 	std::vector<BaseVSIn> vertices;
@@ -528,22 +816,22 @@ public:
 	VkDeviceMemory indexMemory = nullptr;
 
 	CameraData camData{};
-	VkBuffer camDataBuffer = nullptr;
-	VkDeviceMemory camDataMemory = nullptr;
+	VkBuffer camDataBuffer[VULKAN_FRAMES_IN_FLIGHT] = { nullptr, nullptr };
+	VkDeviceMemory camDataMemory[VULKAN_FRAMES_IN_FLIGHT] = { nullptr, nullptr };
 
 	std::vector<ModelTransform> moddelTransforms;
-	VkBuffer matBuf_modelTransforms = nullptr;
-	VkDeviceMemory matDevMem_modelTransforms = nullptr;
+	VkBuffer matBuf_modelTransforms[VULKAN_FRAMES_IN_FLIGHT] = { nullptr, nullptr };
+	VkDeviceMemory matDevMem_modelTransforms[VULKAN_FRAMES_IN_FLIGHT] = { nullptr, nullptr };
 
 	std::vector<VkTextureResource> texResources;
 
 	std::vector<uint32_t> instanceIndexStage;
-	VkBuffer instanceIndexStageBuffer = nullptr;
-	VkDeviceMemory instanceIndexStageMemory = nullptr;
+	VkBuffer instanceIndexStageBuffer[VULKAN_FRAMES_IN_FLIGHT] = { nullptr, nullptr };
+	VkDeviceMemory instanceIndexStageMemory[VULKAN_FRAMES_IN_FLIGHT] = { nullptr, nullptr };
 
 	std::vector<BaseMaterialInstance> matData_baseMatInstances;
-	VkBuffer matBuf_baseMatInstances = nullptr;
-	VkDeviceMemory matDevMem_baseMatInstances = nullptr;
+	VkBuffer matBuf_baseMatInstances[VULKAN_FRAMES_IN_FLIGHT] = { nullptr, nullptr };
+	VkDeviceMemory matDevMem_baseMatInstances[VULKAN_FRAMES_IN_FLIGHT] = { nullptr, nullptr };
 
 	uint32_t registerBaseMaterialInstance(const BaseMaterialInstance* const matInstance) {
 		auto index = matData_baseMatInstances.size();
@@ -551,9 +839,15 @@ public:
 			matData_baseMatInstances.push_back(*matInstance);
 		else
 			matData_baseMatInstances.push_back({});
-		//_reloadBaseMatData();
 		return index;
 	}
+
+	INLINE BaseMaterialInstance* getBaseMaterialInstanceData(const uint32_t index) {
+		if (index >= matData_baseMatInstances.size())
+			return nullptr;
+		return &matData_baseMatInstances[index];
+	}
+	
 
 	void setPendingExit() { m_pendingExit = true; }
 	const bool& isPendingExit() const { return m_pendingExit; }
@@ -609,55 +903,57 @@ public:
 
 		VkResult vkResult{};
 
-		VkDeviceSize bufferSize = sizeof(BaseMaterialInstance) * this->matData_baseMatInstances.size();
-		VkBufferCreateInfo createInfo{};
-		createInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-		createInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
-		createInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-		createInfo.size = bufferSize;
-		Vk_CHECK(vkResult, vkCreateBuffer(m_vkDevice, &createInfo, nullptr, &matBuf_baseMatInstances));
-		VkMemoryRequirements bufferMemReq{};
-		vkGetBufferMemoryRequirements(m_vkDevice, matBuf_baseMatInstances, &bufferMemReq);
-		VkMemoryAllocateInfo allocInfo{};
-		allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-		allocInfo.allocationSize = bufferMemReq.size;
-		allocInfo.memoryTypeIndex = findMemoryType(
-			bufferMemReq.memoryTypeBits,
-			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-			m_phyDevice
-		);
-		Vk_CHECK(vkResult, vkAllocateMemory(m_vkDevice, &allocInfo, nullptr, &matDevMem_baseMatInstances));
-		Vk_CHECK(vkResult, vkBindBufferMemory(m_vkDevice, matBuf_baseMatInstances, matDevMem_baseMatInstances, 0));
+		for (size_t i = 0; i < VULKAN_FRAMES_IN_FLIGHT; ++i) {
+			VkDeviceSize bufferSize = sizeof(BaseMaterialInstance) * this->matData_baseMatInstances.size();
+			VkBufferCreateInfo createInfo{};
+			createInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+			createInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+			createInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+			createInfo.size = bufferSize;
+			Vk_CHECK(vkResult, vkCreateBuffer(m_vkDevice, &createInfo, nullptr, &matBuf_baseMatInstances[i]));
+			VkMemoryRequirements bufferMemReq{};
+			vkGetBufferMemoryRequirements(m_vkDevice, matBuf_baseMatInstances[i], &bufferMemReq);
+			VkMemoryAllocateInfo allocInfo{};
+			allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+			allocInfo.allocationSize = bufferMemReq.size;
+			allocInfo.memoryTypeIndex = findMemoryType(
+				bufferMemReq.memoryTypeBits,
+				VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+				m_phyDevice
+			);
+			Vk_CHECK(vkResult, vkAllocateMemory(m_vkDevice, &allocInfo, nullptr, &matDevMem_baseMatInstances[i]));
+			Vk_CHECK(vkResult, vkBindBufferMemory(m_vkDevice, matBuf_baseMatInstances[i], matDevMem_baseMatInstances[i], 0));
 
-		void* data;
-		vkMapMemory(m_vkDevice, matDevMem_baseMatInstances, 0, bufferSize, 0, &data);
-		memcpy(data, this->matData_baseMatInstances.data(), (size_t)bufferSize);
-		vkUnmapMemory(m_vkDevice, matDevMem_baseMatInstances);
+			void* data;
+			vkMapMemory(m_vkDevice, matDevMem_baseMatInstances[i], 0, bufferSize, 0, &data);
+			memcpy(data, this->matData_baseMatInstances.data(), (size_t)bufferSize);
+			vkUnmapMemory(m_vkDevice, matDevMem_baseMatInstances[i]);
 
 
-		// Update descriptor sets
-		VkDescriptorSet set = bindingToDescriptorSet[{MAT_BASE_MAT_INSTANCES_BIND, MAT_BASE_MAT_INSTANCES_SET}];
-		// Only update the buffers that changed
-		std::vector<VkWriteDescriptorSet> descriptorWrites;
+			// Update descriptor sets
+			VkDescriptorSet set = bindingToDescriptorSet[{MAT_BASE_MAT_INSTANCES_BIND, MAT_BASE_MAT_INSTANCES_SET, 0}][i];
+			// Only update the buffers that changed
+			std::vector<VkWriteDescriptorSet> descriptorWrites;
 
-		// Say only your instance data changed this frame
-		VkDescriptorBufferInfo instanceDataBufferInfo{};
-		instanceDataBufferInfo.buffer = matBuf_baseMatInstances;
-		instanceDataBufferInfo.offset = 0;
-		instanceDataBufferInfo.range = VK_WHOLE_SIZE;
+			// Say only your instance data changed this frame
+			VkDescriptorBufferInfo instanceDataBufferInfo{};
+			instanceDataBufferInfo.buffer = matBuf_baseMatInstances[i];
+			instanceDataBufferInfo.offset = 0;
+			instanceDataBufferInfo.range = VK_WHOLE_SIZE;
 
-		VkWriteDescriptorSet instanceDataWrite{};
-		instanceDataWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-		instanceDataWrite.dstSet = set;
-		instanceDataWrite.dstBinding = MAT_BASE_MAT_INSTANCES_BIND;
-		instanceDataWrite.dstArrayElement = 0;
-		instanceDataWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-		instanceDataWrite.descriptorCount = 1;
-		instanceDataWrite.pBufferInfo = &instanceDataBufferInfo;
+			VkWriteDescriptorSet instanceDataWrite{};
+			instanceDataWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+			instanceDataWrite.dstSet = set;
+			instanceDataWrite.dstBinding = MAT_BASE_MAT_INSTANCES_BIND;
+			instanceDataWrite.dstArrayElement = 0;
+			instanceDataWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+			instanceDataWrite.descriptorCount = 1;
+			instanceDataWrite.pBufferInfo = &instanceDataBufferInfo;
 
-		// Only update what changed
-		vkUpdateDescriptorSets(m_vkDevice, 1, &instanceDataWrite, 0, nullptr);
+			// Only update what changed
+			vkUpdateDescriptorSets(m_vkDevice, 1, &instanceDataWrite, 0, nullptr);
 
+		}
 
 		return VK_SUCCESS;
 	}
@@ -743,7 +1039,7 @@ public:
 	INLINE VkResult initVulkan(const VkPresentModeKHR mode, bool prioIGpu = false) {
 		VkResult vk{};
 
-		for (size_t i = 0; i < VULKAN_MAX_FRAMES_IN_FLIGHT; ++i) {
+		for (size_t i = 0; i < VULKAN_FRAMES_IN_FLIGHT; ++i) {
 			frameSync[i] = FrameSync{};
 		}
 		presentMode = mode;
@@ -825,26 +1121,76 @@ public:
 		VkResult vkResult;
 		LOGLINE(LogType::Info, LogMod::Vulkan, "Creating and binding global buffers... ");
 
-		// cameraData
-		VkBufferCreateInfo camDatabufferInfo{};
-		camDatabufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-		camDatabufferInfo.size = sizeof(CameraData);
-		camDatabufferInfo.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
-		camDatabufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-		Vk_CHECK(vkResult, vkCreateBuffer(m_vkDevice, &camDatabufferInfo, nullptr, &camDataBuffer));
+		for (size_t i = 0; i < VULKAN_FRAMES_IN_FLIGHT; ++i) {
 
-		VkMemoryRequirements memRequirements;
-		vkGetBufferMemoryRequirements(m_vkDevice, camDataBuffer, &memRequirements);
+			// cameraData
+			VkBufferCreateInfo camDatabufferInfo{};
+			camDatabufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+			camDatabufferInfo.size = sizeof(CameraData);
+			camDatabufferInfo.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+			camDatabufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+			Vk_CHECK(vkResult, vkCreateBuffer(m_vkDevice, &camDatabufferInfo, nullptr, &camDataBuffer[i]));
 
-		VkMemoryAllocateInfo globalDataAllocInfo{};
-		globalDataAllocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-		globalDataAllocInfo.allocationSize = memRequirements.size;
-		globalDataAllocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits,
-												   VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-												   m_phyDevice);
+			VkMemoryRequirements memRequirements;
+			vkGetBufferMemoryRequirements(m_vkDevice, camDataBuffer[i], &memRequirements);
 
-		Vk_CHECK(vkResult, vkAllocateMemory(m_vkDevice, &globalDataAllocInfo, nullptr, &camDataMemory));
-		Vk_CHECK(vkResult, vkBindBufferMemory(m_vkDevice, camDataBuffer, camDataMemory, 0));
+			VkMemoryAllocateInfo globalDataAllocInfo{};
+			globalDataAllocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+			globalDataAllocInfo.allocationSize = memRequirements.size;
+			globalDataAllocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits,
+																 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+																 m_phyDevice);
+
+			Vk_CHECK(vkResult, vkAllocateMemory(m_vkDevice, &globalDataAllocInfo, nullptr, &camDataMemory[i]));
+			Vk_CHECK(vkResult, vkBindBufferMemory(m_vkDevice, camDataBuffer[i], camDataMemory[i], 0));
+
+
+
+			// ModelTransforms
+			VkBufferCreateInfo modelTransBufferInfo{};
+			modelTransBufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+			modelTransBufferInfo.size = sizeof(BaseMaterialInstance);
+			modelTransBufferInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+			modelTransBufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+			Vk_CHECK(vkResult, vkCreateBuffer(m_vkDevice, &modelTransBufferInfo, nullptr, &matBuf_modelTransforms[i]));
+
+			vkGetBufferMemoryRequirements(m_vkDevice, matBuf_modelTransforms[i], &memRequirements);
+
+			VkMemoryAllocateInfo modelsAllocInfo{};
+			modelsAllocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+			modelsAllocInfo.allocationSize = memRequirements.size;
+			modelsAllocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits,
+															 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+															 m_phyDevice);
+
+			Vk_CHECK(vkResult, vkAllocateMemory(m_vkDevice, &modelsAllocInfo, nullptr, &matDevMem_modelTransforms[i]));
+			Vk_CHECK(vkResult, vkBindBufferMemory(m_vkDevice, matBuf_modelTransforms[i], matDevMem_modelTransforms[i], 0));
+
+
+			// Instance Stage Indices
+			instanceIndexStage.resize(VULKAN_INSTANCE_INDEX_STAGE_SIZE);
+			VkBufferCreateInfo indicesBufferInfo{};
+			indicesBufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+			indicesBufferInfo.size = sizeof(uint32_t) * instanceIndexStage.size();
+			indicesBufferInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+			indicesBufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+			Vk_CHECK(vkResult, vkCreateBuffer(m_vkDevice, &indicesBufferInfo, nullptr, &instanceIndexStageBuffer[i]));
+
+			vkGetBufferMemoryRequirements(m_vkDevice, instanceIndexStageBuffer[i], &memRequirements);
+
+			VkMemoryAllocateInfo indexAllocInfo{};
+			indexAllocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+			indexAllocInfo.allocationSize = memRequirements.size;
+			indexAllocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits,
+															VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+															m_phyDevice);
+
+			Vk_CHECK(vkResult, vkAllocateMemory(m_vkDevice, &indexAllocInfo, nullptr, &instanceIndexStageMemory[i]));
+			Vk_CHECK(vkResult, vkBindBufferMemory(m_vkDevice, instanceIndexStageBuffer[i], instanceIndexStageMemory[i], 0));
+
+		}
+
+
 
 		//// BaseMaterialInstances
 		//VkBufferCreateInfo baseMatInstanceBufferInfo{};
@@ -868,59 +1214,22 @@ public:
 		//Vk_CHECK(vkResult, vkBindBufferMemory(m_vkDevice, matBuf_baseMatInstances, matDevMem_baseMatInstances, 0));
 
 
-		// ModelTransforms
-		VkBufferCreateInfo modelTransBufferInfo{};
-		modelTransBufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-		modelTransBufferInfo.size = sizeof(BaseMaterialInstance);
-		modelTransBufferInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
-		modelTransBufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-		Vk_CHECK(vkResult, vkCreateBuffer(m_vkDevice, &modelTransBufferInfo, nullptr, &matBuf_modelTransforms));
-
-		vkGetBufferMemoryRequirements(m_vkDevice, matBuf_modelTransforms, &memRequirements);
-
-		VkMemoryAllocateInfo modelsAllocInfo{};
-		modelsAllocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-		modelsAllocInfo.allocationSize = memRequirements.size;
-		modelsAllocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits,
-														  VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-														  m_phyDevice);
-
-		Vk_CHECK(vkResult, vkAllocateMemory(m_vkDevice, &modelsAllocInfo, nullptr, &matDevMem_modelTransforms));
-		Vk_CHECK(vkResult, vkBindBufferMemory(m_vkDevice, matBuf_modelTransforms, matDevMem_modelTransforms, 0));
 
 
-		// Instance Stage Indices
-		instanceIndexStage.resize(VULKAN_INSTANCE_INDEX_STAGE_SIZE);
-		VkBufferCreateInfo indicesBufferInfo{};
-		indicesBufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-		indicesBufferInfo.size = sizeof(uint32_t) * instanceIndexStage.size();
-		indicesBufferInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
-		indicesBufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-		Vk_CHECK(vkResult, vkCreateBuffer(m_vkDevice, &indicesBufferInfo, nullptr, &instanceIndexStageBuffer));
 
-		vkGetBufferMemoryRequirements(m_vkDevice, instanceIndexStageBuffer, &memRequirements);
 
-		VkMemoryAllocateInfo indexAllocInfo{};
-		indexAllocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-		indexAllocInfo.allocationSize = memRequirements.size;
-		indexAllocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits,
-														 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-														 m_phyDevice);
-
-		Vk_CHECK(vkResult, vkAllocateMemory(m_vkDevice, &indexAllocInfo, nullptr, &instanceIndexStageMemory));
-		Vk_CHECK(vkResult, vkBindBufferMemory(m_vkDevice, instanceIndexStageBuffer, instanceIndexStageMemory, 0));
 
 
 		// Dummy texture
+		//Texture2D dummyTex{};
+		//dummyTex.width = 1;
+		//dummyTex.height = 1;
+		//dummyTex.texelPtr = reinterpret_cast<void*>(&c_dummyPixel[0]);
 
-		Texture2D dummyTex{};
-		dummyTex.width = 1;
-		dummyTex.height = 1;
-		dummyTex.texelPtr = reinterpret_cast<void*>(&c_dummyPixel[0]);
+		//uint32_t texIndex{};
+		//loadTexture(dummyTex, &texIndex);
+		//texResources[0].imageInfo.sampler = baseSamplers[{SamplerMode::Aniso8X, SamplerAddressMode::Repeat}];
 
-		uint32_t texIndex{};
-		loadTexture(dummyTex, &texIndex);
-		texResources[0].imageInfo.sampler = baseSamplers[{SamplerMode::Aniso8X, SamplerAddressMode::Repeat}];
 		//VkImageCreateInfo imageCreateInfo{};
 		//imageCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
 		//imageCreateInfo.imageType = VK_IMAGE_TYPE_2D;
@@ -1411,6 +1720,7 @@ public:
 		return VK_SUCCESS;
 	}
 
+
 	VkResult createPipelineFromMaterial(RenderManager* const renderMan, Material& material)
 	{
 		LOGLINE(LogType::Info, LogMod::Vulkan, std::string{ "Creating Pipeline for " + material.name() + "... "});
@@ -1544,224 +1854,249 @@ public:
 		colorBlending.attachmentCount = colorBlends.size();
 		colorBlending.pAttachments = colorBlends.data();
 
+
+
 		// Layout & Descriptor sets
+		std::vector<BindSetCombo> descriptorSetsList;
 		std::vector<VkDescriptorSetLayout> layouts;
-		std::vector<std::pair<uint8_t, VkDescriptorSet>> descriptorSetsList;
-		for (auto& [set, key] : material.descriptorSetLayoutKeys) {
-
-			VkDescriptorSetLayout layout;
-			auto layoutIt = descSetLayoutCache.find(key);
-			if (layoutIt == descSetLayoutCache.end()) {
-
-				// not found, create the descriptor set
-				std::unordered_map<uint32_t, std::vector<VkDescriptorSetLayoutBinding>> setBindings;
-				for (size_t i = 0; i < key.bindings.size(); ++i) {
-					VkDescriptorSetLayoutBinding binding{};
-					binding.binding = key.bindings[i];
-					binding.descriptorType = key.types[i];
-					binding.descriptorCount = key.counts[i];
-					binding.stageFlags = key.stageFlags[i];
-					binding.pImmutableSamplers = nullptr;
-					setBindings[set].push_back(binding);
-				}	
+		Vk_CHECK(vkResult, _initDescLayoutAndSets(renderMan, material, vkResult, layouts, descriptorSetsList));
 		
-				VkDescriptorSetLayoutCreateInfo layoutInfo{};
-				layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-				layoutInfo.bindingCount = static_cast<uint32_t>(setBindings[set].size());
-				layoutInfo.pBindings = setBindings[set].data();
-				layoutInfo.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
+		//std::vector<VkDescriptorSetLayout> layouts;
+		//std::vector<std::pair<uint8_t, VkDescriptorSet>> descriptorSetsList;
+		//for (auto& [set, key] : material.descriptorSetLayoutKeys) {
 
-				Vk_CHECK(vkResult, vkCreateDescriptorSetLayout(m_vkDevice, &layoutInfo, nullptr, &layout));
-				descSetLayoutCache.insert({ key, layout });
-			} else
-				layout = layoutIt->second;
+		//	VkDescriptorSetLayout layout;
+		//	auto layoutIt = descSetLayoutCache.find(key);
+		//	if (layoutIt == descSetLayoutCache.end()) {
+
+		//		// not found, create the descriptor set
+		//		std::unordered_map<uint32_t, std::vector<VkDescriptorSetLayoutBinding>> setBindings;
+		//		for (size_t i = 0; i < key.bindings.size(); ++i) {
+		//			VkDescriptorSetLayoutBinding binding{};
+		//			binding.binding = key.bindings[i];
+		//			binding.descriptorType = key.types[i];
+		//			binding.descriptorCount = key.counts[i];
+		//			binding.stageFlags = key.stageFlags[i];
+		//			binding.pImmutableSamplers = nullptr;
+		//			setBindings[set].push_back(binding);
+		//		}	
+		//
+		//		VkDescriptorSetLayoutCreateInfo layoutInfo{};
+		//		layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+		//		layoutInfo.bindingCount = static_cast<uint32_t>(setBindings[set].size());
+		//		layoutInfo.pBindings = setBindings[set].data();
+		//		layoutInfo.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
+
+		//		Vk_CHECK(vkResult, vkCreateDescriptorSetLayout(m_vkDevice, &layoutInfo, nullptr, &layout));
+		//		descSetLayoutCache.insert({ key, layout });
+		//	} else
+		//		layout = layoutIt->second;
 
 
-			struct PendingWrite
-			{
-				VkWriteDescriptorSet write{};
-				VkDescriptorBufferInfo bufferInfo{};
-				VkDescriptorImageInfo imageInfo{};
-			};
+		//	struct PendingWrite
+		//	{
+		//		VkWriteDescriptorSet write{};
+		//		VkDescriptorBufferInfo bufferInfo{};
+		//		VkDescriptorImageInfo imageInfo{};
+		//	};
 
-			std::vector<PendingWrite> pendingWrites;
-			pendingWrites.reserve(key.bindings.size());
-			std::vector< VkDescriptorSetVariableDescriptorCountAllocateInfo> pendingCounts;
-			pendingCounts.reserve(key.bindings.size());
-			VkDescriptorSet descriptorSet;
-			BoundDescriptorKey descSetKey{};
-			descSetKey.layout = layout;
-			std::vector<VkDescriptorImageInfo> imageInfos;
-			for (size_t i = 0; i < key.bindings.size(); ++i) {
-				ResourceBinding rBind{};
-				rBind.binding = key.bindings[i];
-				rBind.type = key.types[i];
+		//	std::vector<PendingWrite> pendingWrites;
+		//	pendingWrites.reserve(key.bindings.size() * VULKAN_FRAMES_IN_FLIGHT);
+		//	
+		//	std::vector< VkDescriptorSetVariableDescriptorCountAllocateInfo> pendingCounts;
+		//	pendingCounts.reserve(key.bindings.size() * VULKAN_FRAMES_IN_FLIGHT);
+		//	std::array<VkDescriptorSet, VULKAN_FRAMES_IN_FLIGHT> descriptorSet;
+		//	BoundDescriptorKey descSetKey{};
+		//	descSetKey.layout = layout;
+		//	std::vector<VkDescriptorImageInfo> imageInfos;
+		//	imageInfos.reserve(key.bindings.size()* VULKAN_FRAMES_IN_FLIGHT * 3);
+		//	for (size_t i = 0; i < key.bindings.size(); ++i) {
+		//		ResourceBinding rBind{};
+		//		rBind.binding = key.bindings[i];
+		//		rBind.type = key.types[i];
 
-				if (set == MAT_CAMERADATA_SET && renderMan->getParamName(key.nameIndices[i]) == MAT_CAMERADATA_NAME) {
-					rBind.handle = reinterpret_cast<uint64_t>(&camDataBuffer);
+		//		if (set == MAT_CAMERADATA_SET && renderMan->getParamName(key.nameIndices[i]) == MAT_CAMERADATA_NAME) {
+		//			rBind.handle = reinterpret_cast<uint64_t>(&camDataBuffer);
 
-					PendingWrite pw{};
+		//			for (size_t j = 0; j < VULKAN_FRAMES_IN_FLIGHT; j++) {
+		//				PendingWrite pw{};
 
-					pw.bufferInfo.buffer = camDataBuffer;
-					pw.bufferInfo.offset = 0;
-					pw.bufferInfo.range = sizeof(CameraData);
+		//				pw.bufferInfo.buffer = camDataBuffer[j];
+		//				pw.bufferInfo.offset = 0;
+		//				pw.bufferInfo.range = sizeof(CameraData);
 
-					pw.write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-					pw.write.dstSet = nullptr;
-					pw.write.dstBinding = key.bindings[i];
-					pw.write.dstArrayElement = 0;
-					pw.write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-					pw.write.descriptorCount = 1;
-					//pw.write.pBufferInfo = &pw.bufferInfo;
+		//				pw.write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		//				pw.write.dstSet = reinterpret_cast<VkDescriptorSet>(j); //hacky workaround for init
+		//				pw.write.dstBinding = key.bindings[i];
+		//				pw.write.dstArrayElement = 0;
+		//				pw.write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		//				pw.write.descriptorCount = 1;
+		//				//pw.write.pBufferInfo = &pw.bufferInfo;
 
-					pendingWrites.push_back(pw);
-					pendingWrites.back().write.pBufferInfo = &pendingWrites.back().bufferInfo;
+		//				pendingWrites.push_back(pw);
+		//				pendingWrites.back().write.pBufferInfo = &pendingWrites.back().bufferInfo;
+		//			}
 
-				} else if (set == MAT_TEXTURES_SET && renderMan->getParamName(key.nameIndices[i]) == MAT_TEXTURES_NAME) {
-					rBind.handle = reinterpret_cast<uint64_t>(&texResources);
+		//		} else if (set == MAT_TEXTURES_SET && renderMan->getParamName(key.nameIndices[i]) == MAT_TEXTURES_NAME) {
+		//			rBind.handle = reinterpret_cast<uint64_t>(&texResources);
 
-					VkDescriptorSetVariableDescriptorCountAllocateInfo countInfo{};
-					uint32_t textures = 0;
-					countInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO;
-					countInfo.descriptorSetCount = 1;
-					countInfo.pDescriptorCounts = &textures;
-					pendingCounts.push_back(countInfo);
+		//			VkDescriptorSetVariableDescriptorCountAllocateInfo countInfo{};
+		//			uint32_t textures = 0;
+		//			countInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO;
+		//			countInfo.descriptorSetCount = 1;
+		//			countInfo.pDescriptorCounts = &textures;
+		//			pendingCounts.push_back(countInfo);
 
-				} else if (set == MAT_BASE_MAT_INSTANCES_SET && renderMan->getParamName(key.nameIndices[i]) == MAT_BASE_MAT_INSTANCES_NAME) {
-					rBind.handle = reinterpret_cast<uint64_t>(&matBuf_baseMatInstances);
+		//		} else if (set == MAT_BASE_MAT_INSTANCES_SET && renderMan->getParamName(key.nameIndices[i]) == MAT_BASE_MAT_INSTANCES_NAME) {
+		//			rBind.handle = reinterpret_cast<uint64_t>(&matBuf_baseMatInstances);
 
-					PendingWrite pw{};
+		//			for (size_t j = 0; j < VULKAN_FRAMES_IN_FLIGHT; j++) {
+		//				PendingWrite pw{};
 
-					
-					pw.bufferInfo.buffer = matBuf_baseMatInstances;
-					pw.bufferInfo.offset = 0;
-					pw.bufferInfo.range = sizeof(BaseMaterialInstance);
 
-					
-					pw.write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-					pw.write.dstSet = nullptr;
-					pw.write.dstBinding = key.bindings[i];
-					pw.write.dstArrayElement = 0;
-					pw.write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-					pw.write.descriptorCount = 1;
-					//pw.write.pBufferInfo = &pw.bufferInfo;
+		//				pw.bufferInfo.buffer = matBuf_baseMatInstances[j];
+		//				pw.bufferInfo.offset = 0;
+		//				pw.bufferInfo.range = sizeof(BaseMaterialInstance);
 
-					pendingWrites.push_back(pw);
-					pendingWrites.back().write.pBufferInfo = &pendingWrites.back().bufferInfo;
 
-				} else if (set == MAT_MODELMATRICES_SET && renderMan->getParamName(key.nameIndices[i]) == MAT_MODELMATRICES_NAME) {
-					rBind.handle = reinterpret_cast<uint64_t>(&matBuf_modelTransforms);
+		//				pw.write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		//				pw.write.dstSet = reinterpret_cast<VkDescriptorSet>(j); //hacky workaround for init
+		//				pw.write.dstBinding = key.bindings[i];
+		//				pw.write.dstArrayElement = 0;
+		//				pw.write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+		//				pw.write.descriptorCount = 1;
+		//				//pw.write.pBufferInfo = &pw.bufferInfo;
 
-					PendingWrite pw{};
+		//				pendingWrites.push_back(pw);
+		//				pendingWrites.back().write.pBufferInfo = &pendingWrites.back().bufferInfo;
+		//			}
 
-					pw.bufferInfo.buffer = matBuf_modelTransforms;
-					pw.bufferInfo.offset = 0;
-					pw.bufferInfo.range = sizeof(ModelTransform);
+		//		} else if (set == MAT_MODELMATRICES_SET && renderMan->getParamName(key.nameIndices[i]) == MAT_MODELMATRICES_NAME) {
+		//			rBind.handle = reinterpret_cast<uint64_t>(&matBuf_modelTransforms);
 
-					pw.write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-					pw.write.dstSet = nullptr;
-					pw.write.dstBinding = key.bindings[i];
-					pw.write.dstArrayElement = 0;
-					pw.write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-					pw.write.descriptorCount = 1;
-					//pw.write.pBufferInfo = &pw.bufferInfo;
+		//			for (size_t j = 0; j < VULKAN_FRAMES_IN_FLIGHT; j++) {
 
-					pendingWrites.push_back(pw);
-					pendingWrites.back().write.pBufferInfo = &pendingWrites.back().bufferInfo;
+		//				PendingWrite pw{};
 
-				} else if (set == MAT_SAMPLER_SET && renderMan->getParamName(key.nameIndices[i]) == MAT_SAMPLER_NAME) {
-					rBind.handle = reinterpret_cast<uint64_t>(&baseSamplers);
+		//				pw.bufferInfo.buffer = matBuf_modelTransforms[j];
+		//				pw.bufferInfo.offset = 0;
+		//				pw.bufferInfo.range = sizeof(ModelTransform);
 
-					PendingWrite pw{};
+		//				pw.write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		//				pw.write.dstSet = reinterpret_cast<VkDescriptorSet>(j); //hacky workaround for init
+		//				pw.write.dstBinding = key.bindings[i];
+		//				pw.write.dstArrayElement = 0;
+		//				pw.write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+		//				pw.write.descriptorCount = 1;
+		//				//pw.write.pBufferInfo = &pw.bufferInfo;
 
-					for (int i = 0; i < 1; ++i) {
-						VkDescriptorImageInfo info{};
-						info.sampler = texResources[0].imageInfo.sampler;
-						info.imageView = texResources[0].imageView;
-						info.imageLayout = texResources[0].imageInfo.imageLayout;
-						imageInfos.push_back(info);
-					}
+		//				pendingWrites.push_back(pw);
+		//				pendingWrites.back().write.pBufferInfo = &pendingWrites.back().bufferInfo;
+		//			}
 
-					//VkWriteDescriptorSet write{};
-					pw.write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-					pw.write.dstSet = nullptr;
-					pw.write.dstBinding = key.bindings[i];
-					pw.write.dstArrayElement = 0;
-					pw.write.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
-					pw.write.descriptorCount = 1;
-					pw.write.pImageInfo = imageInfos.data();
+		//		} else if (set == MAT_SAMPLER_SET && renderMan->getParamName(key.nameIndices[i]) == MAT_SAMPLER_NAME) {
+		//			rBind.handle = reinterpret_cast<uint64_t>(&baseSamplers);
 
-					pendingWrites.push_back(pw);
+		//			for (size_t j = 0; j < VULKAN_FRAMES_IN_FLIGHT; j++) {
 
-				} else if (set == MAT_BASE_MAT_INSTANCES_INDICES_SET && renderMan->getParamName(key.nameIndices[i]) == MAT_BASE_MAT_INSTANCES_INDICES_NAME) {
-					
-					rBind.handle = reinterpret_cast<uint64_t>(&instanceIndexStage);
+		//				PendingWrite pw{};
 
-					PendingWrite pw{};
+		//				for (int k = 0; k < k; ++i) {
+		//					VkDescriptorImageInfo info{};
+		//					info.sampler = texResources[0].imageInfo.sampler;
+		//					info.imageView = texResources[0].imageView;
+		//					info.imageLayout = texResources[0].imageInfo.imageLayout;
+		//					imageInfos.push_back(info);
+		//				}
 
-					pw.bufferInfo.buffer = instanceIndexStageBuffer;
-					pw.bufferInfo.offset = 0;
-					pw.bufferInfo.range = VK_WHOLE_SIZE;//sizeof(uint32_t) * instanceIndexStage.size();
+		//				//VkWriteDescriptorSet write{};
+		//				pw.write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		//				pw.write.dstSet = reinterpret_cast<VkDescriptorSet>(j); //hacky workaround for init
+		//				pw.write.dstBinding = key.bindings[i];
+		//				pw.write.dstArrayElement = 0;
+		//				pw.write.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
+		//				pw.write.descriptorCount = 1;
+		//				pw.write.pImageInfo = imageInfos.data();
 
-					pw.write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-					pw.write.dstSet = nullptr;
-					pw.write.dstBinding = key.bindings[i];
-					pw.write.dstArrayElement = 0;
-					pw.write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-					pw.write.descriptorCount = 1;
-					//pw.write.pBufferInfo = &pw.bufferInfo;
+		//				pendingWrites.push_back(pw);
+		//			}
 
-					pendingWrites.push_back(pw);
-					pendingWrites.back().write.pBufferInfo = &pendingWrites.back().bufferInfo;
-				}
+		//		} else if (set == MAT_BASE_MAT_INSTANCES_INDICES_SET && renderMan->getParamName(key.nameIndices[i]) == MAT_BASE_MAT_INSTANCES_INDICES_NAME) {
+		//			
+		//			rBind.handle = reinterpret_cast<uint64_t>(&instanceIndexStage);
 
-				descSetKey.bindings.push_back(rBind);
-			}
-			auto descSetIt = descriptorSetCache.find(descSetKey);
-			if (descSetIt == descriptorSetCache.end()) {
+		//			for (size_t j = 0; j < VULKAN_FRAMES_IN_FLIGHT; j++) {
 
-				// TODO TODO
-				void* allocPtr = nullptr;
-				if (!pendingCounts.empty()) {
-					allocPtr = &pendingCounts[0];
+		//				PendingWrite pw{};
 
-					for (size_t i = 0; i < pendingCounts.size() - 1; ++i) {
-						pendingCounts[i].pNext = &pendingCounts[i + 1];
-					}
-				}
-				
+		//				pw.bufferInfo.buffer = instanceIndexStageBuffer[j];
+		//				pw.bufferInfo.offset = 0;
+		//				pw.bufferInfo.range = VK_WHOLE_SIZE;//sizeof(uint32_t) * instanceIndexStage.size();
 
-				// allocate and update descriptor set
-				VkDescriptorSetAllocateInfo allocInfo{};
-				allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-				allocInfo.descriptorPool = currentDescPool;
-				allocInfo.descriptorSetCount = 1;
-				allocInfo.pSetLayouts = &layout;
-				allocInfo.pNext = allocPtr;
-				Vk_CHECK(vkResult, vkAllocateDescriptorSets(m_vkDevice, &allocInfo, &descriptorSet));
+		//				pw.write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		//				pw.write.dstSet = reinterpret_cast<VkDescriptorSet>(j); //hacky workaround for init
+		//				pw.write.dstBinding = key.bindings[i];
+		//				pw.write.dstArrayElement = 0;
+		//				pw.write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+		//				pw.write.descriptorCount = 1;
+		//				//pw.write.pBufferInfo = &pw.bufferInfo;
 
-				
-				for (auto& pw : pendingWrites) {
-					pw.write.dstSet = descriptorSet;
-					//__debugbreak();
-					vkUpdateDescriptorSets(m_vkDevice, 1, &pw.write, 0, nullptr);
-				}
+		//				pendingWrites.push_back(pw);
+		//				pendingWrites.back().write.pBufferInfo = &pendingWrites.back().bufferInfo;
 
-				descriptorSetCache.insert({ descSetKey, descriptorSet });
-			} else
-				descriptorSet = descSetIt->second;
+		//			}
+		//		}
 
-			// TESTING TESTING
-			descriptorSetsList.push_back({static_cast<uint8_t>(set), descriptorSet });
+		//		descSetKey.bindings.push_back(rBind);
+		//	}
+		//	auto descSetIt = descriptorSetCache.find(descSetKey);
+		//	if (descSetIt == descriptorSetCache.end()) {
 
-			// for later mapping
-			for (auto& binding : key.bindings) {
-				bindingToDescriptorSet.insert({ {binding, set}, descriptorSet });
-			}
+		//		// TODO TODO
+		//		void* allocPtr = nullptr;
+		//		if (!pendingCounts.empty()) {
+		//			allocPtr = &pendingCounts[0];
 
-			layouts.resize(std::max(layouts.size(), static_cast<size_t>(set + 1)));
-			layouts[set] = layout;
-		}
+		//			for (size_t i = 0; i < pendingCounts.size() - 1; ++i) {
+		//				pendingCounts[i].pNext = &pendingCounts[i + 1];
+		//			}
+		//		}
+		//		
+		//		for (size_t j = 0; j < VULKAN_FRAMES_IN_FLIGHT; ++j) {
+		//			// allocate and update descriptor set
+		//			VkDescriptorSetAllocateInfo allocInfo{};
+		//			allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+		//			allocInfo.descriptorPool = currentDescPool;
+		//			allocInfo.descriptorSetCount = 1;
+		//			allocInfo.pSetLayouts = &layout;
+		//			allocInfo.pNext = allocPtr;
+		//			Vk_CHECK(vkResult, vkAllocateDescriptorSets(m_vkDevice, &allocInfo, &descriptorSet[j]));
+		//		}
+
+		//		for (auto& pw : pendingWrites) {
+		//			pw.write.dstSet = descriptorSet[reinterpret_cast<size_t>(pw.write.dstSet)]; // correcting back the hackywacky
+		//			//__debugbreak();
+		//			vkUpdateDescriptorSets(m_vkDevice, 1, &pw.write, 0, nullptr);
+		//		}
+		//		
+
+
+
+		//		descriptorSetCache.insert({ descSetKey, descriptorSet });
+		//	} else
+		//		descriptorSet = descSetIt->second;
+
+		//	// TESTING TESTING
+		//	descriptorSetsList.push_back({static_cast<uint8_t>(set), descriptorSet[0]});
+
+		//	// for later mapping
+		//	for (auto& binding : key.bindings) {
+		//		bindingToDescriptorSet.insert({ {binding, set}, descriptorSet });
+		//	}
+
+		//	layouts.resize(std::max(layouts.size(), static_cast<size_t>(set + 1)));
+		//	layouts[set] = layout;
+		//}
 
 		// Push Constants
 		std::vector<VkPushConstantRange> pushConstantRanges;
@@ -1877,7 +2212,7 @@ public:
 		allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
 		allocInfo.commandBufferCount = 1;
 
-		for (size_t i = 0; i < VULKAN_MAX_FRAMES_IN_FLIGHT; ++i) {
+		for (size_t i = 0; i < VULKAN_FRAMES_IN_FLIGHT; ++i) {
 			Vk_CHECK(vkResult, vkAllocateCommandBuffers(m_vkDevice, &allocInfo, &frameSync[i].cmdBuffer));
 		}
 		
@@ -1895,15 +2230,14 @@ public:
 		fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
 		fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
-		for (size_t i = 0; i < VULKAN_MAX_FRAMES_IN_FLIGHT; ++i) {
+		for (size_t i = 0; i < VULKAN_FRAMES_IN_FLIGHT; ++i) {
 			Vk_CHECK(vkResult, vkCreateSemaphore(m_vkDevice, &semaphoreInfo, nullptr, &frameSync[i].imageAvailable));
-			Vk_CHECK(vkResult, vkCreateSemaphore(m_vkDevice, &semaphoreInfo, nullptr, &frameSync[i].renderFinished));
 			Vk_CHECK(vkResult, vkCreateFence(m_vkDevice, &fenceInfo, nullptr, &frameSync[i].inFlight));
 		}
-		//for (size_t i = 0; i < swapchainImages.size(); i++) {
-		//	imageRenderDone.push_back(VkSemaphore{});
-		//	Vk_CHECK(vkResult, vkCreateSemaphore(m_vkDevice, &semaphoreInfo, nullptr, &imageRenderDone.back()));
-		//}
+		for (size_t i = 0; i < swapchainImages.size(); i++) {
+			imageRenderFinished.push_back(VkSemaphore{});
+			Vk_CHECK(vkResult, vkCreateSemaphore(m_vkDevice, &semaphoreInfo, nullptr, &imageRenderFinished.back()));
+		}
 		
 		LOG(LogType::Success, "Done.");
 		return VK_SUCCESS;
@@ -2352,6 +2686,7 @@ public:
 
 		VkImageMemoryBarrier lastBarrier = barrier;
 		lastBarrier.subresourceRange.baseMipLevel = mipLevels - 1;
+		lastBarrier.subresourceRange.levelCount = 1;
 		lastBarrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
 		lastBarrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 		lastBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
@@ -2410,13 +2745,19 @@ public:
 	VkResult loadTexture(const Texture2D& tex, uint32_t* outTexIndex) {
 		VkResult vkResult{};
 
+		uint32_t mipLevels = tex.generateMips
+			? static_cast<uint32_t>(
+				std::floor(std::log2(std::max(tex.width, tex.height)))
+				) + 1
+			: 1;
+
 		VkImageCreateInfo imageInfo{};
 		imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
 		imageInfo.imageType = VK_IMAGE_TYPE_2D;
 		imageInfo.extent.width = tex.width;
 		imageInfo.extent.height = tex.height;
 		imageInfo.extent.depth = tex.depth;
-		imageInfo.mipLevels = tex.mipLevels;
+		imageInfo.mipLevels = mipLevels;
 		imageInfo.arrayLayers = tex.arrayLayers;
 		imageInfo.format = tex.format;
 		imageInfo.tiling = tex.tiling;
@@ -2447,7 +2788,7 @@ public:
 		viewInfo.format = imageInfo.format;
 		viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 		viewInfo.subresourceRange.baseMipLevel = 0;
-		viewInfo.subresourceRange.levelCount = 1;
+		viewInfo.subresourceRange.levelCount = mipLevels;
 		viewInfo.subresourceRange.baseArrayLayer = 0;
 		viewInfo.subresourceRange.layerCount = 1;
 
@@ -2460,13 +2801,32 @@ public:
 		texture.imageView = imageView;
 		texture.imageInfo.imageView = imageView;
 		texture.imageInfo.imageLayout = tex.imageLayout;
+		texture.imageInfo.sampler = baseSamplers[{SamplerMode::Aniso8X, SamplerAddressMode::Repeat}];
+
+		uint32_t texIndex = static_cast<uint32_t>(texResources.size());
 
 		if (outTexIndex) {
-			*outTexIndex = static_cast<uint32_t>(texResources.size());
+			*outTexIndex = texIndex;
 		}
 		texResources.push_back(texture);
 
-		return transferTextureData(tex.texelData(), texture.image, tex.mipLevels, tex.width, tex.height, 4, commandPool, m_graphicsQueue);
+		// update descriptor sets
+		for (size_t t = 0; t < VULKAN_FRAMES_IN_FLIGHT; ++t) {
+			VkDescriptorSet descSet = bindingToDescriptorSet[{MAT_TEXTURES_BIND, MAT_TEXTURES_SET, 0}][t];
+			VkWriteDescriptorSet write{};
+			write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+			write.dstSet = descSet;
+			write.dstBinding = MAT_TEXTURES_BIND; // binding = 3 in your shader
+			write.dstArrayElement = texIndex;  // index in textures[]
+			write.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE; // or COMBINED_IMAGE_SAMPLER
+			write.descriptorCount = 1;
+			write.pImageInfo = &texture.imageInfo;
+
+			vkUpdateDescriptorSets(m_vkDevice, 1, &write, 0, nullptr);
+		}
+
+
+		return transferTextureData(tex.texelData(), texture.image, mipLevels, tex.width, tex.height, 4, commandPool, m_graphicsQueue);
 	}
 };
 #pragma warning(pop)

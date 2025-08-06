@@ -95,15 +95,22 @@ ErrorCode AssetLoader::loadModel(
 				
 				auto matData = aiMaterialToBaseMaterialData(aiMat);
 				parseMaterialTextures(filename, scene, aiMat, matData.textures);
-				newMat.createInstance(&matData);
+				auto& matInstance = newMat.createInstance(&matData);
+				subMesh.instanceIndex = matInstance.instanceIndex();
 				RenderManager::getInstance()->vkContext()->createPipelineFromMaterial(RenderManager::getInstance(), newMat);
 
 			} else {
 				subMesh.materialIndex = material->matIndex;
+				auto& instance = material->createCopyOfLastInstance();
+				subMesh.instanceIndex = instance.instanceIndex();
 			}
 
 		} else {
-			subMesh.materialIndex = UINT32_INVALID;
+			// Fallback
+			subMesh.materialIndex = 0;
+			auto basicMaterial = render.getMaterial(0);
+			auto& baseMatInstance = basicMaterial->createInstance();
+			subMesh.instanceIndex = baseMatInstance.instanceIndex();
 		}
 
 		subMeshBuffer.push_back(subMesh);
@@ -127,8 +134,8 @@ Material& AssetLoader::createMaterial(const aiMaterial* aiMat) {
 	auto* baseVs = Engine::getInstance()->getRenderManager()->getShader(MAT_BASE_VS);
 	auto* basePs = Engine::getInstance()->getRenderManager()->getShader(MAT_BASE_PS);	
 	auto& mat = Material::createMaterial(matName, *baseVs, *basePs );
+	//mat.createInstance();
 	LOG(LogType::Success, "Done.");
-	//mat.debugPrintMaterialInfo();
 	return mat;
 }
 
@@ -220,7 +227,9 @@ void AssetLoader::parseMaterialTextures(const std::string& filename, const aiSce
 
 		auto texPtr = Engine::getInstance()->getRenderManager()->getTexture(path.C_Str());
 		if (texPtr) {
-			//TODO TODO
+			
+			fillTexturePack(texPack, texPtr->type, texPtr->textureIndex);
+
 			continue;
 		}
 
@@ -276,11 +285,13 @@ void AssetLoader::parseMaterialTextures(const std::string& filename, const aiSce
 			newTex.height = static_cast<uint16_t>(h);
 			newTex = Engine::getInstance()->getRenderManager()->registerTexture(path.C_Str(), newTex);
 			fillTexturePack(texPack, newTex.type, newTex.textureIndex);
-			for (size_t i = 0; i < newTex.texelCount(); ++i) {
-				texels.push_back(*reinterpret_cast<ColorRGBA*>(data + i));
-			}
-			//texels.push_back(reinterpret_cast<ColorRGBA*>(data),
-			//			  reinterpret_cast<ColorRGBA*>(data) + newTex.texelCount());
+			
+			//for (size_t i = 0; i < newTex.texelCount(); ++i) {
+			//	texels.push_back(*reinterpret_cast<ColorRGBA*>(data + i));
+			//}
+			auto* pixels = reinterpret_cast<const ColorRGBA*>(data);
+			texels.insert(texels.end(), pixels, pixels + newTex.texelCount());
+
 			stbi_image_free(data);
 			LOGLINE(LogType::Info, LogMod::Assets, std::format("Imported Texture '{}'", pathString));
 		} else

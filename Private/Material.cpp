@@ -317,7 +317,6 @@ std::string& Material::name() const {
 	return RenderManager::getInstance()->getMaterialName(*this);
 }
 
-
 MaterialBuffer* Material::getBuffer(const std::string& bufferName) {
 	auto nameIndex = RenderManager::getInstance()->getParamNameIndex(bufferName);
 	if (nameIndex != SIZE_INVALID) {
@@ -346,4 +345,8 @@ void MaterialInstance::setParameter(const std::string& bufferName, const std::st
 		LOGLINE(LogType::Warning, LogMod::Rendering,
 				std::format("setParameter: buffer '{}' not found.", bufferName));
 	}
+}
+
+BaseMaterialInstance* MaterialInstance::getBaseMaterialInstanceData() {
+	return RenderManager::getInstance()->vkContext()->getBaseMaterialInstanceData(m_instanceIndex);
 }
