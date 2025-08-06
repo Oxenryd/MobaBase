@@ -106,8 +106,7 @@ add_executable (MobaBase
 	"Public/TimerSystem.h"
 	"Public/Timer.h"
 	"Public/Arena.hpp"
-	"Public/FSM.hpp"
-	
+	"Public/FSM.hpp"	
 	"Public/Material.hpp"
 	"Public/Shader.h"
 	"Public/ArenaAllocator.hpp"
@@ -153,6 +152,9 @@ add_executable (MobaBase
 	"Public/BasicTypes.hpp"
 	"Public/stb_image.h"
 	"Public/stb_image_write.h"
+	"Public/BoundingSystem.h"
+	"Private/Mesh.cpp"
+
 
 	"Private/Engine.cpp"
 	"Private/Timer.cpp"
@@ -171,7 +173,7 @@ add_executable (MobaBase
 	"Private/GlobalComponents.cpp"
 	"Private/Camera.cpp"
 	"Private/Timing.cpp"
-	"Private/Texture.cpp"  )
+	"Private/Texture.cpp" )
 
 
 
@@ -196,6 +198,7 @@ target_include_directories(MobaBase PRIVATE
 
 # DEFINES ----------------------------------------------------------------------------
 target_compile_definitions(MobaBase PRIVATE 
+	GLM_FORCE_SSE2
 	DEBUGGING
 	BUILD_WIN
 	# $<$<CONFIG:Debug>:LOGGING>

@@ -152,8 +152,9 @@ public:
 	std::span<MeshDrawCommand> persistentDrawCommands() { 
 		return std::span<MeshDrawCommand>(s_threadPresistentDrawBuffers[m_sceneIndex]); }
 
-	std::span<BaseVSIn> getVertices() { return std::span<BaseVSIn>(m_vertices); }
-	std::span<SubMesh> getSubMeshes() { return std::span<SubMesh>(m_subMeshes); }
+	ArenaVector<MeshData> getMeshes() { return m_meshes; }
+	ArenaVector<BaseVSIn>& getVertices() { return m_vertices; }
+	ArenaVector<SubMesh>& getSubMeshes() { return m_subMeshes; }
 	//std::span<Camera> getCameras() { return std::span<Camera>(m_cameras); }
 };
 

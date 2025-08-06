@@ -86,24 +86,24 @@ struct InstanceData
 	}
 };
 
-struct VSInput
-{
-	glm::vec3 position;
-	glm::vec3 normal;
-	glm::vec2 uv;
-	glm::vec4 tangent;
-	glm::vec4 color;
-	glm::u32vec4 boneIndices;
-	glm::vec4 boneWeights;
-};
-
-struct VSOuput
-{
-	glm::vec4 worldPos;
-	glm::vec3 localPos;
-	glm::vec3 normal;
-	glm::vec2 uv;
-};
+//struct VSInput
+//{
+//	glm::vec3 position;
+//	glm::vec3 normal;
+//	glm::vec2 uv;
+//	glm::vec4 tangent;
+//	glm::vec4 color;
+//	glm::u32vec4 boneIndices;
+//	glm::vec4 boneWeights;
+//};
+//
+//struct VSOuput
+//{
+//	glm::vec4 worldPos;
+//	glm::vec3 localPos;
+//	glm::vec3 normal;
+//	glm::vec2 uv;
+//};
 
 struct BaseMatPush
 {

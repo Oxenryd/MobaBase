@@ -11,6 +11,7 @@
 #include "GameObjectSystem.hpp"
 #include "TagSystem.hpp"
 #include "SceneRenderSystem.hpp"
+#include "BoundingSystem.h"
 
 enum class SceneTransitionStatus
 {
@@ -40,14 +41,16 @@ protected:
     Arena m_arena;
     uint16_t m_sceneIndex;
     bool m_pendingUnload = false;
+    bool m_firstFrame = true;
     ArenaRegistry m_reg;
     SceneRenderSystem m_renderSys;
     //TagSystem m_nameTagSys;
     TransformSystem m_transformSys;
     GameObjectSystem m_gameObjectSys;
+    BoundingSystem m_boundingSys;
     
     
-    bool m_firstFrame = true;
+    
     
     //template<typename T>
     //void _registerComponent() {
@@ -61,18 +64,18 @@ public:
     SceneBase(SceneBase&&) = delete;
     SceneBase& operator=(SceneBase&&) = delete;
     SceneBase(size_t arenaSize, uint16_t sceneIndex) :
-        //m_heap(DEFAULT_HEAP_SIZE),
+        
         m_arena{ arenaSize },
         m_reg{ ArenaAllocator<entt::entity>{&m_arena} },
         m_transformSys{&m_reg, sceneIndex, &m_arena},
-        m_gameObjectSys{ m_sceneIndex, &m_reg},
-        m_renderSys{ &m_reg, &m_arena, m_sceneIndex },
-        //m_nameTagSys{&m_reg, sceneIndex },
+        m_gameObjectSys{ sceneIndex, &m_reg},
+        m_renderSys{ &m_reg, &m_arena, sceneIndex },
+        m_boundingSys{&m_reg, &m_arena, sceneIndex },
         m_sceneIndex{sceneIndex}
     {
         m_reg.storage<TransformComponent>().reserve(ECS_BASE_COMPONENTS_RESERVATION_COUNT);
         m_reg.storage<EnabledTag>().reserve(ECS_BASE_COMPONENTS_RESERVATION_COUNT);
-        //m_reg.storage<TagComponent>().reserve(ECS_BASE_COMPONENTS_RESERVATION_COUNT);
+        m_reg.storage<BoundingVolumeComponent>().reserve(ECS_BASE_COMPONENTS_RESERVATION_COUNT);
         m_reg.storage<MeshComponent>().reserve(ECS_BASE_COMPONENTS_RESERVATION_COUNT);
     }
     //SceneBase() : SceneBase(DEFAULT_HEAP_SIZE) {}
@@ -93,7 +96,7 @@ public:
     ArenaRegistry& registry() { return m_reg; }
     TransformSystem& transformSystem() { return m_transformSys; }
     GameObjectSystem& gameObjectSystem() { return m_gameObjectSys; }  
-    //TagSystem& nameTagSystem() { return m_nameTagSys; }
+    BoundingSystem& boundingSystem() { return m_boundingSys; }
     SceneRenderSystem& sceneRender() { return m_renderSys; }
     void setUnload() { m_pendingUnload = true; }
     uint32_t sceneIndex() const { return m_sceneIndex; }

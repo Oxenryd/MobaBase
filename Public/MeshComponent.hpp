@@ -2,7 +2,12 @@
 #define MESH_HPP
 
 #include <cstdint>
+#include <glm/glm.hpp>
+#include <span>
+
 #include "ArenaAllocator.hpp"
+#include "HlslTypes.h"
+#include "Transform.hpp"
 
 struct MeshDescription
 {
@@ -31,6 +36,7 @@ struct SubMesh
 	uint32_t materialIndex;
 	uint32_t instanceIndex;
 };
+
 
 struct Mesh
 {
@@ -73,7 +79,10 @@ public:
 		return m_reg == rhs.m_reg && m_entity == rhs.m_entity;
 	}
 
-	//... to be filled with accessors
+	MeshData& getMeshData();
+	glm::vec3 getAvgCenter();
+	std::span<BaseVSIn> getVertices();
+	std::span<SubMesh> getSubmeshes();
 };
 
 

@@ -11,9 +11,9 @@
 #include "ObjectState.hpp"
 #include "GlobalMacros.h"
 
-constexpr glm::vec3 DIR_FORWARD{ 0.0f, 0.0f, -1.0f };
-constexpr glm::vec3 DIR_RIGHT{ 1.0f, 0.0f, 0.0f };
-constexpr glm::vec3 DIR_UP{ 0.0f, 1.0f, 0.0f };
+static const glm::vec3 DIR_FORWARD{ 0.0f, 0.0f, -1.0f };
+static const glm::vec3 DIR_RIGHT{ 1.0f, 0.0f, 0.0f };
+static const glm::vec3 DIR_UP{ 0.0f, 1.0f, 0.0f };
 
 struct TransformComponent
 {

@@ -95,14 +95,17 @@ void VulkanContext::draw(void* rendCtx) {
 	void* mappedData = nullptr;
 	vkMapMemory(m_vkDevice, camDataMemory[currentFrame], 0, sizeof(CameraData), 0, &mappedData);
 	memcpy(mappedData, &Engine::getInstance()->mainCamera()->cameraData(), sizeof(CameraData));
-	vkUnmapMemory(m_vkDevice, camDataMemory[currentFrame]);
+	vkUnmapMemory(m_vkDevice, camDataMemory[currentFrame]);	
 
 	// Check the draw commands and issue binds and draw calls
 	uint32_t drawCount = 0;
 	for (const auto& cmd : drawCmds) {
 
+		// Frustum culling
+
+
+
 		Material* matBase = RenderManager::getInstance()->getMaterial(cmd.materialIndex);
-		//MaterialInstance& matInstance = matBase->instances[cmd.instanceIndex];
 
 		if (cmd.materialIndex != lastMatIndex) {
 			// Bind pipeline if changed
@@ -159,6 +162,8 @@ void VulkanContext::draw(void* rendCtx) {
 		vkCmdDrawIndexed(frame.cmdBuffer, indexCount, 1, indexOffset, vertexOffset, 0);
 		drawCount++;
 	}
+
+	m_lastDrawcallCount = drawCount;
 
 	// End Render Pass
 	vkCmdEndRenderPass(frame.cmdBuffer);

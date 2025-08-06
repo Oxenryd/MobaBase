@@ -90,4 +90,11 @@ public:
 	operator const LayerMask&() const;
 };
 
+struct BoundingVolume
+{
+private:
+
+public:
+};
+
 #endif
