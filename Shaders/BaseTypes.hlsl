@@ -13,6 +13,8 @@ static const float4 QUAD2D[6] =
     float4(-0.5, 0.5, 0, 1)
 };
 
+
+
 struct SpriteInstance
 {
     float2 position;
@@ -34,7 +36,7 @@ struct TexturePack
     uint emissiveId;
     uint metallicId;
     uint aoId;
-    uint _pad;
+    uint _pad0;
 };
 
 struct BaseMaterialInstance
@@ -85,6 +87,7 @@ struct BaseMatPush
 {
     float4x4    modelToWorld;
     uint        matrixIndex;
+    uint        materialIndex;
     uint        boneOffset;
     uint        boneCount;
 };
@@ -97,13 +100,16 @@ struct ModelTransform
     float4x4 modelToWorld;
 };
 
-struct Index32
+struct InstanceData
 {
-    uint value;
+    uint matrixIndex;
+    uint materialIndex;
+    uint boneOffset;
+    uint boneCount;
 };
 
 [[vk::binding(2, 0)]] StructuredBuffer<ModelTransform> modelMatrices : register(t0, space0);
-[[vk::binding(3, 0)]] StructuredBuffer<Index32> instanceIndices : register(t1, space0);
+[[vk::binding(3, 0)]] StructuredBuffer<InstanceData> instanceData : register(t1, space0);
 
 
 [[vk::binding(1, 1)]] SamplerState smp : register(s0, space1);
@@ -141,7 +147,7 @@ float4 RetainGlobals()
     {
         double4 dummy2 = dummy.xxxx + textures[0].SampleLevel(smp, float2(0, 0), 0.0);
         double4 dummy3 = dummy2 + baseMatInstances[0].ambient.xyzx;
-        double4 dummy4 = mul(dummy3, modelMatrices[instanceIndices[0].value].modelToWorld);
+        double4 dummy4 = mul(dummy3, modelMatrices[instanceData[0].matrixIndex].modelToWorld);
         return (float4) dummy4;
     }
         

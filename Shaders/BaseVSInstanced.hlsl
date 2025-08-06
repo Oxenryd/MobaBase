@@ -13,7 +13,7 @@ BasePSIn main(BaseVSIn input)
 	
     // fetch model transform matrix
     float4x4 modelToWorld = basePush.matrixIndex == UINT_INVALID
-        ? modelMatrices[instanceIndices[input.instanceID].value].modelToWorld
+        ? modelMatrices[instanceData[input.instanceID].matrixIndex].modelToWorld
         : basePush.modelToWorld;
         
 	// Model->View transformation

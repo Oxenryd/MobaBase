@@ -14,6 +14,7 @@
 #include "MeshComponent.hpp"
 #include "ErrorCodes.hpp"
 #include "HlslTypes.h"
+#include "Texture.hpp"
 
 
 class RenderManager;
@@ -55,6 +56,11 @@ public:
 	static Material& createMaterial(const aiMaterial* aiMat);
 
 	static BaseMaterialInstance aiMaterialToBaseMaterialData(const aiMaterial* const aiMat);
+
+
+	static void parseMaterialTextures(const std::string& filename, const aiScene* scene, const aiMaterial* mat, TexturePack& texPack);
+
+	static void fillTexturePack(TexturePack& texPack, TextureType type, uint32_t index);
 };
 
 #endif

@@ -121,6 +121,26 @@ std::string& RenderManager::getMaterialName(const Material& mat) {
 	return m_mat_IndexNameMap[mat.matIndex];
 }
 
+std::string& RenderManager::getTextureName(const Texture2D& tex) {
+	return m_texIndexNameMap[tex.textureIndex];
+}
+
+Texture2D* RenderManager::getTexture(const std::string& filePath) {
+	auto it = m_texNameIndexMap.find(filePath);
+	if (it != m_texNameIndexMap.end()) {
+		return &m_tex2ds[it->second];
+	} else
+		return nullptr;
+}
+
+Texture2D* RenderManager::getTexture(const size_t texIndex) {
+	auto it = m_texIndexNameMap.find(texIndex);
+	if (it != m_texIndexNameMap.end()) {
+		return &m_tex2ds[texIndex];
+	} else
+		return nullptr;
+}
+
 //std::string& ShaderManager::getMaterialName(const size_t matIndex) {
 //	return 
 //}

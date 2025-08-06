@@ -156,6 +156,8 @@ add_executable (MobaBase
 	"Public/GlobalSystem.hpp"
 	"Public/Timing.h"
 	"Public/MemDebugFilter.hpp"
+	"Public/BasicTypes.hpp"
+	"Public/stb_image.h"
 
 	"Private/Engine.cpp"
 	"Private/Timer.cpp"
@@ -173,7 +175,8 @@ add_executable (MobaBase
 	"Private/SceneRenderSystem.cpp"
 	"Private/GlobalComponents.cpp"
 	"Private/Camera.cpp"
-	"Private/Timing.cpp")
+	"Private/Timing.cpp"
+	"Private/Texture.cpp" )
 
 
 
@@ -230,11 +233,12 @@ target_compile_definitions(MobaBase PRIVATE
 	MAT_TEXTURES_NAME=\"textures\"
 	MAT_TEXTURES_SET=0
 
-	MAT_BASE_MAT_INSTANCES_INDICES_NAME=\"instanceIndices\"
+	MAT_BASE_MAT_INSTANCES_INDICES_NAME=\"instanceData\"
 	MAT_BASE_MAT_INSTANCES_INDICES_SET=0;
 
 	MAT_BASE_MAT_INSTANCES_NAME=\"baseMatInstances\"
-	MAT_BASE_MAT_INSTANCES_SET=1;
+	MAT_BASE_MAT_INSTANCES_SET=1
+	MAT_BASE_MAT_INSTANCES_BIND=2
 
 	# Data types settings
 	FIXED_STRINGS_MAX_LENGTH=63

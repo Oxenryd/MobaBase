@@ -37,15 +37,18 @@ struct ModelTransform
 	glm::mat4x4& operator*=(glm::mat4x4& rhs) { return modelToWorld = modelToWorld * rhs; }
 };
 
-struct Index32
+struct InstanceData
 {
-	uint32_t value;
+	uint32_t matrixIndex{ UINT32_INVALID };
+	uint32_t materialIndex{ UINT32_INVALID };
+	uint32_t boneOffset{ UINT32_INVALID };
+	uint32_t boneCount{ 0 };
 
 	operator uint32_t() {
-		return value;
+		return materialIndex;
 	}
 	bool isValid() {
-		return value != UINT32_INVALID;
+		return materialIndex != UINT32_INVALID;
 	}
 };
 
@@ -70,10 +73,11 @@ struct VSOuput
 
 struct BaseMatPush
 {
-	glm::mat4x4 modelToWorld;
-	uint32_t matrixIndex;
-	uint32_t boneOffset;
-	uint32_t boneCount;
+	glm::mat4x4 modelToWorld{ 1 };
+	uint32_t matrixIndex{ UINT32_INVALID };
+	uint32_t materialIndex{ UINT32_INVALID };
+	uint32_t boneOffset{ UINT32_INVALID };
+	uint32_t boneCount{ 0 };
 };
 
 struct CameraData
@@ -131,7 +135,7 @@ struct alignas (16) TexturePack
 	uint32_t emissiveId = UINT32_INVALID;
 	uint32_t metallicId = UINT32_INVALID;
 	uint32_t aoId = UINT32_INVALID;
-	uint32_t _pad;
+	uint32_t _pad0 = UINT32_INVALID;
 };
 
 struct alignas (16) BaseMaterialInstance

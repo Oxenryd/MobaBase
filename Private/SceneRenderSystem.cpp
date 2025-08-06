@@ -27,7 +27,10 @@ ErrorCode SceneRenderSystem::loadModel(const std::string& filename, MeshDescript
 
 		}
 		RenderManager::getInstance()->vkContext()->reallocateVertexIndexBuffers();
-
+		for (auto& tex : RenderManager::getInstance()->textures()) {
+			tex.tryAllocate();
+		}
+		RenderManager::getInstance()->vkContext()->loadBaseMatData();
 	}
 
 	return ec;

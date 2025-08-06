@@ -388,6 +388,7 @@ public:
 	struct FrameSync
 	{
 		VkSemaphore imageAvailable;
+		VkSemaphore renderFinished;
 		VkFence inFlight;
 		VkCommandBuffer cmdBuffer;
 	};
@@ -467,38 +468,7 @@ private:
 #endif
 
 
-	VkResult _reloadBaseMatData() {
 
-		VkResult vkResult{};
-
-		VkDeviceSize bufferSize = sizeof(BaseMaterialInstance) * this->matData_baseMatInstances.size();
-		VkBufferCreateInfo createInfo{};
-		createInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-		createInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
-		createInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-		createInfo.size = bufferSize;
-		Vk_CHECK(vkResult, vkCreateBuffer(m_vkDevice, &createInfo, nullptr, &matBuf_baseMatInstances));
-		VkMemoryRequirements bufferMemReq{};
-		vkGetBufferMemoryRequirements(m_vkDevice, matBuf_baseMatInstances, &bufferMemReq);
-		VkMemoryAllocateInfo allocInfo{};
-		allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-		allocInfo.allocationSize = bufferMemReq.size;
-		allocInfo.memoryTypeIndex = findMemoryType(
-			bufferMemReq.memoryTypeBits,
-			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-			m_phyDevice
-		);
-		Vk_CHECK(vkResult, vkAllocateMemory(m_vkDevice, &allocInfo, nullptr, &matDevMem_baseMatInstances));
-		Vk_CHECK(vkResult, vkBindBufferMemory(m_vkDevice, matBuf_baseMatInstances, matDevMem_baseMatInstances, 0));
-
-		void* data;
-		vkMapMemory(m_vkDevice, matDevMem_baseMatInstances, 0, bufferSize, 0, &data);
-		memcpy(data, this->matData_baseMatInstances.data(), (size_t)bufferSize);
-		vkUnmapMemory(m_vkDevice, matDevMem_baseMatInstances);
-
-
-		return VK_SUCCESS;
-	}
 
 public:
 	WindowSurface* const windowSurface;
@@ -510,8 +480,12 @@ public:
 	uint32_t m_graphicsQueueFamilyIndex = static_cast<uint32_t>(-1);
 
 	std::unordered_map<SamplerState, VkSampler, SamplerStateHash> baseSamplers;
+
+	// Descriptor Layouts & Sets
 	std::unordered_map<DescriptorSetLayoutKey, VkDescriptorSetLayout, DescriptorSetLayoutKeyHash> descSetLayoutCache;
 	std::unordered_map<BoundDescriptorKey, VkDescriptorSet, BoundDescriptorKeyHash> descriptorSetCache;
+
+	std::unordered_map<std::pair<uint8_t, uint8_t>, VkDescriptorSet, PairHash<uint8_t, uint8_t>> bindingToDescriptorSet;
 
 
 	BlendMode currentBlendMode = BlendMode::Opaque;
@@ -561,7 +535,7 @@ public:
 	VkBuffer matBuf_modelTransforms = nullptr;
 	VkDeviceMemory matDevMem_modelTransforms = nullptr;
 
-	std::vector<VkTextureResource> textures;
+	std::vector<VkTextureResource> texResources;
 
 	std::vector<uint32_t> instanceIndexStage;
 	VkBuffer instanceIndexStageBuffer = nullptr;
@@ -577,7 +551,7 @@ public:
 			matData_baseMatInstances.push_back(*matInstance);
 		else
 			matData_baseMatInstances.push_back({});
-		_reloadBaseMatData();
+		//_reloadBaseMatData();
 		return index;
 	}
 
@@ -612,6 +586,12 @@ public:
 		//pipelines.reserve(2048);
 	}
 
+	INLINE VkTextureResource* getTexResource(const size_t resourceIndex) {
+		if (resourceIndex >= texResources.size())
+			return nullptr;
+		return &texResources[resourceIndex];
+	}
+	INLINE std::vector<VkTextureResource>& textureResources() { return texResources; }
 	INLINE void registerMesh(BaseVSIn* vertices, uint32_t vertexCount, uint32_t* indices, uint32_t indexCount) {
 		
 		auto vertStartId = this->vertices.size();
@@ -623,6 +603,63 @@ public:
 		std::memcpy(&this->indices[indexStartId], indices, indexCount * sizeof(uint32_t));
 
 		
+	}
+
+	INLINE VkResult loadBaseMatData() {
+
+		VkResult vkResult{};
+
+		VkDeviceSize bufferSize = sizeof(BaseMaterialInstance) * this->matData_baseMatInstances.size();
+		VkBufferCreateInfo createInfo{};
+		createInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+		createInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+		createInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+		createInfo.size = bufferSize;
+		Vk_CHECK(vkResult, vkCreateBuffer(m_vkDevice, &createInfo, nullptr, &matBuf_baseMatInstances));
+		VkMemoryRequirements bufferMemReq{};
+		vkGetBufferMemoryRequirements(m_vkDevice, matBuf_baseMatInstances, &bufferMemReq);
+		VkMemoryAllocateInfo allocInfo{};
+		allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+		allocInfo.allocationSize = bufferMemReq.size;
+		allocInfo.memoryTypeIndex = findMemoryType(
+			bufferMemReq.memoryTypeBits,
+			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+			m_phyDevice
+		);
+		Vk_CHECK(vkResult, vkAllocateMemory(m_vkDevice, &allocInfo, nullptr, &matDevMem_baseMatInstances));
+		Vk_CHECK(vkResult, vkBindBufferMemory(m_vkDevice, matBuf_baseMatInstances, matDevMem_baseMatInstances, 0));
+
+		void* data;
+		vkMapMemory(m_vkDevice, matDevMem_baseMatInstances, 0, bufferSize, 0, &data);
+		memcpy(data, this->matData_baseMatInstances.data(), (size_t)bufferSize);
+		vkUnmapMemory(m_vkDevice, matDevMem_baseMatInstances);
+
+
+		// Update descriptor sets
+		VkDescriptorSet set = bindingToDescriptorSet[{MAT_BASE_MAT_INSTANCES_BIND, MAT_BASE_MAT_INSTANCES_SET}];
+		// Only update the buffers that changed
+		std::vector<VkWriteDescriptorSet> descriptorWrites;
+
+		// Say only your instance data changed this frame
+		VkDescriptorBufferInfo instanceDataBufferInfo{};
+		instanceDataBufferInfo.buffer = matBuf_baseMatInstances;
+		instanceDataBufferInfo.offset = 0;
+		instanceDataBufferInfo.range = VK_WHOLE_SIZE;
+
+		VkWriteDescriptorSet instanceDataWrite{};
+		instanceDataWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		instanceDataWrite.dstSet = set;
+		instanceDataWrite.dstBinding = MAT_BASE_MAT_INSTANCES_BIND;
+		instanceDataWrite.dstArrayElement = 0;
+		instanceDataWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+		instanceDataWrite.descriptorCount = 1;
+		instanceDataWrite.pBufferInfo = &instanceDataBufferInfo;
+
+		// Only update what changed
+		vkUpdateDescriptorSets(m_vkDevice, 1, &instanceDataWrite, 0, nullptr);
+
+
+		return VK_SUCCESS;
 	}
 
 	INLINE VkResult reallocateVertexIndexBuffers() {
@@ -809,26 +846,26 @@ public:
 		Vk_CHECK(vkResult, vkAllocateMemory(m_vkDevice, &globalDataAllocInfo, nullptr, &camDataMemory));
 		Vk_CHECK(vkResult, vkBindBufferMemory(m_vkDevice, camDataBuffer, camDataMemory, 0));
 
-		// BaseMaterialInstances
-		VkBufferCreateInfo baseMatInstanceBufferInfo{};
-		baseMatInstanceBufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-		baseMatInstanceBufferInfo.size = sizeof(BaseMaterialInstance);
-		baseMatInstanceBufferInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
-		baseMatInstanceBufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-		Vk_CHECK(vkResult, vkCreateBuffer(m_vkDevice, &baseMatInstanceBufferInfo, nullptr, &matBuf_baseMatInstances));
+		//// BaseMaterialInstances
+		//VkBufferCreateInfo baseMatInstanceBufferInfo{};
+		//baseMatInstanceBufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+		//baseMatInstanceBufferInfo.size = sizeof(BaseMaterialInstance);
+		//baseMatInstanceBufferInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+		//baseMatInstanceBufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+		//Vk_CHECK(vkResult, vkCreateBuffer(m_vkDevice, &baseMatInstanceBufferInfo, nullptr, &matBuf_baseMatInstances));
 
 	
-		vkGetBufferMemoryRequirements(m_vkDevice, matBuf_baseMatInstances, &memRequirements);
+		//vkGetBufferMemoryRequirements(m_vkDevice, matBuf_baseMatInstances, &memRequirements);
 
-		VkMemoryAllocateInfo baseMatAllocInfo{};
-		baseMatAllocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-		baseMatAllocInfo.allocationSize = memRequirements.size;
-		baseMatAllocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits,
-												   VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-												   m_phyDevice);
+		//VkMemoryAllocateInfo baseMatAllocInfo{};
+		//baseMatAllocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+		//baseMatAllocInfo.allocationSize = memRequirements.size;
+		//baseMatAllocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits,
+		//										   VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+		//										   m_phyDevice);
 
-		Vk_CHECK(vkResult, vkAllocateMemory(m_vkDevice, &baseMatAllocInfo, nullptr, &matDevMem_baseMatInstances));
-		Vk_CHECK(vkResult, vkBindBufferMemory(m_vkDevice, matBuf_baseMatInstances, matDevMem_baseMatInstances, 0));
+		//Vk_CHECK(vkResult, vkAllocateMemory(m_vkDevice, &baseMatAllocInfo, nullptr, &matDevMem_baseMatInstances));
+		//Vk_CHECK(vkResult, vkBindBufferMemory(m_vkDevice, matBuf_baseMatInstances, matDevMem_baseMatInstances, 0));
 
 
 		// ModelTransforms
@@ -879,65 +916,65 @@ public:
 		Texture2D dummyTex{};
 		dummyTex.width = 1;
 		dummyTex.height = 1;
-		dummyTex.m_pixelData = reinterpret_cast<void*>(&c_dummyPixel[0]);
+		dummyTex.texelPtr = reinterpret_cast<void*>(&c_dummyPixel[0]);
 
 		uint32_t texIndex{};
 		loadTexture(dummyTex, &texIndex);
+		texResources[0].imageInfo.sampler = baseSamplers[{SamplerMode::Aniso8X, SamplerAddressMode::Repeat}];
+		//VkImageCreateInfo imageCreateInfo{};
+		//imageCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+		//imageCreateInfo.imageType = VK_IMAGE_TYPE_2D;
+		//imageCreateInfo.format = VK_FORMAT_R8G8B8A8_UNORM;
+		//imageCreateInfo.extent = { 1, 1, 1 };
+		//imageCreateInfo.mipLevels = 1;
+		//imageCreateInfo.arrayLayers = 1;
+		//imageCreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+		//imageCreateInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+		//imageCreateInfo.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+		//imageCreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		//imageCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-		VkImageCreateInfo imageCreateInfo{};
-		imageCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-		imageCreateInfo.imageType = VK_IMAGE_TYPE_2D;
-		imageCreateInfo.format = VK_FORMAT_R8G8B8A8_UNORM;
-		imageCreateInfo.extent = { 1, 1, 1 };
-		imageCreateInfo.mipLevels = 1;
-		imageCreateInfo.arrayLayers = 1;
-		imageCreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;
-		imageCreateInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-		imageCreateInfo.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-		imageCreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-		imageCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+		//VkImage dummyImage;
+		//vkCreateImage(m_vkDevice, &imageCreateInfo, nullptr, &dummyImage);
 
-		VkImage dummyImage;
-		vkCreateImage(m_vkDevice, &imageCreateInfo, nullptr, &dummyImage);
+		//vkGetImageMemoryRequirements(m_vkDevice, dummyImage, &memRequirements);
 
-		vkGetImageMemoryRequirements(m_vkDevice, dummyImage, &memRequirements);
+		//VkMemoryAllocateInfo allocInfo{};
+		//allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+		//allocInfo.allocationSize = memRequirements.size;
+		//allocInfo.memoryTypeIndex = findMemoryType(
+		//	memRequirements.memoryTypeBits,
+		//	VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+		//	m_phyDevice);
 
-		VkMemoryAllocateInfo allocInfo{};
-		allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-		allocInfo.allocationSize = memRequirements.size;
-		allocInfo.memoryTypeIndex = findMemoryType(
-			memRequirements.memoryTypeBits,
-			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-			m_phyDevice);
+		//VkDeviceMemory dummyMemory;
+		//vkAllocateMemory(m_vkDevice, &allocInfo, nullptr, &dummyMemory);
+		//vkBindImageMemory(m_vkDevice, dummyImage, dummyMemory, 0);
 
-		VkDeviceMemory dummyMemory;
-		vkAllocateMemory(m_vkDevice, &allocInfo, nullptr, &dummyMemory);
-		vkBindImageMemory(m_vkDevice, dummyImage, dummyMemory, 0);
+		//VkImageViewCreateInfo viewInfo{};
+		//viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+		//viewInfo.image = dummyImage;
+		//viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+		//viewInfo.format = VK_FORMAT_R8G8B8A8_UNORM;
+		//viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		//viewInfo.subresourceRange.baseMipLevel = 0;
+		//viewInfo.subresourceRange.levelCount = 1;
+		//viewInfo.subresourceRange.baseArrayLayer = 0;
+		//viewInfo.subresourceRange.layerCount = 1;
 
-		VkImageViewCreateInfo viewInfo{};
-		viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-		viewInfo.image = dummyImage;
-		viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-		viewInfo.format = VK_FORMAT_R8G8B8A8_UNORM;
-		viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-		viewInfo.subresourceRange.baseMipLevel = 0;
-		viewInfo.subresourceRange.levelCount = 1;
-		viewInfo.subresourceRange.baseArrayLayer = 0;
-		viewInfo.subresourceRange.layerCount = 1;
+		//VkImageView dummyImageView;
+		//vkCreateImageView(m_vkDevice, &viewInfo, nullptr, &dummyImageView);
 
-		VkImageView dummyImageView;
-		vkCreateImageView(m_vkDevice, &viewInfo, nullptr, &dummyImageView);
+		//VkTextureResource dummyTexture{};
+		//dummyTexture.image = dummyImage;
+		//dummyTexture.imageView = dummyImageView;
+		//dummyTexture.memory = dummyMemory;
 
-		VkTextureResource dummyTexture{};
-		dummyTexture.image = dummyImage;
-		dummyTexture.imageView = dummyImageView;
-		dummyTexture.memory = dummyMemory;
+		//dummyTexture.imageInfo.sampler = baseSamplers[{SamplerMode::Linear, SamplerAddressMode::Repeat}];;
+		//dummyTexture.imageInfo.imageView = dummyImageView;
+		//dummyTexture.imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
-		dummyTexture.imageInfo.sampler = baseSamplers[{SamplerMode::Linear, SamplerAddressMode::Repeat}];;
-		dummyTexture.imageInfo.imageView = dummyImageView;
-		dummyTexture.imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
-		textures.insert(textures.begin(), dummyTexture);
+		//texResources.push_back(dummyTexture);
 
 
 
@@ -1581,7 +1618,7 @@ public:
 					pendingWrites.back().write.pBufferInfo = &pendingWrites.back().bufferInfo;
 
 				} else if (set == MAT_TEXTURES_SET && renderMan->getParamName(key.nameIndices[i]) == MAT_TEXTURES_NAME) {
-					rBind.handle = reinterpret_cast<uint64_t>(&textures);
+					rBind.handle = reinterpret_cast<uint64_t>(&texResources);
 
 					VkDescriptorSetVariableDescriptorCountAllocateInfo countInfo{};
 					uint32_t textures = 0;
@@ -1639,9 +1676,9 @@ public:
 
 					for (int i = 0; i < 1; ++i) {
 						VkDescriptorImageInfo info{};
-						info.sampler = textures[0].imageInfo.sampler;
-						info.imageView = textures[0].imageView;
-						info.imageLayout = textures[0].imageInfo.imageLayout;
+						info.sampler = texResources[0].imageInfo.sampler;
+						info.imageView = texResources[0].imageView;
+						info.imageLayout = texResources[0].imageInfo.imageLayout;
 						imageInfos.push_back(info);
 					}
 
@@ -1716,6 +1753,11 @@ public:
 
 			// TESTING TESTING
 			descriptorSetsList.push_back({static_cast<uint8_t>(set), descriptorSet });
+
+			// for later mapping
+			for (auto& binding : key.bindings) {
+				bindingToDescriptorSet.insert({ {binding, set}, descriptorSet });
+			}
 
 			layouts.resize(std::max(layouts.size(), static_cast<size_t>(set + 1)));
 			layouts[set] = layout;
@@ -2419,11 +2461,11 @@ public:
 		texture.imageInfo.imageLayout = tex.imageLayout;
 
 		if (outTexIndex) {
-			*outTexIndex = static_cast<uint32_t>(textures.size());
+			*outTexIndex = static_cast<uint32_t>(texResources.size());
 		}
-		textures.push_back(texture);
+		texResources.push_back(texture);
 
-		return transferTextureData(tex.pixelData(), texture.image, tex.mipLevels, tex.width, tex.height, 4, commandPool, m_graphicsQueue);
+		return transferTextureData(tex.texelData(), texture.image, tex.mipLevels, tex.width, tex.height, 4, commandPool, m_graphicsQueue);
 	}
 };
 #pragma warning(pop)

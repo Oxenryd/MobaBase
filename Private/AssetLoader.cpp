@@ -1,7 +1,13 @@
 #include "AssetLoader.h"
-//#include "RenderManager.h"
 #include "Engine.h"
 #include <format>
+
+#ifndef STB_IMAGE_IMPLEMENTATION
+	#define STB_IMAGE_IMPLEMENTATION
+#endif
+
+#include "stb_image.h"
+
 
 ErrorCode AssetLoader::loadModel(
 	const std::string& filename,
@@ -88,6 +94,7 @@ ErrorCode AssetLoader::loadModel(
 				newMats++;
 				
 				auto matData = aiMaterialToBaseMaterialData(aiMat);
+				parseMaterialTextures(filename, scene, aiMat, matData.textures);
 				newMat.createInstance(&matData);
 				RenderManager::getInstance()->vkContext()->createPipelineFromMaterial(RenderManager::getInstance(), newMat);
 
@@ -115,11 +122,13 @@ ErrorCode AssetLoader::loadModel(
 }
 
 Material& AssetLoader::createMaterial(const aiMaterial* aiMat) {
-	auto* baseVs = Engine::getInstance()->getRenderManager()->getShader(MAT_BASE_VS);
-	auto* basePs = Engine::getInstance()->getRenderManager()->getShader(MAT_BASE_PS);
 	std::string matName = aiMat->GetName().C_Str();
+	LOGLINE(LogType::Info, LogMod::Assets, std::format("Creating material {}... ", matName));
+	auto* baseVs = Engine::getInstance()->getRenderManager()->getShader(MAT_BASE_VS);
+	auto* basePs = Engine::getInstance()->getRenderManager()->getShader(MAT_BASE_PS);	
 	auto& mat = Material::createMaterial(matName, *baseVs, *basePs );
-	mat.debugPrintMaterialInfo();
+	LOG(LogType::Success, "Done.");
+	//mat.debugPrintMaterialInfo();
 	return mat;
 }
 
@@ -127,10 +136,7 @@ BaseMaterialInstance AssetLoader::aiMaterialToBaseMaterialData(const aiMaterial*
 	BaseMaterialInstance base{};
 	const aiMaterial& ai = *aiMat;
 	char ptr[32]{ 0 };
-	
-	//TODO:
-	// check textures -> load textures from filename -> bind indices
-	
+		
 	if (ai.Get(AI_MATKEY_COLOR_AMBIENT, *reinterpret_cast<aiColor3D*>(ptr)) == AI_SUCCESS) {
 		auto aiCol = *reinterpret_cast<aiColor3D*>(ptr);
 		base.ambient = {aiCol.r, aiCol.g, aiCol.b};
@@ -200,4 +206,117 @@ BaseMaterialInstance AssetLoader::aiMaterialToBaseMaterialData(const aiMaterial*
 
 
 	return base;
+}
+
+void AssetLoader::parseMaterialTextures(const std::string& filename, const aiScene* scene, const aiMaterial* mat, TexturePack& texPack) {
+
+	for (const aiTextureType& aiType : Texture2D::aiTypesList) {
+		size_t texCount = mat->GetTextureCount(aiType);
+		if (texCount == 0)
+			continue;
+		aiString path;
+		if (mat->GetTexture(aiType, 0, &path) != AI_SUCCESS)
+			continue;
+
+		auto texPtr = Engine::getInstance()->getRenderManager()->getTexture(path.C_Str());
+		if (texPtr) {
+			//TODO TODO
+			continue;
+		}
+
+		auto& texels = Engine::getInstance()->getRenderManager()->texels();
+		Texture2D newTex{};
+		newTex.type = Texture2D::typeFrom_aiTextureType(aiType);
+		newTex.texelOffset = texels.size();
+
+		// Texturedata baked into the scene
+		if (path.length > 0 && path.C_Str()[0] == '*') {
+			int texIndex = std::atoi(path.C_Str() + 1);
+			if (texIndex >= 0 && texIndex < (int)scene->mNumTextures) {
+				const aiTexture* embeddedTex = scene->mTextures[texIndex];
+
+				if (embeddedTex->mHeight == 0) {
+					// Compressed texture (PNG/JPEG) in memory
+					size_t dataSize = embeddedTex->mWidth;
+					const uint8_t* data = reinterpret_cast<const uint8_t*>(embeddedTex->pcData);
+					// Now you can feed `data` to your image loader (stb_image, etc.)
+					throw std::exception("Not Implemented.");
+
+				} else {
+					
+
+					newTex.height = embeddedTex->mHeight;
+					newTex.width = embeddedTex->mWidth;
+					newTex.filePath = path.C_Str();
+
+					newTex = Engine::getInstance()->getRenderManager()->registerTexture(path.C_Str(), newTex);
+					fillTexturePack(texPack, newTex.type, newTex.textureIndex);
+					const aiTexel* pixels = embeddedTex->pcData;
+					for (size_t i = 0; i < newTex.texelCount(); ++i) {
+						texels.push_back(ColorRGBA{ pixels[i] });
+					}
+				}
+			}
+			continue;
+		}
+
+
+
+		// Data needs to be fetched from file
+		int w, h, chan;
+		std::filesystem::path fullPath = std::filesystem::path(filename).parent_path() / path.C_Str();
+		std::string pathString = fullPath.generic_string();
+		unsigned char* data = stbi_load(
+			pathString.c_str(),
+			&w, &h, &chan, 4
+		);
+		if (data) {
+			newTex.filePath = pathString;
+			newTex.width = static_cast<uint16_t>(w);
+			newTex.height = static_cast<uint16_t>(h);
+			newTex = Engine::getInstance()->getRenderManager()->registerTexture(path.C_Str(), newTex);
+			fillTexturePack(texPack, newTex.type, newTex.textureIndex);
+			for (size_t i = 0; i < newTex.texelCount(); ++i) {
+				texels.push_back(*reinterpret_cast<ColorRGBA*>(data + i));
+			}
+			//texels.push_back(reinterpret_cast<ColorRGBA*>(data),
+			//			  reinterpret_cast<ColorRGBA*>(data) + newTex.texelCount());
+			stbi_image_free(data);
+			LOGLINE(LogType::Info, LogMod::Assets, std::format("Imported Texture '{}'", pathString));
+		} else
+			LOGLINE(LogType::Error, LogMod::Assets, std::format("stb_image: Failed to load file: '{}'", pathString));
+	}
+}
+
+void AssetLoader::fillTexturePack(TexturePack& texPack, TextureType type, uint32_t index) {
+
+	switch (type) {
+		case TextureType::Diffuse:
+			texPack.albedoId = index; break;
+
+		case TextureType::Emissive:
+			texPack.emissiveId = index; break;
+
+		case TextureType::Clearcoat:
+			break;
+
+		case TextureType::Metalness:
+			texPack.metallicId = index; break;
+
+		case TextureType::AmbientOcclusion:
+			texPack.aoId = index; break;
+
+		case TextureType::Height:
+		case TextureType::Normal:
+			texPack.normalId = index; break;
+
+		case TextureType::Specular:
+			texPack.specularId = index; break;
+
+		case TextureType::Roughness:
+			texPack.roughnessId = index; break;
+
+		default:
+			break;
+	}
 }
