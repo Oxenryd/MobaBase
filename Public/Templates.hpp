@@ -12,7 +12,7 @@ private:
     uint64_t m_drawHash{ 0 };
     std::string m_name{ "TestObject" };
     GameObject m_go;
-    uint32_t m_camIndex;
+    uint32_t m_camIndex{};
     float m_camSpeed = 12.5f;
 
 

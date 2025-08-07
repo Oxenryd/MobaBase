@@ -82,7 +82,8 @@ void VulkanContext::draw(void* rendCtx) {
 	}
 	std::sort(drawCmds.begin(), drawCmds.end());
 
-	VkPipeline lastPipeline = VK_NULL_HANDLE;
+	//VkPipeline lastPipeline = VK_NULL_HANDLE;
+	uint32_t lastPipelineIndex = UINT32_INVALID;
 	Material* lastMaterial = nullptr;
 	uint32_t lastDescCount = 0;
 	uint32_t lastMatIndex = UINT32_INVALID;
@@ -125,9 +126,9 @@ void VulkanContext::draw(void* rendCtx) {
 
 		if (cmd.materialIndex != lastMatIndex) {
 			// Bind pipeline if changed
-			if (matBase->pipeline != lastPipeline) {
-				vkCmdBindPipeline(frame.cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, matBase->pipeline);
-				lastPipeline = matBase->pipeline;
+			if (matBase->pipelineId != lastPipelineIndex) {
+				vkCmdBindPipeline(frame.cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines[matBase->pipelineId]);
+				lastPipelineIndex = matBase->pipelineId;
 				pipelinesCount++;
 			}
 

@@ -559,26 +559,6 @@ private:
 				} else if (set == MAT_BASE_MAT_INSTANCES_SET && renderMan->getParamName(key.nameIndices[i]) == MAT_BASE_MAT_INSTANCES_NAME) {
 					rBind.handle = reinterpret_cast<uint64_t>(&matBuf_baseMatInstances);
 					layoutHandle = 0;
-					//for (size_t j = 0; j < VULKAN_FRAMES_IN_FLIGHT; j++) {
-					//	PendingWrite pw{};
-
-
-					//	pw.bufferInfo.buffer = matBuf_baseMatInstances[j];
-					//	pw.bufferInfo.offset = 0;
-					//	pw.bufferInfo.range = sizeof(BaseMaterialInstance);
-
-
-					//	pw.write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-					//	pw.write.dstSet = reinterpret_cast<VkDescriptorSet>(j); //hacky workaround for init
-					//	pw.write.dstBinding = key.bindings[i];
-					//	pw.write.dstArrayElement = 0;
-					//	pw.write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-					//	pw.write.descriptorCount = 1;
-					//	//pw.write.pBufferInfo = &pw.bufferInfo;
-
-					//	pendingWrites.push_back(pw);
-					//	pendingWrites.back().write.pBufferInfo = &pendingWrites.back().bufferInfo;
-					//}
 
 				} else if (set == MAT_MODELMATRICES_SET && renderMan->getParamName(key.nameIndices[i]) == MAT_MODELMATRICES_NAME) {
 					rBind.handle = reinterpret_cast<uint64_t>(&matBuf_modelTransforms);
@@ -606,33 +586,6 @@ private:
 				} else if (set == MAT_SAMPLER_SET && renderMan->getParamName(key.nameIndices[i]) == MAT_SAMPLER_NAME) {
 					rBind.handle = reinterpret_cast<uint64_t>(&baseSamplers);
 					layoutHandle = 0;
-					//for (size_t j = 0; j < VULKAN_FRAMES_IN_FLIGHT; j++) {
-
-					//	PendingWrite pw{};
-
-					//	if (!dummyTexCreated) {
-					//		if (texResources.empty())
-					//			texResources.push_back({});
-					//	}
-					//	for (int k = 0; k < 1; ++k) {
-					//		VkDescriptorImageInfo info{};
-					//		info.sampler = texResources[0].imageInfo.sampler;
-					//		info.imageView = texResources[0].imageView;
-					//		info.imageLayout = texResources[0].imageInfo.imageLayout;
-					//		imageInfos.push_back(info);
-					//	}
-
-					//	//VkWriteDescriptorSet write{};
-					//	pw.write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-					//	pw.write.dstSet = reinterpret_cast<VkDescriptorSet>(j); //hacky workaround for init
-					//	pw.write.dstBinding = key.bindings[i];
-					//	pw.write.dstArrayElement = 0;
-					//	pw.write.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
-					//	pw.write.descriptorCount = 1;
-					//	pw.write.pImageInfo = imageInfos.data();
-
-					//	pendingWrites.push_back(pw);
-					//}
 
 				} else if (set == MAT_BASE_MAT_INSTANCES_INDICES_SET && renderMan->getParamName(key.nameIndices[i]) == MAT_BASE_MAT_INSTANCES_INDICES_NAME) {
 
@@ -776,6 +729,8 @@ public:
 
 	std::unordered_map<BindSetCombo, std::array<VkDescriptorSet, VULKAN_FRAMES_IN_FLIGHT>, BindSetComboKeyHash> bindingToDescriptorSet;
 
+	std::unordered_map<PipelineKey, uint32_t, PipelineKeyHasher> pipelineHashIndexMap;
+	std::vector<VkPipeline> pipelines;
 
 	BlendMode currentBlendMode = BlendMode::Opaque;
 
@@ -1070,12 +1025,6 @@ public:
 		return VK_SUCCESS;
 	}
 
-	//inline VkResult createOrReloadPipeline(PsoDesc& pso) {
-	//	VkResult vk{};
-	//	Vk_CHECK(vk, createGraphicsPipeline(pso));
-	//	return VK_SUCCESS;
-	//}
-
 	inline VkResult setupVertexBuffer() {
 		VkResult vkResult;
 
@@ -1194,125 +1143,6 @@ public:
 			Vk_CHECK(vkResult, vkBindBufferMemory(m_vkDevice, instanceIndexStageBuffer[i], instanceIndexStageMemory[i], 0));
 
 		}
-
-
-
-		//// BaseMaterialInstances
-		//VkBufferCreateInfo baseMatInstanceBufferInfo{};
-		//baseMatInstanceBufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-		//baseMatInstanceBufferInfo.size = sizeof(BaseMaterialInstance);
-		//baseMatInstanceBufferInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
-		//baseMatInstanceBufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-		//Vk_CHECK(vkResult, vkCreateBuffer(m_vkDevice, &baseMatInstanceBufferInfo, nullptr, &matBuf_baseMatInstances));
-
-	
-		//vkGetBufferMemoryRequirements(m_vkDevice, matBuf_baseMatInstances, &memRequirements);
-
-		//VkMemoryAllocateInfo baseMatAllocInfo{};
-		//baseMatAllocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-		//baseMatAllocInfo.allocationSize = memRequirements.size;
-		//baseMatAllocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits,
-		//										   VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-		//										   m_phyDevice);
-
-		//Vk_CHECK(vkResult, vkAllocateMemory(m_vkDevice, &baseMatAllocInfo, nullptr, &matDevMem_baseMatInstances));
-		//Vk_CHECK(vkResult, vkBindBufferMemory(m_vkDevice, matBuf_baseMatInstances, matDevMem_baseMatInstances, 0));
-
-
-
-
-
-
-
-
-		// Dummy texture
-		//Texture2D dummyTex{};
-		//dummyTex.width = 1;
-		//dummyTex.height = 1;
-		//dummyTex.texelPtr = reinterpret_cast<void*>(&c_dummyPixel[0]);
-
-		//uint32_t texIndex{};
-		//loadTexture(dummyTex, &texIndex);
-		//texResources[0].imageInfo.sampler = baseSamplers[{SamplerMode::Aniso8X, SamplerAddressMode::Repeat}];
-
-		//VkImageCreateInfo imageCreateInfo{};
-		//imageCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-		//imageCreateInfo.imageType = VK_IMAGE_TYPE_2D;
-		//imageCreateInfo.format = VK_FORMAT_R8G8B8A8_UNORM;
-		//imageCreateInfo.extent = { 1, 1, 1 };
-		//imageCreateInfo.mipLevels = 1;
-		//imageCreateInfo.arrayLayers = 1;
-		//imageCreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;
-		//imageCreateInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-		//imageCreateInfo.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-		//imageCreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-		//imageCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-
-		//VkImage dummyImage;
-		//vkCreateImage(m_vkDevice, &imageCreateInfo, nullptr, &dummyImage);
-
-		//vkGetImageMemoryRequirements(m_vkDevice, dummyImage, &memRequirements);
-
-		//VkMemoryAllocateInfo allocInfo{};
-		//allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-		//allocInfo.allocationSize = memRequirements.size;
-		//allocInfo.memoryTypeIndex = findMemoryType(
-		//	memRequirements.memoryTypeBits,
-		//	VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-		//	m_phyDevice);
-
-		//VkDeviceMemory dummyMemory;
-		//vkAllocateMemory(m_vkDevice, &allocInfo, nullptr, &dummyMemory);
-		//vkBindImageMemory(m_vkDevice, dummyImage, dummyMemory, 0);
-
-		//VkImageViewCreateInfo viewInfo{};
-		//viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-		//viewInfo.image = dummyImage;
-		//viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-		//viewInfo.format = VK_FORMAT_R8G8B8A8_UNORM;
-		//viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-		//viewInfo.subresourceRange.baseMipLevel = 0;
-		//viewInfo.subresourceRange.levelCount = 1;
-		//viewInfo.subresourceRange.baseArrayLayer = 0;
-		//viewInfo.subresourceRange.layerCount = 1;
-
-		//VkImageView dummyImageView;
-		//vkCreateImageView(m_vkDevice, &viewInfo, nullptr, &dummyImageView);
-
-		//VkTextureResource dummyTexture{};
-		//dummyTexture.image = dummyImage;
-		//dummyTexture.imageView = dummyImageView;
-		//dummyTexture.memory = dummyMemory;
-
-		//dummyTexture.imageInfo.sampler = baseSamplers[{SamplerMode::Linear, SamplerAddressMode::Repeat}];;
-		//dummyTexture.imageInfo.imageView = dummyImageView;
-		//dummyTexture.imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
-		//texResources.push_back(dummyTexture);
-
-
-
-		//// Vertexbuffer
-		//VkDeviceSize vertexBufferSize = sizeof(BaseVSIn) * 0;
-		//VkBufferCreateInfo vBufferInfo{};
-		//vBufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-		//vBufferInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
-		//vBufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-		//vBufferInfo.size = vertexBufferSize;
-		//Vk_CHECK(vkResult, vkCreateBuffer(m_vkDevice, &vBufferInfo, nullptr, &vertexBuffer));
-		//VkMemoryRequirements vBufferMemReq{};
-		//vkGetBufferMemoryRequirements(m_vkDevice, vertexBuffer, &vBufferMemReq);
-		//VkMemoryAllocateInfo vertexAllocInfo{};
-		//vertexAllocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-		//vertexAllocInfo.allocationSize = vBufferMemReq.size;
-		//vertexAllocInfo.memoryTypeIndex = findMemoryType(
-		//	vBufferMemReq.memoryTypeBits,
-		//	VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-		//	m_phyDevice
-		//);
-		//Vk_CHECK(vkResult, vkAllocateMemory(m_vkDevice, &vertexAllocInfo, nullptr, &vertexMemory));
-		//Vk_CHECK(vkResult, vkBindBufferMemory(m_vkDevice, vertexBuffer, vertexMemory, 0));
-
 
 		LOG(LogType::Success, "Done.");
 		return VK_SUCCESS;
@@ -1866,243 +1696,6 @@ public:
 		std::vector<VkDescriptorSetLayout> layouts;
 		Vk_CHECK(vkResult, _initDescLayoutAndSets(renderMan, material, vkResult, layouts, descriptorSetsList));
 		
-		//std::vector<VkDescriptorSetLayout> layouts;
-		//std::vector<std::pair<uint8_t, VkDescriptorSet>> descriptorSetsList;
-		//for (auto& [set, key] : material.descriptorSetLayoutKeys) {
-
-		//	VkDescriptorSetLayout layout;
-		//	auto layoutIt = descSetLayoutCache.find(key);
-		//	if (layoutIt == descSetLayoutCache.end()) {
-
-		//		// not found, create the descriptor set
-		//		std::unordered_map<uint32_t, std::vector<VkDescriptorSetLayoutBinding>> setBindings;
-		//		for (size_t i = 0; i < key.bindings.size(); ++i) {
-		//			VkDescriptorSetLayoutBinding binding{};
-		//			binding.binding = key.bindings[i];
-		//			binding.descriptorType = key.types[i];
-		//			binding.descriptorCount = key.counts[i];
-		//			binding.stageFlags = key.stageFlags[i];
-		//			binding.pImmutableSamplers = nullptr;
-		//			setBindings[set].push_back(binding);
-		//		}	
-		//
-		//		VkDescriptorSetLayoutCreateInfo layoutInfo{};
-		//		layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-		//		layoutInfo.bindingCount = static_cast<uint32_t>(setBindings[set].size());
-		//		layoutInfo.pBindings = setBindings[set].data();
-		//		layoutInfo.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
-
-		//		Vk_CHECK(vkResult, vkCreateDescriptorSetLayout(m_vkDevice, &layoutInfo, nullptr, &layout));
-		//		descSetLayoutCache.insert({ key, layout });
-		//	} else
-		//		layout = layoutIt->second;
-
-
-		//	struct PendingWrite
-		//	{
-		//		VkWriteDescriptorSet write{};
-		//		VkDescriptorBufferInfo bufferInfo{};
-		//		VkDescriptorImageInfo imageInfo{};
-		//	};
-
-		//	std::vector<PendingWrite> pendingWrites;
-		//	pendingWrites.reserve(key.bindings.size() * VULKAN_FRAMES_IN_FLIGHT);
-		//	
-		//	std::vector< VkDescriptorSetVariableDescriptorCountAllocateInfo> pendingCounts;
-		//	pendingCounts.reserve(key.bindings.size() * VULKAN_FRAMES_IN_FLIGHT);
-		//	std::array<VkDescriptorSet, VULKAN_FRAMES_IN_FLIGHT> descriptorSet;
-		//	BoundDescriptorKey descSetKey{};
-		//	descSetKey.layout = layout;
-		//	std::vector<VkDescriptorImageInfo> imageInfos;
-		//	imageInfos.reserve(key.bindings.size()* VULKAN_FRAMES_IN_FLIGHT * 3);
-		//	for (size_t i = 0; i < key.bindings.size(); ++i) {
-		//		ResourceBinding rBind{};
-		//		rBind.binding = key.bindings[i];
-		//		rBind.type = key.types[i];
-
-		//		if (set == MAT_CAMERADATA_SET && renderMan->getParamName(key.nameIndices[i]) == MAT_CAMERADATA_NAME) {
-		//			rBind.handle = reinterpret_cast<uint64_t>(&camDataBuffer);
-
-		//			for (size_t j = 0; j < VULKAN_FRAMES_IN_FLIGHT; j++) {
-		//				PendingWrite pw{};
-
-		//				pw.bufferInfo.buffer = camDataBuffer[j];
-		//				pw.bufferInfo.offset = 0;
-		//				pw.bufferInfo.range = sizeof(CameraData);
-
-		//				pw.write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-		//				pw.write.dstSet = reinterpret_cast<VkDescriptorSet>(j); //hacky workaround for init
-		//				pw.write.dstBinding = key.bindings[i];
-		//				pw.write.dstArrayElement = 0;
-		//				pw.write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-		//				pw.write.descriptorCount = 1;
-		//				//pw.write.pBufferInfo = &pw.bufferInfo;
-
-		//				pendingWrites.push_back(pw);
-		//				pendingWrites.back().write.pBufferInfo = &pendingWrites.back().bufferInfo;
-		//			}
-
-		//		} else if (set == MAT_TEXTURES_SET && renderMan->getParamName(key.nameIndices[i]) == MAT_TEXTURES_NAME) {
-		//			rBind.handle = reinterpret_cast<uint64_t>(&texResources);
-
-		//			VkDescriptorSetVariableDescriptorCountAllocateInfo countInfo{};
-		//			uint32_t textures = 0;
-		//			countInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO;
-		//			countInfo.descriptorSetCount = 1;
-		//			countInfo.pDescriptorCounts = &textures;
-		//			pendingCounts.push_back(countInfo);
-
-		//		} else if (set == MAT_BASE_MAT_INSTANCES_SET && renderMan->getParamName(key.nameIndices[i]) == MAT_BASE_MAT_INSTANCES_NAME) {
-		//			rBind.handle = reinterpret_cast<uint64_t>(&matBuf_baseMatInstances);
-
-		//			for (size_t j = 0; j < VULKAN_FRAMES_IN_FLIGHT; j++) {
-		//				PendingWrite pw{};
-
-
-		//				pw.bufferInfo.buffer = matBuf_baseMatInstances[j];
-		//				pw.bufferInfo.offset = 0;
-		//				pw.bufferInfo.range = sizeof(BaseMaterialInstance);
-
-
-		//				pw.write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-		//				pw.write.dstSet = reinterpret_cast<VkDescriptorSet>(j); //hacky workaround for init
-		//				pw.write.dstBinding = key.bindings[i];
-		//				pw.write.dstArrayElement = 0;
-		//				pw.write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-		//				pw.write.descriptorCount = 1;
-		//				//pw.write.pBufferInfo = &pw.bufferInfo;
-
-		//				pendingWrites.push_back(pw);
-		//				pendingWrites.back().write.pBufferInfo = &pendingWrites.back().bufferInfo;
-		//			}
-
-		//		} else if (set == MAT_MODELMATRICES_SET && renderMan->getParamName(key.nameIndices[i]) == MAT_MODELMATRICES_NAME) {
-		//			rBind.handle = reinterpret_cast<uint64_t>(&matBuf_modelTransforms);
-
-		//			for (size_t j = 0; j < VULKAN_FRAMES_IN_FLIGHT; j++) {
-
-		//				PendingWrite pw{};
-
-		//				pw.bufferInfo.buffer = matBuf_modelTransforms[j];
-		//				pw.bufferInfo.offset = 0;
-		//				pw.bufferInfo.range = sizeof(ModelTransform);
-
-		//				pw.write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-		//				pw.write.dstSet = reinterpret_cast<VkDescriptorSet>(j); //hacky workaround for init
-		//				pw.write.dstBinding = key.bindings[i];
-		//				pw.write.dstArrayElement = 0;
-		//				pw.write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-		//				pw.write.descriptorCount = 1;
-		//				//pw.write.pBufferInfo = &pw.bufferInfo;
-
-		//				pendingWrites.push_back(pw);
-		//				pendingWrites.back().write.pBufferInfo = &pendingWrites.back().bufferInfo;
-		//			}
-
-		//		} else if (set == MAT_SAMPLER_SET && renderMan->getParamName(key.nameIndices[i]) == MAT_SAMPLER_NAME) {
-		//			rBind.handle = reinterpret_cast<uint64_t>(&baseSamplers);
-
-		//			for (size_t j = 0; j < VULKAN_FRAMES_IN_FLIGHT; j++) {
-
-		//				PendingWrite pw{};
-
-		//				for (int k = 0; k < k; ++i) {
-		//					VkDescriptorImageInfo info{};
-		//					info.sampler = texResources[0].imageInfo.sampler;
-		//					info.imageView = texResources[0].imageView;
-		//					info.imageLayout = texResources[0].imageInfo.imageLayout;
-		//					imageInfos.push_back(info);
-		//				}
-
-		//				//VkWriteDescriptorSet write{};
-		//				pw.write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-		//				pw.write.dstSet = reinterpret_cast<VkDescriptorSet>(j); //hacky workaround for init
-		//				pw.write.dstBinding = key.bindings[i];
-		//				pw.write.dstArrayElement = 0;
-		//				pw.write.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
-		//				pw.write.descriptorCount = 1;
-		//				pw.write.pImageInfo = imageInfos.data();
-
-		//				pendingWrites.push_back(pw);
-		//			}
-
-		//		} else if (set == MAT_BASE_MAT_INSTANCES_INDICES_SET && renderMan->getParamName(key.nameIndices[i]) == MAT_BASE_MAT_INSTANCES_INDICES_NAME) {
-		//			
-		//			rBind.handle = reinterpret_cast<uint64_t>(&instanceIndexStage);
-
-		//			for (size_t j = 0; j < VULKAN_FRAMES_IN_FLIGHT; j++) {
-
-		//				PendingWrite pw{};
-
-		//				pw.bufferInfo.buffer = instanceIndexStageBuffer[j];
-		//				pw.bufferInfo.offset = 0;
-		//				pw.bufferInfo.range = VK_WHOLE_SIZE;//sizeof(uint32_t) * instanceIndexStage.size();
-
-		//				pw.write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-		//				pw.write.dstSet = reinterpret_cast<VkDescriptorSet>(j); //hacky workaround for init
-		//				pw.write.dstBinding = key.bindings[i];
-		//				pw.write.dstArrayElement = 0;
-		//				pw.write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-		//				pw.write.descriptorCount = 1;
-		//				//pw.write.pBufferInfo = &pw.bufferInfo;
-
-		//				pendingWrites.push_back(pw);
-		//				pendingWrites.back().write.pBufferInfo = &pendingWrites.back().bufferInfo;
-
-		//			}
-		//		}
-
-		//		descSetKey.bindings.push_back(rBind);
-		//	}
-		//	auto descSetIt = descriptorSetCache.find(descSetKey);
-		//	if (descSetIt == descriptorSetCache.end()) {
-
-		//		// TODO TODO
-		//		void* allocPtr = nullptr;
-		//		if (!pendingCounts.empty()) {
-		//			allocPtr = &pendingCounts[0];
-
-		//			for (size_t i = 0; i < pendingCounts.size() - 1; ++i) {
-		//				pendingCounts[i].pNext = &pendingCounts[i + 1];
-		//			}
-		//		}
-		//		
-		//		for (size_t j = 0; j < VULKAN_FRAMES_IN_FLIGHT; ++j) {
-		//			// allocate and update descriptor set
-		//			VkDescriptorSetAllocateInfo allocInfo{};
-		//			allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-		//			allocInfo.descriptorPool = currentDescPool;
-		//			allocInfo.descriptorSetCount = 1;
-		//			allocInfo.pSetLayouts = &layout;
-		//			allocInfo.pNext = allocPtr;
-		//			Vk_CHECK(vkResult, vkAllocateDescriptorSets(m_vkDevice, &allocInfo, &descriptorSet[j]));
-		//		}
-
-		//		for (auto& pw : pendingWrites) {
-		//			pw.write.dstSet = descriptorSet[reinterpret_cast<size_t>(pw.write.dstSet)]; // correcting back the hackywacky
-		//			//__debugbreak();
-		//			vkUpdateDescriptorSets(m_vkDevice, 1, &pw.write, 0, nullptr);
-		//		}
-		//		
-
-
-
-		//		descriptorSetCache.insert({ descSetKey, descriptorSet });
-		//	} else
-		//		descriptorSet = descSetIt->second;
-
-		//	// TESTING TESTING
-		//	descriptorSetsList.push_back({static_cast<uint8_t>(set), descriptorSet[0]});
-
-		//	// for later mapping
-		//	for (auto& binding : key.bindings) {
-		//		bindingToDescriptorSet.insert({ {binding, set}, descriptorSet });
-		//	}
-
-		//	layouts.resize(std::max(layouts.size(), static_cast<size_t>(set + 1)));
-		//	layouts[set] = layout;
-		//}
-
 		// Push Constants
 		std::vector<VkPushConstantRange> pushConstantRanges;
 		for (const auto& param : material.params) {
@@ -2154,9 +1747,20 @@ public:
 		Vk_CHECK(vkResult, vkCreateGraphicsPipelines(m_vkDevice, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &graphicsPipeline));
 
 		// Make Material ready
-		material.init(graphicsPipeline, pipelineLayout, pipelineId++, descriptorSetsList);
+		auto pipelineIndex = pipelines.size();
+		auto key = PipelineKey::create(material);
+		auto keyIt = pipelineHashIndexMap.find(key);
+		if (keyIt != pipelineHashIndexMap.end()) {
+			material.init(graphicsPipeline, pipelineLayout, keyIt->second, descriptorSetsList);
+			LOG(LogType::Success, std::format(" Reusing Pipeline Index: {}.. ", keyIt->second));
+		} else {
+			material.init(graphicsPipeline, pipelineLayout, pipelineIndex, descriptorSetsList);
+			pipelines.push_back(graphicsPipeline);
+			pipelineHashIndexMap.insert({ key, pipelineIndex });
+			LOG(LogType::Success, "Done.");
+		}
 
-		LOG(LogType::Success, "Done.");
+		
 		return VK_SUCCESS;
 	}
 
@@ -2700,26 +2304,6 @@ public:
 		vkCmdPipelineBarrier(loadingCmdBuffer,
 							 VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
 							 0, 0, nullptr, 0, nullptr, 1, &lastBarrier);
-
-		//if (mipLevels == 1) {
-		//	VkImageMemoryBarrier mip0Barrier{};
-		//	mip0Barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-		//	mip0Barrier.image = image;
-		//	mip0Barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-		//	mip0Barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-		//	mip0Barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-		//	mip0Barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-		//	mip0Barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-		//	mip0Barrier.subresourceRange.baseMipLevel = 0;
-		//	mip0Barrier.subresourceRange.levelCount = 1;
-		//	mip0Barrier.subresourceRange.baseArrayLayer = 0;
-		//	mip0Barrier.subresourceRange.layerCount = 1;
-
-		//	vkCmdPipelineBarrier(loadingCmdBuffer,
-		//						 VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-		//						 0, 0, nullptr, 0, nullptr, 1, &mip0Barrier);
-		//}
-
 
 		vkEndCommandBuffer(loadingCmdBuffer);
 

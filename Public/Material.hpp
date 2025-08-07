@@ -79,18 +79,28 @@ struct DescriptorSetLayoutKey
 		reorder(counts);
 		reorder(stageFlags);
 	}
+
+	size_t hash() const {
+		size_t h = setIndex;
+		for (auto b : bindings)       h ^= std::hash<uint32_t>{}(b)+0x9e3779b9 + (h << 6) + (h >> 2);
+		for (auto t : types)          h ^= std::hash<uint32_t>{}(t)+0x9e3779b9 + (h << 6) + (h >> 2);
+		for (auto n : nameIndices)	  h ^= std::hash<uint32_t>{}(n)+0x9e3779b9 + (h << 6) + (h >> 2);
+		for (auto s : stageFlags)	  h ^= std::hash<uint32_t>{}(s)+0x9e3779b9 + (h << 6) + (h >> 2);
+		for (auto c : counts)		  h ^= std::hash<uint32_t>{}(c)+0x9e3779b9 + (h << 6) + (h >> 2);
+		return h;
+	}
 };
 
 struct DescriptorSetLayoutKeyHash
 {
 	size_t operator()(const DescriptorSetLayoutKey& key) const {
-		size_t h = key.setIndex;
-		for (auto b : key.bindings)       h ^= std::hash<uint32_t>{}(b)+0x9e3779b9 + (h << 6) + (h >> 2);
-		for (auto t : key.types)          h ^= std::hash<uint32_t>{}(t)+0x9e3779b9 + (h << 6) + (h >> 2);
-		for (auto n : key.nameIndices)	  h ^= std::hash<uint32_t>{}(n)+0x9e3779b9 + (h << 6) + (h >> 2);
-		for (auto s : key.stageFlags)	  h ^= std::hash<uint32_t>{}(s)+0x9e3779b9 + (h << 6) + (h >> 2);
-		for (auto c : key.counts)		  h ^= std::hash<uint32_t>{}(c)+0x9e3779b9 + (h << 6) + (h >> 2);
-		return h;
+		//size_t h = key.setIndex;
+		//for (auto b : key.bindings)       h ^= std::hash<uint32_t>{}(b)+0x9e3779b9 + (h << 6) + (h >> 2);
+		//for (auto t : key.types)          h ^= std::hash<uint32_t>{}(t)+0x9e3779b9 + (h << 6) + (h >> 2);
+		//for (auto n : key.nameIndices)	  h ^= std::hash<uint32_t>{}(n)+0x9e3779b9 + (h << 6) + (h >> 2);
+		//for (auto s : key.stageFlags)	  h ^= std::hash<uint32_t>{}(s)+0x9e3779b9 + (h << 6) + (h >> 2);
+		//for (auto c : key.counts)		  h ^= std::hash<uint32_t>{}(c)+0x9e3779b9 + (h << 6) + (h >> 2);
+		return key.hash();
 	}
 };
 
@@ -154,6 +164,7 @@ public:
 	//}
 };
 
+
 class Shader;
 class RenderManager;
 class VulkanContext;
@@ -211,7 +222,7 @@ private:
 	}
 
 	void init(VkPipeline& pipeline, VkPipelineLayout& layout, uint32_t id, std::vector<BindSetCombo>& descriptors) {
-		this->pipeline = pipeline;
+		//this->pipeline = pipeline;
 		this->pipelineLayout = layout;
 		pipelineId = id;
 		dependentDescriptorBindings.resize(descriptors.size());
@@ -233,13 +244,12 @@ public:
 	RasterMode rasterMode = RasterMode::RasterDefault;
 	MultiSamplingMode msaaMode = MultiSamplingMode::MSAA_None;
 	uint32_t pipelineId = UINT32_INVALID;
-	VkPipeline pipeline = nullptr;
+	//VkPipeline pipeline = nullptr;
 	VkPipelineLayout pipelineLayout = nullptr;
 	uint32_t pushConstantOffset = 0;
 	uint32_t pushConstantSize = 0;
 	VkShaderStageFlags pushShaderFlags{};
 	std::unordered_map<VkBindPair, SamplerState, VkBindPairHash> samplerStates;
-	//std::vector<std::pair<uint8_t, VkDescriptorSet>> defaultDescriptors;
 	std::vector<BindSetCombo> dependentDescriptorBindings;
 	std::unordered_map<uint32_t, DescriptorSetLayoutKey> descriptorSetLayoutKeys;
 	std::vector<MaterialInstance> instances;
@@ -260,7 +270,7 @@ public:
 		return
 			matIndex != SIZE_INVALID &&
 			pipelineId != UINT32_INVALID &&
-			pipeline && pipelineLayout;
+			/*pipeline &&*/ pipelineLayout;
 	}
 
 
@@ -273,10 +283,10 @@ public:
 		auto index = instances.size();
 		instances.emplace_back(MaterialInstance{ this, index });
 		_setInstanceMaterialBufferIndex(instances.back(), defaultMaterialParameters);
-		for (auto& buffer : buffers) {
-			uint32_t pushedIndex = buffer.push_new();
-			assert(pushedIndex == index && "createInstance(): index mismatch between instance index and buffer index.");
-		}
+		//for (auto& buffer : buffers) {
+		//	uint32_t pushedIndex = buffer.push_new();
+		//	assert(pushedIndex == index && "createInstance(): index mismatch between instance index and buffer index.");
+		//}
 
 		return instances.back();
 	}
@@ -294,6 +304,61 @@ public:
 };
 
 
+struct PipelineKey
+{
+	std::string vShaderName;
+	std::string pShaderName;
+	std::vector<BlendMode> blendModes;
+	DepthMode depthMode;
+	RasterMode rasterMode;
+	MultiSamplingMode msaaMode;
+	std::unordered_map<uint32_t, DescriptorSetLayoutKey> descriptorSetLayoutKeys;
+	uint32_t pushConstantOffset;
+	uint32_t pushConstantSize;
+	VkShaderStageFlags pushShaderFlags;
 
+	bool operator==(const PipelineKey& other) const = default;
+
+	static PipelineKey create(const Material& mat) {
+		PipelineKey key;
+		key.vShaderName = mat.vShaderName;
+		key.pShaderName = mat.pShaderName;
+		key.blendModes = mat.blendModes;
+		key.depthMode = mat.depthMode;
+		key.rasterMode = mat.rasterMode;
+		key.msaaMode = mat.msaaMode;
+		key.descriptorSetLayoutKeys = mat.descriptorSetLayoutKeys;
+		key.pushConstantOffset = mat.pushConstantOffset;
+		key.pushConstantSize = mat.pushConstantSize;
+		key.pushShaderFlags = mat.pushShaderFlags;
+		return key;
+	}
+};
+
+struct PipelineKeyHasher
+{
+	std::size_t operator()(const PipelineKey& key) const {
+		size_t h = 0;
+		hash_combine(h, std::hash<std::string>()(key.vShaderName));
+		hash_combine(h, std::hash<std::string>()(key.pShaderName));
+		for (const auto& b : key.blendModes)
+			hash_combine(h, std::hash<int>()(static_cast<int>(b)));
+		hash_combine(h, std::hash<int>()(static_cast<int>(key.depthMode)));
+		hash_combine(h, std::hash<int>()(static_cast<int>(key.rasterMode)));
+		hash_combine(h, std::hash<int>()(static_cast<int>(key.msaaMode)));
+		for (const auto& [set, layout] : key.descriptorSetLayoutKeys)
+			hash_combine(h, std::hash<uint64_t>()(layout.hash())); // assume layout has a `hash()` method
+		hash_combine(h, std::hash<uint32_t>()(key.pushConstantOffset));
+		hash_combine(h, std::hash<uint32_t>()(key.pushConstantSize));
+		hash_combine(h, std::hash<VkShaderStageFlags>()(key.pushShaderFlags));
+		return h;
+	}
+
+private:
+	template<typename T>
+	static void hash_combine(size_t& seed, const T& value) {
+		seed ^= std::hash<T>()(value) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+	}
+};
 
 #endif

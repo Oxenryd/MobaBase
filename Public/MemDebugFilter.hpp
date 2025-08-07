@@ -50,7 +50,7 @@ static const char* kProjectPathFilter = SOURCE_DIR;
 void __cdecl MyDumpClient(void* pUserData, size_t size) {
     
     long requestNumber;
-    char* fileName;
+    char* fileName = nullptr;
     int lineNumber;
     int blockType;
 
