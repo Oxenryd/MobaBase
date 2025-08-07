@@ -21,6 +21,11 @@ struct MeshComponent
 	uint32_t meshIndex;
 };
 
+struct SubMeshComponent
+{
+	uint32_t subMeshIndex;
+};
+
 struct MeshData
 {
 	size_t firstSubMeshIndex;
@@ -29,12 +34,16 @@ struct MeshData
 
 struct SubMesh
 {
-	uint32_t vertexOffset;
-	uint32_t vertexCount;
-	uint32_t indexOffset;
-	uint32_t indexCount;
-	uint32_t materialIndex;
-	uint32_t instanceIndex;
+	entt::entity entity{ entt::null };
+	uint32_t vertexOffset{ UINT32_INVALID };
+	uint32_t vertexCount{ UINT32_INVALID };
+	uint32_t indexOffset{ UINT32_INVALID };
+	uint32_t indexCount{ UINT32_INVALID };
+	uint32_t materialIndex{ UINT32_INVALID };
+	uint32_t instanceIndex{ UINT32_INVALID };
+
+	glm::vec3 getAvgCenter();
+	std::span<BaseVSIn> getVertices();
 };
 
 
@@ -47,7 +56,8 @@ private:
 
 public:
 	~Mesh() = default;
-	Mesh() = delete;
+	Mesh() :
+		m_reg{ nullptr }, m_entity{entt::null} {}
 	Mesh(ArenaRegistry* registry, entt::entity entity)
 		: m_reg{ registry }, m_entity{ entity } {}
 	Mesh(const Mesh& other) {
@@ -69,11 +79,14 @@ public:
 		other.m_entity = entt::null;
 	}
 	Mesh& operator=(Mesh&& other) noexcept {
+		
 		m_reg = other.m_reg;
 		m_entity = other.m_entity;
 
 		other.m_reg = nullptr;
 		other.m_entity = entt::null;
+
+		return *this;
 	}
 	bool operator==(const Mesh& rhs) {
 		return m_reg == rhs.m_reg && m_entity == rhs.m_entity;
@@ -83,6 +96,7 @@ public:
 	glm::vec3 getAvgCenter();
 	std::span<BaseVSIn> getVertices();
 	std::span<SubMesh> getSubmeshes();
+	//void rigSubMeshTransforms();
 };
 
 

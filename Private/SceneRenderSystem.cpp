@@ -1,6 +1,13 @@
 #include "SceneRenderSystem.hpp"
 #include "Engine.h"
+#include "MobaMath.hpp"
+
 #include <format>
+
+
+
+
+
 
 ErrorCode SceneRenderSystem::loadModel(const std::string& filename, MeshDescription* outMeshInfo) {
 	
@@ -36,6 +43,10 @@ ErrorCode SceneRenderSystem::loadModel(const std::string& filename, MeshDescript
 			tex.tryAllocate();
 		}
 		RenderManager::getInstance()->vkContext()->loadBaseMatData();
+
+		if (outMeshInfo) {
+			*outMeshInfo = mInfo;
+		}
 	}
 
 	return ec;
@@ -63,4 +74,51 @@ uint32_t SceneRenderSystem::addCamera(CameraData* initData) {
 		};
 
 	return index;
+}
+
+ErrorCode SceneRenderSystem::createMeshFromModel(const std::string& path, Mesh* outMesh, const GameObject* go) {
+
+	MeshDescription meshInfo{};
+	auto ec = loadModel(path, &meshInfo);
+	if (!EC_FAILED(ec)) {
+		Mesh newMesh{};
+		MeshComponent meshComp{};
+		meshComp.meshIndex = meshInfo.meshIndex;
+		if (go) {
+			meshComp = m_reg->emplace<MeshComponent>(go->entity(), meshComp);
+			newMesh = Mesh{ m_reg, go->entity() };
+			if (outMesh) {
+				*outMesh = newMesh;
+			}
+		} else {
+			auto newEntity = m_reg->create();
+			meshComp = m_reg->emplace<MeshComponent>(newEntity, meshComp);
+			newMesh = Mesh{ m_reg, newEntity };
+			if (outMesh) {
+				*outMesh = newMesh;
+			}
+		}
+
+		for (size_t i = meshInfo.subMeshOffset; i < meshInfo.subMeshOffset + meshInfo.subMeshCount; ++i) {
+			auto& subMesh = m_subMeshes[i];
+			subMesh.entity = m_reg->create();
+			m_reg->emplace<SubMeshComponent>(subMesh.entity, SubMeshComponent{ static_cast<uint32_t>(i) });
+			
+			auto subVerts = std::span<BaseVSIn>(&m_vertices[subMesh.vertexOffset], subMesh.vertexCount);
+			auto avgCenter = MMath::getAvgCenter(subVerts);
+			TransformComponent transform{};
+			transform.position = avgCenter;
+			m_reg->emplace<TransformComponent>(subMesh.entity, transform);
+
+			BSphere sphere{};
+			sphere.center = avgCenter;
+			sphere.encapsule(subVerts);
+			BoundingVolumeComponent boundComp{};
+			Engine::getInstance()->getScene(m_sceneIndex)->boundingSystem().registryEmplace(subMesh.entity, &sphere, &boundComp);
+		}
+		
+	} else
+		return ec;
+
+	return ErrorCode::OK;
 }

@@ -26,11 +26,10 @@ public:
 		
 		BSphere* sphere = static_cast<BSphere*>(valuePtr);
 
-		auto index = m_bSpheres.size();
+		auto index = static_cast<uint32_t>(m_bSpheres.size());
 		if (!sphere)
 			m_bSpheres.push_back({});
 		else {
-			BSphere* sphere = static_cast<BSphere*>(sphere);
 			m_bSpheres.push_back(*sphere);
 		}
 
@@ -43,6 +42,8 @@ public:
 	virtual void registryRemove(entt::entity, void* valueOut) override {
 		throw std::exception("SystemECS::registryRemove() not implemented.");
 	}
+
+	ArenaVector<BSphere>& bSpheres() { return m_bSpheres; }
 };
 
 #endif

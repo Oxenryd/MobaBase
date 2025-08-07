@@ -71,6 +71,8 @@ public:
 	INLINE Transform transform() const { return Transform{ m_reg, m_entity }; }
 	INLINE Layer layer() { return Layer{ m_globalEntity }; }
 	INLINE Layer layer() const { return Layer{ m_globalEntity }; }
+
+	INLINE entt::entity entity() const { return m_entity; }
 };
 
 static_assert(std::is_nothrow_move_constructible_v<GameObject>, "GameObject is not noexcept movable!");

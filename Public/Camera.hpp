@@ -198,7 +198,7 @@ public:
         return f;
     }
 
-    INLINE Frustum getFurstumSIMD(bool normalize = true) {
+    INLINE Frustum getFrustumSIMD(bool normalize = true) {
 
         Frustum f;
         auto m = viewProjection();

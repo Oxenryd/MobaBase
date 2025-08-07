@@ -1,6 +1,14 @@
 #include "MeshComponent.hpp"
 #include "Engine.h"
 
+std::span<BaseVSIn> SubMesh::getVertices() {
+	return std::span<BaseVSIn>();
+}
+
+
+
+
+
 MeshData& Mesh::getMeshData() {
 	const auto& [meshComp, trans] = m_reg->get<MeshComponent, TransformComponent>(m_entity);
 	return Engine::getInstance()->getScene(trans.sceneIndex)->sceneRender().getMeshes()[meshComp.meshIndex];

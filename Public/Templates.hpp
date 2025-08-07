@@ -28,14 +28,16 @@ public:
         m_go = gameObjectSystem().createGameObject<GameObject>(m_name);
         MeshDescription meshInfo{};
         const std::string path = std::format("{}{}", ASSETS_DIR, "crytek-sponza-hd/sponza.obj"); //"Cube/cube.obj"
-        //const std::string path = std::format("{}{}", ASSETS_DIR, "Cube/cube.obj");
 
-        auto ec = sceneRender().loadModel(path, &meshInfo);
-        if (!EC_FAILED(ec)) {
-            MeshComponent meshComp{};
-            meshComp.meshIndex = meshInfo.meshIndex;
-            registry().emplace<MeshComponent>(m_go, meshComp);
-        }
+        Mesh modelMesh{};
+        sceneRender().createMeshFromModel(path, &modelMesh, &m_go);
+
+        //auto ec = sceneRender().loadModel(path, &meshInfo);
+        //if (!EC_FAILED(ec)) {
+        //    MeshComponent meshComp{};
+        //    meshComp.meshIndex = meshInfo.meshIndex;
+        //    registry().emplace<MeshComponent>(m_go, meshComp);
+        //}
 
         sceneRender().submitPersistent(m_go, meshInfo.meshIndex, 512);
         m_camIndex = sceneRender().addCamera();

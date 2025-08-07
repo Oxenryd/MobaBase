@@ -4,6 +4,8 @@
 #include <concepts>
 #include <glm/glm.hpp>
 #include <glm/gtx/quaternion.hpp>
+#include <span>
+#include "HlslTypes.h"
 #include "GlobalMacros.h"
 
 namespace MMath
@@ -26,6 +28,18 @@ namespace MMath
         glm::vec3 invTranslation = -(invRotation * (position * invScale));
 
         return composeTRS(invTranslation, invRotation, invScale);
+    }
+
+
+    INLINE static glm::vec3 getAvgCenter(std::span<BaseVSIn> vertices) {
+        glm::vec3 total{ 0 };
+        if (vertices.empty())
+            return total;
+
+        for (auto& vert : vertices)
+            total += vert.pos;
+
+        return total / static_cast<float>(vertices.size());
     }
 }
 
@@ -141,5 +155,9 @@ struct uint24_t
     uint24_t& operator--() { return *this -= 1; }
     uint24_t operator--(int) { uint24_t tmp = *this; --(*this); return tmp; }
 };
+
+
+
+
 
 #endif

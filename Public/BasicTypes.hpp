@@ -5,6 +5,7 @@
 #include <array>
 #include <assimp/texture.h>
 #include <span>
+#include <limits>
 
 #include "GlobalMacros.h"
 
@@ -146,6 +147,18 @@ struct BSphere
 	float radius{ 1.0f };
 
 	static constexpr BoundingShape shape() { return BoundingShape::BSphere; }
+
+	void encapsule(const std::span<BaseVSIn> vertices) {
+
+		float maxDistSqr = std::numeric_limits<float>::min();
+
+		for (auto& vert : vertices) {
+			auto delta = vert.pos - center;
+			auto thisDistSqr = glm::dot(delta, delta);
+			maxDistSqr = std::max(maxDistSqr, thisDistSqr);
+		}
+		radius = glm::sqrt(maxDistSqr);
+	}
 };
 
 struct AABB

@@ -91,17 +91,32 @@ void VulkanContext::draw(void* rendCtx) {
 	bool pendingRebind = false;
 
 
+	// Camera
+	const auto mainCam = Engine::getInstance()->mainCamera();
+	Frustum f = mainCam->getFrustum();
+
 	// Update CameraData cBuffer
 	void* mappedData = nullptr;
 	vkMapMemory(m_vkDevice, camDataMemory[currentFrame], 0, sizeof(CameraData), 0, &mappedData);
-	memcpy(mappedData, &Engine::getInstance()->mainCamera()->cameraData(), sizeof(CameraData));
+	memcpy(mappedData, &mainCam->cameraData(), sizeof(CameraData));
 	vkUnmapMemory(m_vkDevice, camDataMemory[currentFrame]);	
+	
+
 
 	// Check the draw commands and issue binds and draw calls
 	uint32_t drawCount = 0;
 	for (const auto& cmd : drawCmds) {
 
 		// Frustum culling
+		auto* scene = Engine::getInstance()->getScene(cmd.sceneIndex);
+		const auto [bound, transform] = scene
+			->registry().try_get<BoundingVolumeComponent, TransformComponent>(cmd.subMeshEntity);
+		if (transform) {
+			auto coarse = scene->boundingSystem().bSpheres()[bound->coarseIndex];
+			//coarse.center += transform->position;
+			if (!Camera::sphereVisible(coarse, f))
+				continue;
+		}
 
 
 
@@ -142,8 +157,6 @@ void VulkanContext::draw(void* rendCtx) {
 			}
 			lastMatIndex = cmd.materialIndex;
 		}
-
-		auto scene = Engine::getInstance()->getScene(cmd.sceneIndex);
 
 		// Push
 		BaseMatPush push{};

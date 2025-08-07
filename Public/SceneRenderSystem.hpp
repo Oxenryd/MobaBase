@@ -102,6 +102,7 @@ public:
 			auto& subMesh = m_subMeshes[mesh.firstSubMeshIndex + i];
 			MeshDrawCommand dCmd{};
 			dCmd.entityId = entity;
+			dCmd.subMeshEntity = subMesh.entity;
 			dCmd.priority = prio;
 			dCmd.instanceIndex = subMesh.instanceIndex;
 			dCmd.sceneIndex = m_sceneIndex;
@@ -156,6 +157,8 @@ public:
 	ArenaVector<BaseVSIn>& getVertices() { return m_vertices; }
 	ArenaVector<SubMesh>& getSubMeshes() { return m_subMeshes; }
 	//std::span<Camera> getCameras() { return std::span<Camera>(m_cameras); }
+
+	ErrorCode createMeshFromModel(const std::string& path, Mesh* outMesh, const GameObject* go = nullptr);
 };
 
 #endif
