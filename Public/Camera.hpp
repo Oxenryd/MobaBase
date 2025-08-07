@@ -187,6 +187,12 @@ public:
         f.planes[Frustum::Far].normal.z = m[2][3] - m[2][2];
         f.planes[Frustum::Far].d = m[3][3] - m[3][2];
 
+        //printf("\n\nSCALAR:\n");
+
+        //for (int i = 0; i < 6; ++i) {
+        //    printf("plane[%d]: %f %f %f %f\n", i, f.planes[i].raw[0], f.planes[i].raw[1], f.planes[i].raw[2], f.planes[i].raw[3]);
+        //}
+
         // Optionally normalize the planes
         if (normalize) {
             for (int i = 0; i < 6; ++i) {
@@ -195,6 +201,7 @@ public:
                 f.planes[i].d /= len;
             }
         }
+
         return f;
     }
 
@@ -204,9 +211,21 @@ public:
         auto m = viewProjection();
 
         __m128 col0 = _mm_loadu_ps(&m[0][0]);
-        __m128 col1 = _mm_loadu_ps(&m[0][1]);
-        __m128 col2 = _mm_loadu_ps(&m[0][2]);
-        __m128 col3 = _mm_loadu_ps(&m[0][3]);
+        __m128 col1 = _mm_loadu_ps(&m[1][0]);
+        __m128 col2 = _mm_loadu_ps(&m[2][0]);
+        __m128 col3 = _mm_loadu_ps(&m[3][0]);
+
+        { 
+            __m128 _Tmp3, _Tmp2, _Tmp1, _Tmp0;
+            _Tmp0 = _mm_shuffle_ps((col0), (col1), 0x44);
+            _Tmp2 = _mm_shuffle_ps((col0), (col1), 0xEE);
+            _Tmp1 = _mm_shuffle_ps((col2), (col3), 0x44);
+            _Tmp3 = _mm_shuffle_ps((col2), (col3), 0xEE);
+            (col0) = _mm_shuffle_ps(_Tmp0, _Tmp1, 0x88);
+            (col1) = _mm_shuffle_ps(_Tmp0, _Tmp1, 0xDD);
+            (col2) = _mm_shuffle_ps(_Tmp2, _Tmp3, 0x88);
+            (col3) = _mm_shuffle_ps(_Tmp2, _Tmp3, 0xDD);
+        };
 
         __m128 _left = _mm_add_ps(col3, col0);
         __m128 _right = _mm_sub_ps(col3, col0);
@@ -215,39 +234,35 @@ public:
         __m128 _near = _mm_add_ps(col3, col2);
         __m128 _far = _mm_sub_ps(col3, col2);
 
-        _mm_storeu_ps(&f.planes[0], _left);
-        _mm_storeu_ps(&f.planes[1], _right);
-        _mm_storeu_ps(&f.planes[2], _bottom);
-        _mm_storeu_ps(&f.planes[3], _top);
-        _mm_storeu_ps(&f.planes[4], _near);
-        _mm_storeu_ps(&f.planes[5], _far);
+        _mm_storeu_ps(f.planes[0].raw, _left);
+        _mm_storeu_ps(f.planes[1].raw, _right);
+        _mm_storeu_ps(f.planes[2].raw, _bottom);
+        _mm_storeu_ps(f.planes[3].raw, _top);
+        _mm_storeu_ps(f.planes[4].raw, _near);
+        _mm_storeu_ps(f.planes[5].raw, _far);
 
+        //printf("\n\nSIMD:\n");
 
-        for (size_t i = 0; i < 6; ++i) {
+        //for (int i = 0; i < 6; ++i) {
+        //    printf("plane[%d]: %f %f %f %f\n", i, f.planes[i].raw[0], f.planes[i].raw[1], f.planes[i].raw[2], f.planes[i].raw[3]);
+        //}
 
-            auto plane = &f.planes[i];
+        if (normalize)
+            for (size_t i = 0; i < 6; ++i) {
 
-            __m128 v = _mm_loadu_ps(plane); // Load [x, y, z, d]
-            __m128 xyz = _mm_movelh_ps(v, v); // Unchanged, but _mm_dp_ps needs
-            // Mask: bits 0111 = 0x7, means x, y, z
-            __m128 lenSq = _mm_dp_ps(v, v, 0x71); // Dot x,y,z
-            __m128 len = _mm_sqrt_ps(lenSq);
-            v = _mm_div_ps(v, len); // divide all by length
-            _mm_storeu_ps(plane, v);
-        }
-
-
-
-
-        if (normalize) {
-            for (int i = 0; i < 6; ++i) {
-                float len = glm::length(f.planes[i].normal);
-                f.planes[i].normal /= len;
-                f.planes[i].d /= len;
+                float* plane = f.planes[i].raw; // contiguous!
+                __m128 v = _mm_loadu_ps(plane);
+                __m128 lenSq = _mm_dp_ps(v, v, 0x71); // result is [len2, 0, 0, 0]
+                __m128 len = _mm_sqrt_ps(lenSq);
+                // Broadcast length to all lanes
+                len = _mm_shuffle_ps(len, len, 0x00);
+                v = _mm_div_ps(v, len);
+                _mm_storeu_ps(plane, v);
             }
-        }
+
         return f;
     }
+
 
     INLINE static bool sphereVisible(const BSphere& s, Frustum& frustum) {
         for (int i = 0; i < 6; ++i) {
@@ -262,7 +277,7 @@ public:
     INLINE static bool sphereVisibleSIMD(const BSphere& s, Frustum& frustum) {
 
         for (size_t i = 0; i < 6; ++i) {
-            auto plane = &frustum.planes[i];
+            auto plane = &frustum.planes[i].x;
             __m128 vplane = _mm_loadu_ps(plane);           // [nx, ny, nz, d]
             __m128 vcenter = _mm_set_ps(1.0f, s.center.z, s.center.y, s.center.x); // [x, y, z, 1]
             // Dot product for first 3 components, then add d (plane[3])
@@ -313,7 +328,7 @@ private:
 public:
     INLINE static bool aabbVisibleSIMD(const AABB& box, Frustum& frustum) {
         for (size_t i = 0; i < 6; ++i) {
-            if (!_aabbVisibleSIMDPlane(&frustum.planes[i], box.frontTopLeft, box.backBottomRight))
+            if (!_aabbVisibleSIMDPlane(frustum.planes[i].raw, box.frontTopLeft, box.backBottomRight))
                 return false;
         }
         return true;

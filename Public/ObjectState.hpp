@@ -12,7 +12,8 @@ enum class ObjectState : ObjectStateType
 	None					= 0x00,
 	DirtyTransform			= 0x01,
 	IgnoreParentTransform   = 0x02,
-	LocalEnableOverride		= 0x04
+	LocalEnableOverride		= 0x04,
+	MovedThisFrame			= 0x08
 };
 
 

@@ -31,7 +31,13 @@
 //};
 
 
-
+struct MouseDataRaw
+{
+    int deltaX;
+    int deltaY;
+    int absX;
+    int absY;
+};
 
 struct WindowSurface
 {
@@ -93,12 +99,16 @@ struct WindowSurface
     Event<uint8_t, KeysBitfield> onKeyDown;
     Event<uint8_t, KeysBitfield> onKeyUp;
     Event<uint64_t> onChar;
-    Event<MouseState> onMouse;
+    Event<MouseState> onMouseWheel;
+    Event<MouseState> onMouseButton;
+    Event<MouseDataRaw> onMouseRaw;
     Event<> onSysCommand;
     Event<uint16_t, IntRect<32>> onDpiChanged;
     Event<> onQuit;
     Event<WindowSurface* const, HRAWINPUT> onRawInput;
     
+
+
     WindowSurface() = default;
     ~WindowSurface() {}
 #ifdef BUILD_WIN
@@ -139,7 +149,7 @@ struct WindowSurface
         // Keyboard
         rid[1].usUsagePage = 0x01;
         rid[1].usUsage = 0x06;  // <- keyboard
-        rid[1].dwFlags = RIDEV_INPUTSINK;
+        rid[1].dwFlags = 0;//RIDEV_INPUTSINK;
         rid[1].hwndTarget = windowHandle;
 
 
@@ -253,41 +263,41 @@ static LRESULT CALLBACK WindowProc(
             case WM_MBUTTONUP:
             case WM_XBUTTONDOWN:
             case WM_XBUTTONUP:
-            case WM_MOUSEMOVE:
+            //case WM_MOUSEMOVE:
             {
-                auto posX = static_cast<int16_t>(LOWORD(lParam));
-                auto posY = static_cast<int16_t>(HIWORD(lParam));
+                //auto posX = static_cast<int16_t>(LOWORD(lParam));
+                //auto posY = static_cast<int16_t>(HIWORD(lParam));
                 auto btnState = static_cast<uint8_t>(LOWORD(wParam));
                 MouseState state{};
-                state.relativePosition = { posX, posY };
+                //state.relativePosition = { posX, posY };
                 state.buttonState.copyField(btnState);
-                surface->onMouse.notify(state);
+                surface->onMouseButton.notify(state);
             } break;
 
             case WM_MOUSEWHEEL:
             {
-                auto posX = static_cast<int16_t>(LOWORD(lParam));
-                auto posY = static_cast<int16_t>(HIWORD(lParam));
-                auto btnState = static_cast<uint8_t>(LOWORD(wParam));
+                //auto posX = //static_cast<int16_t>(LOWORD(lParam));
+                //auto posY = static_cast<int16_t>(HIWORD(lParam));
+                //auto btnState = static_cast<uint8_t>(LOWORD(wParam));
                 auto wheel = static_cast<int16_t>(HIWORD(wParam));
                 MouseState state{};
-                state.relativePosition = { posX, posY };
-                state.buttonState.copyField(btnState);
+                //state.relativePosition = { posX, posY };
+                //state.buttonState.copyField(btnState);
                 state.wheel = glm::i16vec2{ state.wheel.x, wheel };
-                surface->onMouse.notify(state);
+                surface->onMouseWheel.notify(state);
             } break;
 
             case WM_MOUSEHWHEEL:
             {
-                auto posX = static_cast<int16_t>(LOWORD(lParam));
-                auto posY = static_cast<int16_t>(HIWORD(lParam));
-                auto btnState = static_cast<uint8_t>(LOWORD(wParam));
+                //auto posX = static_cast<int16_t>(LOWORD(lParam));
+                //auto posY = static_cast<int16_t>(HIWORD(lParam));
+                //auto btnState = static_cast<uint8_t>(LOWORD(wParam));
                 auto wheel = static_cast<int16_t>(HIWORD(wParam));
                 MouseState state{};
-                state.relativePosition = { posX, posY };
-                state.buttonState.copyField(btnState);
+                //state.relativePosition = { posX, posY };
+                //state.buttonState.copyField(btnState);
                 state.wheel = glm::i16vec2{ wheel, state.wheel.y };
-                surface->onMouse.notify(state);
+                surface->onMouseWheel.notify(state);
             } break;
 
             case WM_QUIT:
@@ -304,8 +314,35 @@ static LRESULT CALLBACK WindowProc(
             } break;
 
             case WM_INPUT:
-                surface->onRawInput.notify(surface, (HRAWINPUT)lParam);
-                break;
+            {
+
+                RAWINPUT raw;
+                UINT size = sizeof(raw);
+                GetRawInputData((HRAWINPUT)lParam, RID_INPUT, &raw, &size, sizeof(RAWINPUTHEADER));
+
+                if (raw.header.dwType == RIM_TYPEMOUSE) {
+                    const RAWMOUSE& mouse = raw.data.mouse;
+                    if (mouse.usFlags == MOUSE_MOVE_RELATIVE) {
+                        int deltaX = mouse.lLastX;
+                        int deltaY = mouse.lLastY;
+
+                        POINT pos;
+                        int absX = 0, absY = 0;
+                        if (GetCursorPos(&pos)) {
+                            absX = pos.x;
+                            absY = pos.y;
+                        }
+
+                        surface->onMouseRaw.notify(MouseDataRaw{deltaX, deltaY, absX, absY});
+                    }
+                } else if (raw.header.dwType == RIM_TYPEKEYBOARD)
+                {
+                    const RAWKEYBOARD& keyboard = raw.data.keyboard;
+                    KeyEvent event = MapRawKeyboardEvent(keyboard);
+                    surface->onKeyEvent.notify(event);
+                }
+            } break;
+
 
             default:
                 break;
@@ -368,49 +405,28 @@ static ErrorCode createSurface(
     return ErrorCode::OK;
 }
 
-INLINE static void HandleRawInputWin32(WindowSurface* const surface, HRAWINPUT hRawInput) {
-    UINT dataSize = 0;
-
-    // First, query required size
-    GetRawInputData(hRawInput, RID_INPUT, nullptr, &dataSize, sizeof(RAWINPUTHEADER));
-
-    std::vector<BYTE> rawData(dataSize);
-
-    if (GetRawInputData(hRawInput, RID_INPUT, rawData.data(), &dataSize, sizeof(RAWINPUTHEADER)) != dataSize) {
-        // Handle error here
-        return;
-    }
-
-    RAWINPUT* raw = reinterpret_cast<RAWINPUT*>(rawData.data());
-
-    if (raw->header.dwType == RIM_TYPEMOUSE) {
-        const RAWMOUSE& mouse = raw->data.mouse;
-
-        if (mouse.usFlags == MOUSE_MOVE_RELATIVE) {
-            LONG deltaX = mouse.lLastX;
-            LONG deltaY = mouse.lLastY;
-
-            // This is your raw high-precision delta:
-            // deltaX = horizontal movement since last WM_INPUT
-            // deltaY = vertical movement since last WM_INPUT
-
-            // Dispatch into your InputManager, etc:
-            //handleRawMouseDelta(deltaX, deltaY);
-
-        }
-
-        // Optional: handle raw mouse buttons
-        if (mouse.usButtonFlags & RI_MOUSE_LEFT_BUTTON_DOWN) { /* handle left down */ }
-        if (mouse.usButtonFlags & RI_MOUSE_LEFT_BUTTON_UP) { /* handle left up */ }
-        if (mouse.usButtonFlags & RI_MOUSE_RIGHT_BUTTON_DOWN) { /* handle right down */ }
-        if (mouse.usButtonFlags & RI_MOUSE_RIGHT_BUTTON_UP) { /* handle right up */ }
-    } else if (raw->header.dwType == RIM_TYPEKEYBOARD) {
-        const RAWKEYBOARD& keyboard = raw->data.keyboard;
-
-        KeyEvent event = MapRawKeyboardEvent(keyboard);
-        surface->onKeyEvent.notify(event);
-    }
-}
+//INLINE static void HandleRawInputWin32(WindowSurface* const surface, HRAWINPUT hRawInput) {
+//    UINT dataSize = 0;
+//
+//    // First, query required size
+//    GetRawInputData(hRawInput, RID_INPUT, nullptr, &dataSize, sizeof(RAWINPUTHEADER));
+//
+//    std::vector<BYTE> rawData(dataSize);
+//
+//    if (GetRawInputData(hRawInput, RID_INPUT, rawData.data(), &dataSize, sizeof(RAWINPUTHEADER)) != dataSize) {
+//        // Handle error here
+//        return;
+//    }
+//
+//    RAWINPUT* raw = reinterpret_cast<RAWINPUT*>(rawData.data());
+//
+//    if (raw->header.dwType == RIM_TYPEKEYBOARD) {
+//        const RAWKEYBOARD& keyboard = raw->data.keyboard;
+//
+//        KeyEvent event = MapRawKeyboardEvent(keyboard);
+//        surface->onKeyEvent.notify(event);
+//    }
+//}
 
 #endif // BUILD_WIN
 

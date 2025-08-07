@@ -119,13 +119,20 @@ struct ColorRGBA
 
 struct FrustumPlane
 {
-	glm::vec3 normal;
-	float d; // plane equation: dot(normal, point) + d >= 0 is inside
-
-	float* operator& () {
-		return reinterpret_cast<float*>(this);
-	}
-
+	union
+	{
+		float raw[4]{};
+		struct
+		{
+			glm::vec3 normal;
+			float d;
+		};
+		struct
+		{
+			float x, y, z, d;
+		};
+		glm::vec4 vec;
+	};
 };
 
 struct Frustum

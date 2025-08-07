@@ -54,6 +54,8 @@ public:
 			auto& transform = view.get<TransformComponent>(entity);
 			auto id = entt::to_integral(entity);
 
+			transform.state.clearByEnum(ObjectState::MovedThisFrame);
+
 			if (!transform.state.hasFlag(ObjectState::DirtyTransform))
 				continue;
 
@@ -75,6 +77,7 @@ public:
 			}
 
 			transform.state.clearByEnum(ObjectState::DirtyTransform);
+			transform.state.setByEnum(ObjectState::MovedThisFrame);
 		}
 
 

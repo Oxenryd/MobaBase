@@ -401,6 +401,7 @@ private:
 	uint8_t c_dummyPixel[4] = { 128, 128, 128, 255 };
 	bool m_pendingExit = false;
 	uint32_t m_lastDrawcallCount = 0;
+	uint32_t m_lastPipelineSwitches = 0;
 	std::thread m_renderThread;
 
 	struct QueueFamilyIndices
@@ -882,6 +883,7 @@ public:
 	}
 
 	INLINE uint32_t lastDrawcallCount() const { return m_lastDrawcallCount; }
+	INLINE uint32_t lastPipelineSwitchCount() const { return m_lastPipelineSwitches; }
 
 	INLINE VkTextureResource* getTexResource(const size_t resourceIndex) {
 		if (resourceIndex >= texResources.size())

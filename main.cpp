@@ -89,7 +89,8 @@ int __stdcall main(HINSTANCE hInstance, HINSTANCE instance, LPSTR str, int nCmdS
 							{
 								static std::wstring windowTitle;
 								windowTitle = L"VulkanTest - " + std::to_wstring(frames) + L" FPS\t" + 
-									std::to_wstring(RenderManager::getInstance()->vkContext()->lastDrawcallCount()) + L" drawcalls\t";
+									std::to_wstring(RenderManager::getInstance()->vkContext()->lastDrawcallCount()) + L" drawcalls\t" +
+									std::to_wstring(RenderManager::getInstance()->vkContext()->lastPipelineSwitchCount()) + L" pipeline switches\t";
 								SetWindowTextW(engine.getWndSurface()->windowHandle, windowTitle.c_str());
 							});
 

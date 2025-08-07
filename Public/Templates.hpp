@@ -13,7 +13,7 @@ private:
     std::string m_name{ "TestObject" };
     GameObject m_go;
     uint32_t m_camIndex;
-    float m_camSpeed = 7.5f;
+    float m_camSpeed = 12.5f;
 
 
 public:
@@ -27,17 +27,10 @@ public:
         
         m_go = gameObjectSystem().createGameObject<GameObject>(m_name);
         MeshDescription meshInfo{};
-        const std::string path = std::format("{}{}", ASSETS_DIR, "crytek-sponza-hd/sponza.obj"); //"Cube/cube.obj"
+        const std::string path = std::format("{}{}", ASSETS_DIR, "crytek-sponza-hd/sponza.obj"); //"Cube/cube.obj" //"crytek-sponza-hd/sponza.obj"
 
         Mesh modelMesh{};
         sceneRender().createMeshFromModel(path, &modelMesh, &m_go);
-
-        //auto ec = sceneRender().loadModel(path, &meshInfo);
-        //if (!EC_FAILED(ec)) {
-        //    MeshComponent meshComp{};
-        //    meshComp.meshIndex = meshInfo.meshIndex;
-        //    registry().emplace<MeshComponent>(m_go, meshComp);
-        //}
 
         sceneRender().submitPersistent(m_go, meshInfo.meshIndex, 512);
         m_camIndex = sceneRender().addCamera();
@@ -63,34 +56,29 @@ public:
                            }
                               
                        });
+
+
+        Engine::getInstance()->getInputManager()->
+            onMouseRightDown.subscribe([](MouseState state) -> void {
+            Engine::getInstance()->getInputManager()->enableRelativeMouse();
+                                       });
+        Engine::getInstance()->getInputManager()->
+            onMouseRightUp.subscribe([](MouseState state) -> void {
+            Engine::getInstance()->getInputManager()->disableRelativeMouse();
+                                     });
+
+        Engine::getInstance()->getInputManager()->
+            onMouseRightHold.subscribe([this](MouseState state) -> void 
+                                       {
+            auto cam = Camera::getCamera(m_sceneIndex, m_camIndex);
+            auto dt = Timing::deltaTimeF();
+            cam->rotateLocal({ -(float)state.lastPositionDelta.x * dt, -(float)state.lastPositionDelta.y * dt, 0.0f });
+                                       });
+
     }
 
     void update(float dt) {
-        m_time += dt;
 
-        auto cos = std::cos(m_time);
-        auto sin = std::sin(m_time);
-
-        float rotSize = 1.75f;
-        auto transform = m_go.transform();
-
-        
-        auto& mState = Engine::getInstance()->getInputManager()->currentMouseState();
-        auto cam = Camera::getCamera(m_sceneIndex, m_camIndex);
-        //std::cout << std::format("\n mPos: {},{}\twhDelta: {},{}\tpDelta: {},{}\tbState: {}",
-        //                         mState.relativePosition.x,
-        //                         mState.relativePosition.y,
-        //                         mState.wheel.x,
-        //                         mState.wheel.y,
-        //                         mState.lastPositionDelta.x,
-        //                         mState.lastPositionDelta.y,
-        //                         mState.buttonState.getField());
-
-        if (mState.buttonState.hasFlag(MouseButton::Right)) {
-            
-            glm::vec3 rotation{};
-            cam->rotateLocal({ -(float)mState.lastPositionDelta.x * dt, -(float)mState.lastPositionDelta.y * dt, 0.0f });
-        }        
     }
 
     void lateUpdate(float dt) {

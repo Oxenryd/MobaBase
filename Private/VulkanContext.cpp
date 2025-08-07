@@ -1,6 +1,7 @@
 #include "VulkanContext.hpp"
 #include "Engine.h"
 #include <format>
+#include <chrono>
 
 void VulkanContext::draw(void* rendCtx) {
 
@@ -93,18 +94,18 @@ void VulkanContext::draw(void* rendCtx) {
 
 	// Camera
 	const auto mainCam = Engine::getInstance()->mainCamera();
-	Frustum f = mainCam->getFrustum();
+	Frustum f = mainCam->getFrustumSIMD();
 
 	// Update CameraData cBuffer
 	void* mappedData = nullptr;
 	vkMapMemory(m_vkDevice, camDataMemory[currentFrame], 0, sizeof(CameraData), 0, &mappedData);
 	memcpy(mappedData, &mainCam->cameraData(), sizeof(CameraData));
-	vkUnmapMemory(m_vkDevice, camDataMemory[currentFrame]);	
-	
+	vkUnmapMemory(m_vkDevice, camDataMemory[currentFrame]);
 
 
 	// Check the draw commands and issue binds and draw calls
 	uint32_t drawCount = 0;
+	uint32_t pipelinesCount = 0;
 	for (const auto& cmd : drawCmds) {
 
 		// Frustum culling
@@ -127,6 +128,7 @@ void VulkanContext::draw(void* rendCtx) {
 			if (matBase->pipeline != lastPipeline) {
 				vkCmdBindPipeline(frame.cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, matBase->pipeline);
 				lastPipeline = matBase->pipeline;
+				pipelinesCount++;
 			}
 
 			// check descriptor sets
@@ -177,6 +179,7 @@ void VulkanContext::draw(void* rendCtx) {
 	}
 
 	m_lastDrawcallCount = drawCount;
+	m_lastPipelineSwitches = pipelinesCount;
 
 	// End Render Pass
 	vkCmdEndRenderPass(frame.cmdBuffer);

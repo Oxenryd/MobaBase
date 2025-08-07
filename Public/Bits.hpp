@@ -53,7 +53,7 @@ public:
     }
     SizedBitField(ENUM startState) {
         m_field = 0;
-        m_field |= (T(1) << ((uint32_t)startState % WordBits));
+        m_field |= (T(1) << ((uint32_t)startState));
     }
 
     template <typename ENUM>
@@ -61,24 +61,24 @@ public:
             { static_cast<uint32_t>(e) };
     }
     void setByEnum(ENUM index) {
-        m_field |= (T(1) << ((uint32_t)index % WordBits));
+        m_field |= (T(1) << ((uint32_t)index));
     }
     void set(uint32_t index) {
-        m_field |= (T(1) << (index % WordBits));
+        m_field |= (T(1) << (index));
     }
     template <typename ENUM>
         requires requires(ENUM e) {
             { static_cast<uint32_t>(e) };
     }
     void clearByEnum(ENUM index) {
-        m_field &= ~(T(1) << ((uint32_t)index % WordBits));
+        m_field &= ~(T(1) << ((uint32_t)index));
     }
     void clear(uint32_t index) {
-        m_field &= ~(T(1) << (index % WordBits));
+        m_field &= ~(T(1) << (index));
     }
 
     void toggle(uint32_t index) {
-        m_field ^= (T(1) << (index % WordBits));
+        m_field ^= (T(1) << (index));
     }
 
     template <typename ENUM>
@@ -90,7 +90,7 @@ public:
     }
 
     bool isSet(uint32_t index) const {
-        return (m_field & (T(1) << (index % WordBits))) != 0;
+        return (m_field & (T(1) << (index))) != 0;
     }
 
     void setByBool(uint32_t index, bool target) {
@@ -112,9 +112,7 @@ public:
         m_field = fieldValue;
     }
 
-    uint32_t size() const {
-        return WordBits;
-    }
+
 
     T& getField() const { return const_cast<T&>(m_field); }
     T& getField() { return m_field; }
@@ -125,7 +123,6 @@ public:
     }
 
 private:
-    static constexpr const uint8_t WordBits = sizeof(T) * 8;
     T m_field;
 };
 

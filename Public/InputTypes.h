@@ -2,6 +2,8 @@
 #define INPUTTYPES_H
 
 #include <cstdint>
+#include <format>
+#include <string>
 
 enum class KeyCode : uint16_t
 {
@@ -64,7 +66,7 @@ enum class MouseButtonDownState
 #endif
 };
 
-enum class MouseButton : uint8_t
+enum class MButton : uint8_t
 {
     None = 0x00,
     Left = 0x01,
@@ -73,15 +75,45 @@ enum class MouseButton : uint8_t
     ControlKey = 0x08,
     Middle = 0x10,
     M4 = 0x20,
-    M5 = 0x40
+    M5 = 0x40,
+    _ENUM_END = 0x80
 };
+
+//template<typename A, typename B>
+//inline MButton operator|(A a, B b) {
+//    return static_cast<MouseButton>(
+//        static_cast<uint8_t>(a) | static_cast<uint8_t>(b)
+//        );
+//}
+//template<typename A, typename B>
+//inline MButton operator&(A a, B b) {
+//    return static_cast<MouseButton>(
+//        static_cast<uint8_t>(a) & static_cast<uint8_t>(b)
+//        );
+//}
 
 struct MouseState
 {
-    glm::i16vec2 relativePosition{};
-    glm::i16vec2 lastPositionDelta{};
+
+    glm::ivec2 relativePosition{};
+    glm::ivec2 lastPositionDelta{};
+    glm::ivec2 absoluteScreenPosition{};
     glm::i16vec2 wheel{};
     SizedBitField<uint8_t> buttonState{};
+
+    std::string to_String() {
+        return std::format("\n absPos: {},{}\trelPos: {},{}\twhDelta: {},{}\tpDelta: {},{}\tbState: {}",
+                           absoluteScreenPosition.x,
+                           absoluteScreenPosition.y,
+                           relativePosition.x,
+                           relativePosition.y,
+                           wheel.x,
+                           wheel.y,
+                           lastPositionDelta.x,
+                           lastPositionDelta.y,
+                           buttonState.getField());
+    }
+
 };
 
 enum class KeyAction : uint8_t
