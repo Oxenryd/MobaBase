@@ -221,10 +221,10 @@ private:
 		}
 	}
 
-	void init(VkPipeline& pipeline, VkPipelineLayout& layout, uint32_t id, std::vector<BindSetCombo>& descriptors) {
-		//this->pipeline = pipeline;
-		this->pipelineLayout = layout;
-		pipelineId = id;
+	void init(uint32_t pipelineIndex, uint32_t pipelineLayoutIndex, std::vector<BindSetCombo>& descriptors) {
+
+		pipelineLayoutId = pipelineLayoutIndex;
+		pipelineId = pipelineIndex;
 		dependentDescriptorBindings.resize(descriptors.size());
 		std::memcpy(dependentDescriptorBindings.data(), descriptors.data(), descriptors.size() * sizeof(BindSetCombo));
 	}
@@ -245,7 +245,8 @@ public:
 	MultiSamplingMode msaaMode = MultiSamplingMode::MSAA_None;
 	uint32_t pipelineId = UINT32_INVALID;
 	//VkPipeline pipeline = nullptr;
-	VkPipelineLayout pipelineLayout = nullptr;
+	//VkPipelineLayout pipelineLayout = nullptr;
+	uint32_t pipelineLayoutId = UINT32_INVALID;;
 	uint32_t pushConstantOffset = 0;
 	uint32_t pushConstantSize = 0;
 	VkShaderStageFlags pushShaderFlags{};
@@ -270,7 +271,7 @@ public:
 		return
 			matIndex != SIZE_INVALID &&
 			pipelineId != UINT32_INVALID &&
-			/*pipeline &&*/ pipelineLayout;
+			pipelineLayoutId != UINT32_INVALID;;
 	}
 
 

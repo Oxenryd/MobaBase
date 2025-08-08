@@ -97,8 +97,11 @@ ErrorCode AssetLoader::loadModel(
 				parseMaterialTextures(filename, scene, aiMat, matData.textures);
 				auto& matInstance = newMat.createInstance(&matData);
 				subMesh.instanceIndex = matInstance.instanceIndex();
-				RenderManager::getInstance()->vkContext()->createPipelineFromMaterial(RenderManager::getInstance(), newMat);
-
+				auto pipelineResult = RenderManager::getInstance()->vkContext()->createPipelineFromMaterial(RenderManager::getInstance(), newMat);
+				if (pipelineResult != VK_SUCCESS) {
+					LOGLINE(LogType::Error, LogMod::Vulkan, "PipeLine creation failed.. ");
+					return ErrorCode::VULKAN_COULD_NOT_CREATE_PIPELINE;
+				}
 			} else {
 				subMesh.materialIndex = material->matIndex;
 				auto& instance = material->createCopyOfLastInstance();

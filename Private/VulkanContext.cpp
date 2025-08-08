@@ -83,7 +83,7 @@ void VulkanContext::draw(void* rendCtx) {
 	std::sort(drawCmds.begin(), drawCmds.end());
 
 	//VkPipeline lastPipeline = VK_NULL_HANDLE;
-	uint32_t lastPipelineIndex = UINT32_INVALID;
+	uint32_t lastPipelineIndex = UINT32_INVALID - 1;
 	Material* lastMaterial = nullptr;
 	uint32_t lastDescCount = 0;
 	uint32_t lastMatIndex = UINT32_INVALID;
@@ -151,7 +151,7 @@ void VulkanContext::draw(void* rendCtx) {
 			if (pendingRebind) {
 				vkCmdBindDescriptorSets(frame.cmdBuffer,
 										VK_PIPELINE_BIND_POINT_GRAPHICS,
-										matBase->pipelineLayout,
+										pipelineLayouts[matBase->pipelineLayoutId],
 										firstSet,
 										setCount,
 										lastSets,
@@ -166,7 +166,7 @@ void VulkanContext::draw(void* rendCtx) {
 		push.matrixIndex = UINT32_INVALID;
 		push.matInstanceIndex = cmd.instanceIndex;
 		push.modelToWorld = scene->registry().get<TransformComponent>(cmd.entityId).trs();
-		vkCmdPushConstants(frame.cmdBuffer, matBase->pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+		vkCmdPushConstants(frame.cmdBuffer, pipelineLayouts[matBase->pipelineLayoutId], VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
 						   0, sizeof(BaseMatPush), &push);
 
 		

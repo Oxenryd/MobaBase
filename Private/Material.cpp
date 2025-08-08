@@ -48,10 +48,13 @@ void Material::addShaderParams(
 		if (param.spvTypeDesc.op == SpvOpTypeRuntimeArray) {
 			if (param.count == 0) {
 				matParam.arrayType = MatParamArrayType::Dynamic;
-				if (matParam.type == TypeBase::Texture2DArray)
-					matParam.count = VULKAN_MAX_TEXTURE_SSBO;
-				else
-					matParam.count = VULKAN_MAX_RUNTIMEARRAY_INSTANCES;
+				if (matParam.type == TypeBase::Texture2DArray) {
+					if (param.set == MAT_TEXTURES_SET && param.binding == MAT_TEXTURES_BIND)
+						matParam.count = VULKAN_DESCPOOL_BASE_IMAGE;
+					else
+						matParam.count = VULKAN_DESCPOOL_DYNAMIC_IMAGE;
+				} else
+					matParam.count = VULKAN_DESCPOOL_DYNAMIC_STORAGE;
 			} else {
 				matParam.arrayType = MatParamArrayType::Static;
 				matParam.count = param.count;

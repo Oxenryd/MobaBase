@@ -142,12 +142,12 @@ struct BasePSIn
 
 float4 RetainGlobals()
 {
-    double dummy = cameraPosition.x * basePush.boneOffset;
+    float dummy = cameraPosition.x * basePush.boneOffset;
     if (dummy == -9999999.0)
     {
-        double4 dummy2 = dummy.xxxx + textures[0].SampleLevel(smp, float2(0, 0), 0.0);
-        double4 dummy3 = dummy2 + baseMatInstances[0].ambient.xyzx;
-        double4 dummy4 = mul(dummy3, modelMatrices[instanceData[0].matrixIndex].modelToWorld);
+        float4 dummy2 = dummy.xxxx + textures[0].SampleLevel(smp, float2(0, 0), 0.0);
+        float4 dummy3 = dummy2 + baseMatInstances[0].ambient.xyzx;
+        float4 dummy4 = mul(dummy3, modelMatrices[instanceData[0].matrixIndex].modelToWorld);
         return (float4) dummy4;
     }
         

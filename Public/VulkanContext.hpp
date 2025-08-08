@@ -88,6 +88,28 @@ constexpr VkFormat GetVkFormat(TypeBase type) {
 	}
 }
 
+struct DescriptorCaps
+{
+	uint32_t maxSetUBOs = 0;
+	uint32_t maxSetSSBOs = 0;
+	uint32_t maxSetSampledImages = 0;
+	uint32_t maxSetSamplers = 0;
+
+	//update-after-bind:
+	uint32_t maxUAB_SampledImages = 0;
+	uint32_t maxUAB_UniformBuffers = 0;
+	uint32_t maxUAB_StorageBuffers = 0;
+	uint32_t maxUAB_SamplerBuffers = 0;
+	bool     hasIndexing = false;
+};
+
+
+struct PoolSpec
+{
+	VkDescriptorPoolCreateFlags flags{};
+	std::vector<VkDescriptorPoolSize> sizes;
+	uint32_t maxSets{};
+};
 
 struct BoundDescriptorKey
 {
@@ -473,10 +495,71 @@ private:
 	}
 #endif
 
+	/*VkDescriptorPool* _checkDefaultBinding(size_t set, const BoundDescriptorKey& key, size_t& outIndex) {
+		if (set >= VULKAN_GLOBAL_DESCRIPTOR_SETS)
+			return nullptr;
+
+		switch (set) {
+
+			case 0:
+			{
+				for (auto& resource : key.bindings) {
+					switch (resource.binding) {
+						default: return nullptr;
+
+						case MAT_BASE_MAT_INSTANCES_INDICES_BIND:
+							outIndex = DESCPOOL_INSTANCE_INDEX;
+							return &descriptorPoolsDefault[DESCPOOL_INSTANCE_INDEX];
+
+						case MAT_MODELMATRICES_BIND:
+						case MAT_CAMERADATA_BIND:
+							outIndex = DESCPOOL_BASE_INDEX;
+							return &descriptorPoolsDefault[DESCPOOL_BASE_INDEX];
+
+					} break;
+				}
+			} break;
+
+			case 1:
+			{
+				for (auto& resource : key.bindings) {
+					switch (resource.binding) {
+						default: return nullptr;
+
+						case MAT_SAMPLER_BIND:
+							outIndex = DESCPOOL_BASE_INDEX;
+							return &descriptorPoolsDefault[DESCPOOL_BASE_INDEX];
+
+						case MAT_BASE_MAT_INSTANCES_BIND:
+							outIndex = DESCPOOL_INSTANCE_INDEX;
+							return &descriptorPoolsDefault[DESCPOOL_INSTANCE_INDEX];
+
+						case MAT_TEXTURES_BIND:
+							outIndex = DESCPOOL_TEXTURES_INDEX;
+							return &descriptorPoolsDefault[DESCPOOL_TEXTURES_INDEX];
+					} break;
+				}
+			} break;
+		}
+	}*/
+
+	VkDescriptorPool _makePool(VkDevice device, const PoolSpec& spec) {
+		VkDescriptorPoolCreateInfo ci{ VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO };
+		ci.flags = spec.flags;
+		ci.maxSets = spec.maxSets;
+		ci.poolSizeCount = (uint32_t)spec.sizes.size();
+		ci.pPoolSizes = spec.sizes.data();
+
+		VkDescriptorPool pool{};
+		VkResult r = vkCreateDescriptorPool(device, &ci, nullptr, &pool);
+		if (r != VK_SUCCESS) throw std::runtime_error("vkCreateDescriptorPool failed");
+		return pool;
+	}
 
 
 	VkResult _initDescLayoutAndSets(RenderManager* const renderMan, Material& material, VkResult& vkResult,
-									std::vector<VkDescriptorSetLayout>& layouts, std::vector<BindSetCombo>& descriptorSetsList) {
+									std::vector<VkDescriptorSetLayout>& layouts, std::vector<BindSetCombo>& descriptorSetsList,
+									bool doAllocs) {
 		//std::vector<VkDescriptorSetLayout> layouts;
 		//std::vector<std::pair<uint8_t, VkDescriptorSet>> descriptorSetsList;
 		for (auto& [set, key] : material.descriptorSetLayoutKeys) {
@@ -503,7 +586,8 @@ private:
 				layoutInfo.pBindings = setBindings[set].data();
 				layoutInfo.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
 
-				Vk_CHECK(vkResult, vkCreateDescriptorSetLayout(m_vkDevice, &layoutInfo, nullptr, &layout));
+				if (doAllocs)
+					Vk_CHECK(vkResult, vkCreateDescriptorSetLayout(m_vkDevice, &layoutInfo, nullptr, &layout));
 				descSetLayoutCache.insert({ key, layout });
 			} else
 				layout = layoutIt->second;
@@ -629,14 +713,62 @@ private:
 				}
 
 				for (size_t j = 0; j < VULKAN_FRAMES_IN_FLIGHT; ++j) {
+
+					//// find correct pool
+					//size_t outIndexResult = SIZE_INVALID;
+					////size_t arrayIndex = SIZE_INVALID;
+					//VkDescriptorPool* descPool = _checkDefaultBinding(set, descSetKey, outIndexResult);
+					//if (!descPool) {
+					//	//arrayIndex = descriptorPoolsDynamic.size();
+					//	//descriptorPoolsDynamic.emplace_back(_makePool(m_vkDevice, PoolSpec{
+					//	//	/*flags*/ 0,
+					//	//	/*sizes*/{
+					//	//	  { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VULKAN_DESCPOOL_BASE_UNIFORMS },
+					//	//	  { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VULKAN_DESCPOOL_BASE_STORAGE },
+					//	//	  { VK_DESCRIPTOR_TYPE_SAMPLER,        VULKAN_DESCPOOL_BASE_SAMPLER  },
+					//	//	  { VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,  VULKAN_DESCPOOL_BASE_IMAGE }
+					//	//	},
+					//	//	/*maxSets*/ 512 }));
+					//	//descPool = &descriptorPoolsDynamic.back();
+					//	descPool = &descriptorPoolsDynamic.back();
+					//}
+
+					VkDescriptorPool descPool{};
+					if (set >= VULKAN_GLOBAL_DESCRIPTOR_SETS)
+						descPool = descriptorPoolsDynamic.back();
+					else
+						descPool = set == 0 ? descriptorPoolsDefault[0] : descriptorPoolsDefault[1];
+						
+
 					// allocate and update descriptor set
-					VkDescriptorSetAllocateInfo allocInfo{};
-					allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-					allocInfo.descriptorPool = currentDescPool;
-					allocInfo.descriptorSetCount = 1;
-					allocInfo.pSetLayouts = &layout;
-					allocInfo.pNext = allocPtr;
-					Vk_CHECK(vkResult, vkAllocateDescriptorSets(m_vkDevice, &allocInfo, &descriptorSet[j]));
+					if (doAllocs) {
+						VkDescriptorSetAllocateInfo allocInfo{};
+						allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+						allocInfo.descriptorPool = descPool;
+						allocInfo.descriptorSetCount = 1;
+						allocInfo.pSetLayouts = &layout;
+						allocInfo.pNext = allocPtr;
+
+						auto allocResult = vkAllocateDescriptorSets(m_vkDevice, &allocInfo, &descriptorSet[j]);
+						if (allocResult == VK_ERROR_OUT_OF_POOL_MEMORY || allocResult == VK_ERROR_FRAGMENTED_POOL) {
+							if (set >= VULKAN_GLOBAL_DESCRIPTOR_SETS)
+								throw std::exception("BASE DESCRIPTOR POOLS TOO SMALL!");
+
+							descriptorPoolsDynamic.emplace_back(_makePool(m_vkDevice,
+																		  PoolSpec{
+																			  /*flags*/ VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT,
+																			  /*sizes*/{
+																				{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VULKAN_DESCPOOL_DYNAMIC_UNIFORMS },
+																				{ VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VULKAN_DESCPOOL_DYNAMIC_STORAGE },
+																				{ VK_DESCRIPTOR_TYPE_SAMPLER,        VULKAN_DESCPOOL_DYNAMIC_SAMPLER  },
+																				{ VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,  VULKAN_DESCPOOL_DYNAMIC_IMAGE }
+																			  },
+																		  /*maxSets*/ 256 }
+							));
+							allocInfo.descriptorPool = descriptorPoolsDynamic.back();
+							Vk_CHECK(vkResult, vkAllocateDescriptorSets(m_vkDevice, &allocInfo, &descriptorSet[j]));
+						}
+					}
 				}
 
 				for (auto& pw : pendingWrites) {
@@ -644,9 +776,6 @@ private:
 					//__debugbreak();
 					vkUpdateDescriptorSets(m_vkDevice, 1, &pw.write, 0, nullptr);
 				}
-
-
-
 
 				descriptorSetCache.insert({ descSetKey, descriptorSet });
 			} else
@@ -658,7 +787,7 @@ private:
 			// for later mapping
 			for (auto& binding : key.bindings) {
 				BindSetCombo combo{ static_cast<uint8_t>(binding), static_cast<uint8_t>(set), layoutHandle };
-				bindingToDescriptorSet.insert({ combo, descriptorSet });
+				auto insertResult = bindingToDescriptorSet.insert({ combo, descriptorSet });
 				descriptorSetsList.push_back(combo);
 			}
 
@@ -720,6 +849,7 @@ public:
 	VkDevice m_vkDevice = nullptr;
 	VkQueue m_graphicsQueue = nullptr;
 	uint32_t m_graphicsQueueFamilyIndex = static_cast<uint32_t>(-1);
+	DescriptorCaps m_currentCaps{};
 
 	std::unordered_map<SamplerState, VkSampler, SamplerStateHash> baseSamplers;
 
@@ -731,6 +861,7 @@ public:
 
 	std::unordered_map<PipelineKey, uint32_t, PipelineKeyHasher> pipelineHashIndexMap;
 	std::vector<VkPipeline> pipelines;
+	std::vector<VkPipelineLayout> pipelineLayouts;
 
 	BlendMode currentBlendMode = BlendMode::Opaque;
 
@@ -754,7 +885,20 @@ public:
 	VkDebugUtilsMessengerEXT debugMessenger = VK_NULL_HANDLE;
 
 	std::vector<VkDescriptorPool> descPools;
-	VkDescriptorPool currentDescPool = nullptr;
+
+
+	///// DESCRIPTOR POOLS //////////////////////////////////////////////////
+	//constexpr static const size_t DESCPOOL_BASE_INDEX = 0;
+	//constexpr static const size_t DESCPOOL_INSTANCE_INDEX = 1;
+	//constexpr static const size_t DESCPOOL_TEXTURES_INDEX = 2;
+	std::array<VkDescriptorPool, 2> descriptorPoolsDefault;
+	std::vector<VkDescriptorPool> descriptorPoolsDynamic;
+
+
+	//VkDescriptorPool currentDescPool = nullptr;
+
+
+
 
 	VkCommandPool commandPool = nullptr;
 	
@@ -1148,27 +1292,127 @@ public:
 		return VK_SUCCESS;
 	}
 
+	DescriptorCaps queryDescriptorCaps(VkPhysicalDevice phys) {
+		DescriptorCaps caps{};
+
+		VkPhysicalDeviceProperties props{};
+		vkGetPhysicalDeviceProperties(phys, &props);
+		caps.maxSetUBOs = props.limits.maxDescriptorSetUniformBuffers;
+		caps.maxSetSSBOs = props.limits.maxDescriptorSetStorageBuffers;
+		caps.maxSetSampledImages = props.limits.maxDescriptorSetSampledImages;
+		caps.maxSetSamplers = props.limits.maxDescriptorSetSamplers;
+
+		// If you use descriptor indexing / UPDATE_AFTER_BIND, query props2:
+		VkPhysicalDeviceDescriptorIndexingProperties indexingProps{
+			VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_PROPERTIES
+		};
+		VkPhysicalDeviceProperties2 props2{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2 };
+		props2.pNext = &indexingProps;
+		vkGetPhysicalDeviceProperties2(phys, &props2);
+
+		// If the extension/feature is present these will be non-zero and usable.
+		caps.maxUAB_SampledImages = indexingProps.maxDescriptorSetUpdateAfterBindSampledImages;
+		caps.maxUAB_UniformBuffers = indexingProps.maxDescriptorSetUpdateAfterBindUniformBuffers;
+		caps.maxUAB_StorageBuffers = indexingProps.maxDescriptorSetUpdateAfterBindStorageBuffers;
+		caps.maxUAB_SamplerBuffers = indexingProps.maxDescriptorSetUpdateAfterBindSamplers;
+
+		// You should also check features to know if UPDATE_AFTER_BIND is actually supported:
+		VkPhysicalDeviceDescriptorIndexingFeatures indexingFeatures{
+			VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES
+		};
+		VkPhysicalDeviceFeatures2 features2{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2 };
+		features2.pNext = &indexingFeatures;
+		vkGetPhysicalDeviceFeatures2(phys, &features2);
+
+		caps.hasIndexing = indexingFeatures.descriptorBindingPartiallyBound ||
+			indexingFeatures.runtimeDescriptorArray ||
+			indexingFeatures.descriptorBindingUniformBufferUpdateAfterBind ||
+			indexingFeatures.descriptorBindingSampledImageUpdateAfterBind ||
+			indexingFeatures.descriptorBindingStorageBufferUpdateAfterBind;
+
+		return caps;
+	}
 
 	inline VkResult createDescriptorPool() {
 		VkResult vkResult;
-		LOGLINE(LogType::Info, LogMod::Vulkan, "Creating Descriptor pool... ");
+		LOGLINE(LogType::Info, LogMod::Vulkan, "Creating Descriptor pools... ");
 
-		std::vector<VkDescriptorPoolSize> poolSizes = {
-			{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,     100 },
-			{ VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,     200 },
-			{ VK_DESCRIPTOR_TYPE_SAMPLER,            128 },
-			{ VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,      VULKAN_MAX_TEXTURE_SSBO }
+		m_currentCaps = queryDescriptorCaps(m_phyDevice);
+
+		//std::vector<VkDescriptorPoolSize> poolSizes = {
+		//	{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,     100 },
+		//	{ VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,     200 },
+		//	{ VK_DESCRIPTOR_TYPE_SAMPLER,            128 },
+		//	{ VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,      VULKAN_MAX_TEXTURE_SSBO }
+		//};
+
+		//VkDescriptorPoolCreateInfo poolInfo{};
+		//poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+		//poolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT;
+		//poolInfo.maxSets = 256;
+		//poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
+		//poolInfo.pPoolSizes = poolSizes.data();
+
+		//Vk_CHECK(vkResult, vkCreateDescriptorPool(m_vkDevice, &poolInfo, nullptr, &currentDescPool));
+		//descPools.push_back(currentDescPool);
+
+		std::vector<VkDescriptorPoolSize> baseSizes = {
+			{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,     VULKAN_DESCPOOL_BASE_UNIFORMS},
+			{ VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,     VULKAN_DESCPOOL_BASE_STORAGE },
+			{ VK_DESCRIPTOR_TYPE_SAMPLER,            VULKAN_DESCPOOL_BASE_SAMPLER },
+			{ VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,      VULKAN_DESCPOOL_BASE_IMAGE }
+		};
+		//std::vector<VkDescriptorPoolSize> instancesSizes = {
+		//	{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,     VULKAN_DESCPOOL_INSTANCE_UNIFORMS },
+		//	{ VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,     VULKAN_DESCPOOL_INSTANCE_STORAGE }
+		//};
+		//std::vector<VkDescriptorPoolSize> texturesSizes = {
+		//	{ VK_DESCRIPTOR_TYPE_SAMPLER,            VULKAN_DESCPOOL_TEXTURES_SAMPLER },
+		//	{ VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,      VULKAN_DESCPOOL_TEXTURES_IMAGE }
+		//};
+		std::vector<VkDescriptorPoolSize> dynamicSizes = {
+			{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,     VULKAN_DESCPOOL_DYNAMIC_UNIFORMS},
+			{ VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,     VULKAN_DESCPOOL_DYNAMIC_STORAGE },
+			{ VK_DESCRIPTOR_TYPE_SAMPLER,            VULKAN_DESCPOOL_DYNAMIC_SAMPLER },
+			{ VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,      VULKAN_DESCPOOL_DYNAMIC_IMAGE }
 		};
 
 		VkDescriptorPoolCreateInfo poolInfo{};
 		poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
 		poolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT;
-		poolInfo.maxSets = 256;
-		poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
-		poolInfo.pPoolSizes = poolSizes.data();
+		poolInfo.maxSets = 1024;
 
-		Vk_CHECK(vkResult, vkCreateDescriptorPool(m_vkDevice, &poolInfo, nullptr, &currentDescPool));
-		descPools.push_back(currentDescPool);
+
+
+		poolInfo.poolSizeCount = static_cast<uint32_t>(baseSizes.size());
+		poolInfo.pPoolSizes = baseSizes.data();
+		VkDescriptorPool basePool1;
+		Vk_CHECK(vkResult, vkCreateDescriptorPool(m_vkDevice, &poolInfo, nullptr, &basePool1));
+		descriptorPoolsDefault[0] = basePool1;
+
+		descriptorPoolsDefault[1] = descriptorPoolsDefault[0]; // hacky for now
+
+		//VkDescriptorPool basePool2;
+		//Vk_CHECK(vkResult, vkCreateDescriptorPool(m_vkDevice, &poolInfo, nullptr, &basePool2));
+		//descriptorPoolsDefault[1] = basePool2;
+
+		//poolInfo.poolSizeCount = static_cast<uint32_t>(instancesSizes.size());
+		//poolInfo.pPoolSizes = instancesSizes.data();
+		//VkDescriptorPool instancePool;
+		//Vk_CHECK(vkResult, vkCreateDescriptorPool(m_vkDevice, &poolInfo, nullptr, &instancePool));
+		//descriptorPoolsDefault[DESCPOOL_INSTANCE_INDEX] = instancePool;
+
+		//poolInfo.poolSizeCount = static_cast<uint32_t>(texturesSizes.size());
+		//poolInfo.pPoolSizes = texturesSizes.data();
+		//VkDescriptorPool texturePool;
+		//Vk_CHECK(vkResult, vkCreateDescriptorPool(m_vkDevice, &poolInfo, nullptr, &texturePool));
+		//descriptorPoolsDefault[DESCPOOL_TEXTURES_INDEX] = texturePool;
+
+		poolInfo.poolSizeCount = static_cast<uint32_t>(dynamicSizes.size());
+		poolInfo.pPoolSizes = dynamicSizes.data();
+		VkDescriptorPool dynamicPool;
+		Vk_CHECK(vkResult, vkCreateDescriptorPool(m_vkDevice, &poolInfo, nullptr, &dynamicPool));
+		descriptorPoolsDynamic.push_back(dynamicPool);
 
 		LOG(LogType::Success, "Done.");
 		return VK_SUCCESS;
@@ -1241,6 +1485,7 @@ public:
 		std::vector<VkPhysicalDevice> physicalDevices(deviceCount);
 		Vk_CHECK(vkResult, vkEnumeratePhysicalDevices(m_vkInstance, &deviceCount, physicalDevices.data()));
 
+		std::string deviceName{};
 		m_phyDevice = VK_NULL_HANDLE;
 		VkPhysicalDeviceProperties deviceProperties;
 		std::vector<uint16_t> scores;
@@ -1275,6 +1520,7 @@ public:
 						bestScore = scores[d];
 						m_phyDevice = device;
 						m_graphicsQueueFamilyIndex = i;
+						deviceName = deviceProperties.deviceName;
 						//deviceFeatures = deviceFeatures;
 					}
 				}
@@ -1284,7 +1530,7 @@ public:
 		if (m_phyDevice == VK_NULL_HANDLE)
 			return VK_ERROR_INITIALIZATION_FAILED;
 
-		LOG(LogType::Remark, "Using " + std::string{ deviceProperties.deviceName });
+		LOG(LogType::Remark, "Using " + deviceName);
 		return VK_SUCCESS;
 	}
 
@@ -1556,40 +1802,29 @@ public:
 	}
 
 
-	VkResult createPipelineFromMaterial(RenderManager* const renderMan, Material& material)
-	{
-		LOGLINE(LogType::Info, LogMod::Vulkan, std::string{ "Creating Pipeline for " + material.name() + "... "});
+	VkResult createPipelineFromMaterial(RenderManager* const renderMan, Material& material) {
+		LOGLINE(LogType::Info, LogMod::Vulkan, std::string{ "Creating Pipeline for " + material.name() + "... " });
 		VkResult vkResult{};
 
-		// Dynamic State
-		VkViewport viewport{};
-		viewport.x = 0.0f;
-		viewport.y = 0.0f;
-		viewport.width = (float)swapchainExtent.width;
-		viewport.height = (float)swapchainExtent.height;
-		viewport.minDepth = 0.0f;
-		viewport.maxDepth = 1.0f;
+		bool pipelineMatch = false;
 
-		VkRect2D scissor{};
-		scissor.offset = { 0, 0 };
-		scissor.extent = swapchainExtent;
-		std::vector<VkDynamicState> dynamicStates = {
-			VK_DYNAMIC_STATE_VIEWPORT,
-			VK_DYNAMIC_STATE_SCISSOR
-		};
+		// Make Material ready
+		auto key = PipelineKey::create(material);
+		auto keyIt = pipelineHashIndexMap.find(key);
+		if (keyIt != pipelineHashIndexMap.end()) {
+			pipelineMatch = true;
+			LOG(LogType::Success, std::format(" Reusing Pipeline Index: {}.. ", keyIt->second));
+		}
 
-		VkPipelineViewportStateCreateInfo viewportState{};
-		viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-		viewportState.viewportCount = 1;
-		viewportState.pViewports = &viewport;
-		viewportState.scissorCount = 1;
-		viewportState.pScissors = &scissor;
+		// Layout & Descriptor sets
+		std::vector<BindSetCombo> descriptorSetsList;
+		std::vector<VkDescriptorSetLayout> layouts;
+		Vk_CHECK(vkResult, _initDescLayoutAndSets(renderMan, material, vkResult, layouts, descriptorSetsList, !pipelineMatch));
 
-		VkPipelineDynamicStateCreateInfo dynamicState{};
-		dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-		dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
-		dynamicState.pDynamicStates = dynamicStates.data();
-
+		if (pipelineMatch) {
+			material.init(keyIt->second, keyIt->second, descriptorSetsList);
+			return VK_SUCCESS;
+		}
 
 		// Shader Stages
 		auto vs = renderMan->getShader(material.vShaderName);
@@ -1614,7 +1849,8 @@ public:
 		fragShaderStageInfo.module = fragModule;
 		fragShaderStageInfo.pName = ps->entryPoint.c_str();
 
-		VkPipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, fragShaderStageInfo };
+		VkPipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo ,fragShaderStageInfo };
+
 
 
 		// VS input description
@@ -1689,12 +1925,6 @@ public:
 		colorBlending.attachmentCount = colorBlends.size();
 		colorBlending.pAttachments = colorBlends.data();
 
-
-
-		// Layout & Descriptor sets
-		std::vector<BindSetCombo> descriptorSetsList;
-		std::vector<VkDescriptorSetLayout> layouts;
-		Vk_CHECK(vkResult, _initDescLayoutAndSets(renderMan, material, vkResult, layouts, descriptorSetsList));
 		
 		// Push Constants
 		std::vector<VkPushConstantRange> pushConstantRanges;
@@ -1721,6 +1951,36 @@ public:
 
 
 		// Create the pipeline
+		// Dynamic State
+		VkViewport viewport{};
+		viewport.x = 0.0f;
+		viewport.y = 0.0f;
+		viewport.width = (float)swapchainExtent.width;
+		viewport.height = (float)swapchainExtent.height;
+		viewport.minDepth = 0.0f;
+		viewport.maxDepth = 1.0f;
+
+		VkRect2D scissor{};
+		scissor.offset = { 0, 0 };
+		scissor.extent = swapchainExtent;
+		std::vector<VkDynamicState> dynamicStates = {
+			VK_DYNAMIC_STATE_VIEWPORT,
+			VK_DYNAMIC_STATE_SCISSOR
+		};
+
+		VkPipelineViewportStateCreateInfo viewportState{};
+		viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+		viewportState.viewportCount = 1;
+		viewportState.pViewports = &viewport;
+		viewportState.scissorCount = 1;
+		viewportState.pScissors = &scissor;
+
+		VkPipelineDynamicStateCreateInfo dynamicState{};
+		dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+		dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
+		dynamicState.pDynamicStates = dynamicStates.data();
+
+
 		VkGraphicsPipelineCreateInfo pipelineInfo{};
 		pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
 
@@ -1748,17 +2008,15 @@ public:
 
 		// Make Material ready
 		auto pipelineIndex = pipelines.size();
-		auto key = PipelineKey::create(material);
-		auto keyIt = pipelineHashIndexMap.find(key);
-		if (keyIt != pipelineHashIndexMap.end()) {
-			material.init(graphicsPipeline, pipelineLayout, keyIt->second, descriptorSetsList);
-			LOG(LogType::Success, std::format(" Reusing Pipeline Index: {}.. ", keyIt->second));
-		} else {
-			material.init(graphicsPipeline, pipelineLayout, pipelineIndex, descriptorSetsList);
-			pipelines.push_back(graphicsPipeline);
-			pipelineHashIndexMap.insert({ key, pipelineIndex });
-			LOG(LogType::Success, "Done.");
-		}
+		auto pipelineLayoutIndex = pipelineLayouts.size();
+		auto remakeKey = PipelineKey::create(material);
+
+		material.init(pipelineIndex, pipelineLayoutIndex, descriptorSetsList);
+		pipelines.push_back(graphicsPipeline);
+		pipelineLayouts.push_back(pipelineLayout);
+		pipelineHashIndexMap.insert({ remakeKey, pipelineIndex });
+		LOG(LogType::Success, "Done.");
+		
 
 		
 		return VK_SUCCESS;
@@ -2088,14 +2346,14 @@ public:
 		std::vector<VkDescriptorSet>& descriptorSetsBySetIndex, // Assumed to be pre-filled
 		const void* pushConstData = nullptr,
 		uint32_t pushConstSize = 0) {
-		assert(material && material->pipelineLayout);
+		assert(material && pipelineLayouts[material->pipelineLayoutId]);
 
 		// Bind descriptor sets (grouped by set index)
 		if (!descriptorSetsBySetIndex.empty()) {
 			vkCmdBindDescriptorSets(
 				cmd,
 				VK_PIPELINE_BIND_POINT_GRAPHICS,
-				material->pipelineLayout,
+				pipelineLayouts[material->pipelineLayoutId],
 				0, // First set
 				static_cast<uint32_t>(descriptorSetsBySetIndex.size()),
 				descriptorSetsBySetIndex.data(),
@@ -2109,7 +2367,7 @@ public:
 				if (pushConstData && pushConstSize > 0) {
 					vkCmdPushConstants(
 						cmd,
-						material->pipelineLayout,
+						pipelineLayouts[material->pipelineLayoutId],
 						MatParamStageToVkShaderStageFlagBits(param.stage),
 						param.offset,
 						static_cast<uint32_t>(param.size),
