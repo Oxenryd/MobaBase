@@ -69,20 +69,6 @@ struct BaseMaterialInstance
 
 };
 
-// Globals
-[[vk::binding(0, 0)]]
-cbuffer cameraData : register(b0, space0)
-{
-    float4x4 worldToView;
-    float4x4 projection;
-    float4 cameraPosition;
-    float vFov;
-    float nearPlane;
-    float farPlane;
-    float aspectRatio;
-};
-
-
 struct BaseMatPush
 {
     float4x4    modelToWorld;
@@ -91,9 +77,6 @@ struct BaseMatPush
     uint        boneOffset;
     uint        boneCount;
 };
-
-[[vk::push_constant]]
-BaseMatPush basePush;
 
 struct ModelTransform
 {
@@ -108,70 +91,122 @@ struct InstanceData
     uint boneCount;
 };
 
-[[vk::binding(2, 0)]] StructuredBuffer<ModelTransform> modelMatrices : register(t0, space0);
-[[vk::binding(3, 0)]] StructuredBuffer<InstanceData> instanceData : register(t1, space0);
+struct LightType
+{
+    static const uint Directional = 0;
+    static const uint Point = 1;
+    static const uint Spot = 2;
+};
 
+struct GPULight
+{
+    float4 positionVS;
+    float4 directionVS;
+    float4 color;
+    
+    uint type;
+    uint flags;
+    float spotOuterCos;
+    float _pad0;
+    
+    uint shadowIndex;
+    uint shadowType;
+    uint shadowLayerCount;
+    uint _pad1;
+};
 
-[[vk::binding(1, 1)]] SamplerState smp : register(s0, space1);
-[[vk::binding(2, 1)]] StructuredBuffer<BaseMaterialInstance> baseMatInstances: register(t0, space1);
-[[vk::binding(3, 1)]] Texture2D textures[] : register(t1, space1);
-
+struct Index32
+{
+    uint i;
+};
 
 struct BaseVSIn
 {
-    [[vk::location(0)]] float3 pos          : POSITION;
-    [[vk::location(1)]] float3 normal       : NORMAL;
-    [[vk::location(2)]] float3 tangent      : TANGENT;
-    [[vk::location(3)]] float3 binormal     : BINORMAL;
-    [[vk::location(4)]] float2 texCoord     : TEX;
-    [[vk::location(5)]] uint instanceID     : SV_InstanceID;
+    [[vk::location(0)]] float3 pos : POSITION;
+    [[vk::location(1)]] float3 normal : NORMAL;
+    [[vk::location(2)]] float3 tangent : TANGENT;
+    [[vk::location(3)]] float3 binormal : BINORMAL;
+    [[vk::location(4)]] float2 texCoord : TEX;
+    [[vk::location(5)]] uint instanceID : SV_InstanceID;
 };
 
 struct BasePSIn
 {
-    [[vk::location(0)]] float4 pos          : SV_Position;
-    [[vk::location(1)]] float3 localPos     : TEXCOORD2;
-    [[vk::location(2)]] float3 worldPos     : TEXCOORD0;
-    [[vk::location(3)]] float3 normal       : NORMAL;
-    [[vk::location(4)]] float3 tangent      : TANGENT;
-    [[vk::location(5)]] float3 binormal     : BINORMAL;
-    [[vk::location(6)]] float3 localNormal  : TEXCOORD1;
-    [[vk::location(7)]] float2 texCoord     : TEX;
+    [[vk::location(0)]] float4 pos : SV_Position;
+    [[vk::location(1)]] float3 localPos : TEXCOORD2;
+    [[vk::location(2)]] float3 worldPos : TEXCOORD0;
+    [[vk::location(3)]] float3 normal : NORMAL;
+    [[vk::location(4)]] float3 tangent : TANGENT;
+    [[vk::location(5)]] float3 binormal : BINORMAL;
+    [[vk::location(6)]] float3 localNormal : TEXCOORD1;
+    [[vk::location(7)]] float2 texCoord : TEX;
 };
 
 
-float4 RetainGlobals()
-{
-    float dummy = cameraPosition.x * basePush.boneOffset;
-    if (dummy == -9999999.0)
-    {
-        float4 dummy2 = dummy.xxxx + textures[0].SampleLevel(smp, float2(0, 0), 0.0);
-        float4 dummy3 = dummy2 + baseMatInstances[0].ambient.xyzx;
-        float4 dummy4 = mul(dummy3, modelMatrices[instanceData[0].matrixIndex].modelToWorld);
-        return (float4) dummy4;
-    }
-        
-    return float4(0,0,0,0);
-}
-
-
-// Srites
 struct SpritebatchVSInput
 {
-    [[vk::location(0)]] uint vertexId   : SV_VertexID;
+    [[vk::location(0)]] uint vertexId : SV_VertexID;
     [[vk::location(1)]] uint instanceId : SV_InstanceID;
 };
 
 struct SpritebatchVSOutput
 {
     [[vk::location(0)]] float4 position : SV_Position;
-    [[vk::location(1)]] float2 uv       : TEXCOORD0;
+    [[vk::location(1)]] float2 uv : TEXCOORD0;
     [[vk::location(2)]] uint instanceId : TEXCOORD1;
 };
 
-[[vk::binding(0, 2)]] StructuredBuffer<SpriteInstance> spriteInstances : register(t0, space2);
-[[vk::binding(1, 2)]] SamplerState spriteSmp : register(s0, space2);
-[[vk::binding(2, 2)]] Texture2D spriteAtlas[] : register(t1, space2);
+// BINDINGS
 
+[[vk::push_constant]]
+BaseMatPush basePush;
+
+
+[[vk::binding(0, 0)]]
+cbuffer cameraData : register(b0, space0)
+{
+    float4x4 worldToView;
+    float4x4 projection;
+    float4 cameraPosition;
+    float vFov;
+    float nearPlane;
+    float farPlane;
+    float aspectRatio;
+};
+
+[[vk::binding(2, 0)]] StructuredBuffer<ModelTransform> modelMatrices : register(t0, space0);
+[[vk::binding(3, 0)]] StructuredBuffer<InstanceData> instanceData : register(t1, space0);
+
+[[vk::binding(1, 1)]] SamplerState smp : register(s0, space1);
+[[vk::binding(2, 1)]] StructuredBuffer<BaseMaterialInstance> baseMatInstances: register(t0, space1);
+[[vk::binding(3, 1)]] Texture2D textures[] : register(t1, space1);
+
+[[vk::binding(0, 2)]] StructuredBuffer<GPULight> Lights : register(t1, space2);
+[[vk::binding(1, 2)]] StructuredBuffer<Index32> clusterLightCount : register(t1, space2);
+[[vk::binding(2, 2)]] StructuredBuffer<Index32> clusterLightIndices : register(t2, space2);
+
+[[vk::binding(0, 3)]] StructuredBuffer<SpriteInstance> spriteInstances : register(t0, space2);
+[[vk::binding(1, 3)]] SamplerState spriteSmp : register(s0, space2);
+[[vk::binding(2, 3)]] Texture2D spriteAtlas[] : register(t1, space2);
+
+
+
+
+
+// METHODS
+
+float4 RetainGlobals()
+{
+    float dummy = cameraPosition.x * basePush.boneOffset;
+    if (dummy == -9999999.0)
+    {
+        float4 dummy2 = dummy.xxxx + textures[0].SampleLevel(smp, float2(0, 0), 0.0) * Lights[clusterLightCount[0].i].color;
+        float4 dummy3 = dummy2 + baseMatInstances[0].ambient.xyzx * clusterLightIndices[0].i;
+        float4 dummy4 = mul(dummy3, modelMatrices[instanceData[0].matrixIndex].modelToWorld);
+        return (float4) dummy4;
+    }
+        
+    return float4(0, 0, 0, 0);
+}
 
 #endif // BASE_TYPES_INCLUDED

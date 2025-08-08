@@ -7,7 +7,46 @@
 
 #include "GlobalMacros.h"
 
-//using BindSetPair = std::pair<uint8_t, uint8_t>;
+
+enum class LightType : uint32_t
+{
+	Directional = 0,
+	Point = 1,
+	Spot = 2
+};
+
+enum LightFlags : uint32_t
+{
+	CastShadow = 1u << 0,
+	// room for more: Static, Volumetric, ContactShadows...
+};
+
+struct GPULight
+{
+	glm::vec4 positionVS;   // xyz: view-space position, w: radius (point)
+
+	glm::vec4 directionVS;  // xyz: view-space dir (unit), w: spotInnerCos (optional)
+
+	glm::vec4 color;        // rgb linear, a intensity
+
+	uint32_t  type;         // LightType
+	uint32_t  flags;        // LightFlags
+	float     spotOuterCos;
+	float	  _pad0;
+
+	// Shadow binding:
+	// For Directional: baseIndex into cascade matrices & atlas tiles
+	// For Spot: index of 2D/array layer
+	// For Point: baseIndex of cube faces (6 faces contiguous)
+	uint32_t  shadowIndex;  // 0xFFFFFFFF if none
+	uint32_t  shadowType;   // 0=none, 1=DirCSM, 2=Spot2D, 3=PointCube
+	uint32_t  shadowLayerCount; // 4 for CSM, 1 for spot, 6 for point
+	uint32_t  _pad1;
+};
+
+struct ShadowMatrix { glm::mat4 viewProj; };
+
+
 
 struct BindSetCombo
 {
@@ -71,6 +110,41 @@ struct ModelTransform
 	glm::mat4x4& operator*=(glm::mat4x4& rhs) { return modelToWorld = modelToWorld * rhs; }
 };
 
+struct Index32
+{
+private:
+	uint32_t m_value;
+public:
+
+	Index32(const Index32& value) :
+		m_value { value.m_value } {}
+
+	Index32& operator=(const Index32& other) {
+		m_value = other.m_value;
+		return *this; }
+	Index32(const uint32_t& value) :
+		m_value{ value} {}
+
+	Index32& operator=(const uint32_t& other) {
+		m_value = other;
+		return *this; }
+
+	operator uint32_t&() { return m_value; }
+
+	uint32_t operator* (const uint32_t& rhs) const { return m_value * rhs; }
+	uint32_t operator/ (const uint32_t& rhs) const { return m_value / rhs; }
+	uint32_t operator+ (const uint32_t& rhs) const { return m_value + rhs; }
+	uint32_t operator- (const uint32_t& rhs) const { return m_value - rhs; }
+
+	uint32_t& operator*= (const uint32_t& rhs) { return m_value = m_value * rhs; }
+	uint32_t& operator+= (const uint32_t& rhs) { return m_value = m_value + rhs; }
+	uint32_t& operator-= (const uint32_t& rhs) { return m_value = m_value - rhs; }
+	uint32_t& operator/= (const uint32_t& rhs) { return m_value = m_value / rhs; }
+
+	uint32_t* data() { return &m_value; }
+};
+
+
 struct InstanceData
 {
 	uint32_t matrixIndex{ UINT32_INVALID };
@@ -79,6 +153,10 @@ struct InstanceData
 	uint32_t boneCount{ 0 };
 
 	operator uint32_t() {
+		Index32 test = 32;
+
+		uint32_t test2 = test;
+
 		return matInstanceIndex;
 	}
 	bool isValid() {

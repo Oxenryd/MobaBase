@@ -560,8 +560,7 @@ private:
 	VkResult _initDescLayoutAndSets(RenderManager* const renderMan, Material& material, VkResult& vkResult,
 									std::vector<VkDescriptorSetLayout>& layouts, std::vector<BindSetCombo>& descriptorSetsList,
 									bool doAllocs) {
-		//std::vector<VkDescriptorSetLayout> layouts;
-		//std::vector<std::pair<uint8_t, VkDescriptorSet>> descriptorSetsList;
+
 		for (auto& [set, key] : material.descriptorSetLayoutKeys) {
 
 			VkDescriptorSetLayout layout;
@@ -623,7 +622,6 @@ private:
 						pw.write.dstArrayElement = 0;
 						pw.write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 						pw.write.descriptorCount = 1;
-						//pw.write.pBufferInfo = &pw.bufferInfo;
 
 						pendingWrites.push_back(pw);
 						pendingWrites.back().write.pBufferInfo = &pendingWrites.back().bufferInfo;
@@ -661,7 +659,6 @@ private:
 						pw.write.dstArrayElement = 0;
 						pw.write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 						pw.write.descriptorCount = 1;
-						//pw.write.pBufferInfo = &pw.bufferInfo;
 
 						pendingWrites.push_back(pw);
 						pendingWrites.back().write.pBufferInfo = &pendingWrites.back().bufferInfo;
@@ -681,7 +678,7 @@ private:
 
 						pw.bufferInfo.buffer = instanceIndexStageBuffer[j];
 						pw.bufferInfo.offset = 0;
-						pw.bufferInfo.range = VK_WHOLE_SIZE;//sizeof(uint32_t) * instanceIndexStage.size();
+						pw.bufferInfo.range = VK_WHOLE_SIZE;
 
 						pw.write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 						pw.write.dstSet = reinterpret_cast<VkDescriptorSet>(j); //hacky workaround for init
@@ -689,7 +686,6 @@ private:
 						pw.write.dstArrayElement = 0;
 						pw.write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 						pw.write.descriptorCount = 1;
-						//pw.write.pBufferInfo = &pw.bufferInfo;
 
 						pendingWrites.push_back(pw);
 						pendingWrites.back().write.pBufferInfo = &pendingWrites.back().bufferInfo;
@@ -713,25 +709,6 @@ private:
 				}
 
 				for (size_t j = 0; j < VULKAN_FRAMES_IN_FLIGHT; ++j) {
-
-					//// find correct pool
-					//size_t outIndexResult = SIZE_INVALID;
-					////size_t arrayIndex = SIZE_INVALID;
-					//VkDescriptorPool* descPool = _checkDefaultBinding(set, descSetKey, outIndexResult);
-					//if (!descPool) {
-					//	//arrayIndex = descriptorPoolsDynamic.size();
-					//	//descriptorPoolsDynamic.emplace_back(_makePool(m_vkDevice, PoolSpec{
-					//	//	/*flags*/ 0,
-					//	//	/*sizes*/{
-					//	//	  { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VULKAN_DESCPOOL_BASE_UNIFORMS },
-					//	//	  { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VULKAN_DESCPOOL_BASE_STORAGE },
-					//	//	  { VK_DESCRIPTOR_TYPE_SAMPLER,        VULKAN_DESCPOOL_BASE_SAMPLER  },
-					//	//	  { VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,  VULKAN_DESCPOOL_BASE_IMAGE }
-					//	//	},
-					//	//	/*maxSets*/ 512 }));
-					//	//descPool = &descriptorPoolsDynamic.back();
-					//	descPool = &descriptorPoolsDynamic.back();
-					//}
 
 					VkDescriptorPool descPool{};
 					if (set >= VULKAN_GLOBAL_DESCRIPTOR_SETS)
@@ -773,16 +750,12 @@ private:
 
 				for (auto& pw : pendingWrites) {
 					pw.write.dstSet = descriptorSet[reinterpret_cast<size_t>(pw.write.dstSet)]; // correcting back the hackywacky
-					//__debugbreak();
 					vkUpdateDescriptorSets(m_vkDevice, 1, &pw.write, 0, nullptr);
 				}
 
 				descriptorSetCache.insert({ descSetKey, descriptorSet });
 			} else
 				descriptorSet = descSetIt->second;
-
-			// TESTING TESTING
-			//descriptorSetsList.push_back({ static_cast<uint8_t>(set), descriptorSet[0] });
 
 			// for later mapping
 			for (auto& binding : key.bindings) {
