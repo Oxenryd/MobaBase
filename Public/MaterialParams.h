@@ -31,18 +31,7 @@ enum class MatParamArrayType : uint8_t
 	Dynamic
 };
 
-inline static VkShaderStageFlagBits MatParamStageToVkShaderStageFlagBits(MatParamStage stage) {
-	switch (stage) {
-		case MatParamStage::Vertex:
-			return VK_SHADER_STAGE_VERTEX_BIT;
-		case MatParamStage::Fragment:
-			return VK_SHADER_STAGE_FRAGMENT_BIT;
-		case MatParamStage::Both:
-			return (VkShaderStageFlagBits)(VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
 
-		default: return (VkShaderStageFlagBits)0;
-	}
-}
 
 inline static constexpr const char* MatParamStageToString(MatParamStage stage) {
 	switch (stage) {
@@ -129,8 +118,18 @@ public:
 
 
 
+
 struct alignas(8) MatParam
 {
+	enum ResourceType : uint8_t
+	{
+		Unknown = 0,
+		Sampler = 0x01,
+		CBV = 0x02,
+		SRV = 0x04,
+		UAV = 0x08
+	};
+
 	uint32_t nameIndex;
 	uint32_t parentNameIndex;
 	std::vector<MatParam> members;
@@ -144,6 +143,7 @@ struct alignas(8) MatParam
 	uint8_t setIndex;
 	MatParamArrayType arrayType = MatParamArrayType::None;
 	TypeBase type;
+	ResourceType resourceType;
 	
 	uint32_t offset;
 	VkDescriptorType descriptorType;
@@ -197,6 +197,36 @@ struct alignas(8) MatParam
 		return count > 0;
 	}
 };
+
+static MatParam::ResourceType SpvResource_to_ResourceType(int32_t spcType) {
+
+	return (MatParam::ResourceType)static_cast<uint8_t>(spcType);
+}
+
+
+inline static VkShaderStageFlagBits MatParamStageToVkShaderStageFlagBits(MatParamStage stage, MatParam::ResourceType resourceType) {
+
+	VkShaderStageFlagBits matStage = (VkShaderStageFlagBits)0;
+
+	switch (stage) {
+		case MatParamStage::Vertex:
+			matStage = VK_SHADER_STAGE_VERTEX_BIT; break;
+			//return VK_SHADER_STAGE_VERTEX_BIT;
+		case MatParamStage::Fragment:
+			matStage = VK_SHADER_STAGE_FRAGMENT_BIT; break;
+		case MatParamStage::Both:
+			matStage = (VkShaderStageFlagBits)(VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT); break;
+
+		default: break;// return (VkShaderStageFlagBits)0;
+	}
+
+	if (resourceType & MatParam::ResourceType::UAV)
+		matStage = (VkShaderStageFlagBits)(matStage | VK_SHADER_STAGE_COMPUTE_BIT);
+
+	return matStage;
+}
+
+
 
 struct VkBindPair
 {

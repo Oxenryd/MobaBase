@@ -42,8 +42,9 @@ void Material::addShaderParams(
 {
 	for (ShaderBinding& param : s) {
 		MatParam matParam{};
-		matParam.type = Shader::parseReflectedTypeDesc(&param.spvTypeDesc, &param.descriptorType);
+		matParam.type = Shader::parseReflectedTypeDesc(&param.spvTypeDesc, &param.descriptorType, param.spvResourceType);
 		matParam.stage = stage;
+		matParam.resourceType = SpvResource_to_ResourceType(param.spvResourceType);
 		matParam.descriptorType = param.descriptorType;
 		if (param.spvTypeDesc.op == SpvOpTypeRuntimeArray) {
 			if (param.count == 0) {
@@ -182,7 +183,7 @@ Material& Material::initFromShaders(Material& thisMat, const std::string& newNam
 			descSetKey.types.push_back(param.descriptorType);
 			descSetKey.nameIndices.push_back(param.nameIndex);
 			descSetKey.counts.push_back(param.count);
-			descSetKey.stageFlags.push_back(MatParamStageToVkShaderStageFlagBits(param.stage));
+			descSetKey.stageFlags.push_back(MatParamStageToVkShaderStageFlagBits(param.stage, param.resourceType));
 
 			if (param.descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER || param.descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC)
 				descSetKey.flags = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT |
@@ -198,7 +199,7 @@ Material& Material::initFromShaders(Material& thisMat, const std::string& newNam
 		{
 			case TypeBase::PushConstStruct:
 			{
-				this_.pushShaderFlags = MatParamStageToVkShaderStageFlagBits(param.stage);
+				this_.pushShaderFlags = MatParamStageToVkShaderStageFlagBits(param.stage, param.resourceType);
 				this_.pushConstantOffset = param.offset;
 				this_.pushConstantSize = param.size;
 			} break;

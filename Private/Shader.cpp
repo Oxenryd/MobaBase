@@ -57,7 +57,7 @@ std::tuple<
     for (auto& var : inputVars) {
         ShaderIO::Attribute attrib{};
         attrib.location = var->location;
-        attrib.type = parseReflectedTypeDesc(var->type_description, nullptr);
+        attrib.type = parseReflectedTypeDesc(var->type_description, nullptr, 0);
         attrib.offset = static_cast<uint16_t>(iaOffset);
 
         iaOffset += SizeOfTypeBase(attrib.type);
@@ -99,7 +99,7 @@ std::tuple<
     for (auto& var : outputVars) {
         ShaderIO::Attribute attrib{};
         attrib.location = var->location;
-        attrib.type = parseReflectedTypeDesc(var->type_description, nullptr);
+        attrib.type = parseReflectedTypeDesc(var->type_description, nullptr, 0);
 
         if (var->name) {
             std::string s{ var->name };
@@ -130,6 +130,7 @@ std::tuple<
         p.stageFlags = stage;
         p.count = b->count;
         p.spvTypeDesc = b->type_description ? SpvReflectTypeDescription{ *b->type_description } : SpvReflectTypeDescription{};
+        p.spvResourceType = b->resource_type;
         p.descriptorType = mapReflectToVkDescriptorType(b->descriptor_type);
         p.offset = 0;
         
@@ -162,7 +163,7 @@ std::tuple<
             ShaderPushConstant::Attribute attrib{};
             attrib.offset = pc->offset;
             attrib.size = pc->padded_size;
-            attrib.type = parseReflectedTypeDesc(pc->type_description, nullptr);
+            attrib.type = parseReflectedTypeDesc(pc->type_description, nullptr, 0);
             attrib.nameIndex = pcParam.base.nameIndex;
             pcParam.members.push_back(attrib);
             consts.push_back(pcParam);
@@ -177,7 +178,7 @@ std::tuple<
                 ShaderPushConstant::Attribute attrib{};
                 attrib.offset = member.offset;
                 attrib.size = member.padded_size;
-                attrib.type = parseReflectedTypeDesc(member.type_description, nullptr);
+                attrib.type = parseReflectedTypeDesc(member.type_description, nullptr, 0);
 
                 auto nameIndex = RenderManager::getInstance()->getParamNameIndex(member.name);
                 if (nameIndex == SIZE_INVALID) {

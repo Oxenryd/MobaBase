@@ -235,3 +235,24 @@ void VulkanContext::draw(void* rendCtx) {
 	// rotate frame sync /semaphores
 	currentFrame = (currentFrame + 1) % VULKAN_FRAMES_IN_FLIGHT;
 }
+
+void VulkanContext::preDraw() {
+
+	
+
+	// Collect pendingLight updates
+	// ...
+	for (auto& light : pendingLightUpdates) {
+		lightsData.push_back(light);
+	}
+
+	if (!pendingLightUpdates.empty())
+		updateLightsData();
+
+	// Reset stuff
+	pendingLightUpdates.clear();
+}
+
+void VulkanContext::postDraw() {
+
+}

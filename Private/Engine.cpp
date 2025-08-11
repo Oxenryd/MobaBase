@@ -279,8 +279,9 @@ inline void Engine::_run() {
 		VulkanContext::RenderContext drawCtx{};	
 		drawCtx.frameCount = m_totalFrames;
 
-
+		m_vkCtx->preDraw();
 		m_vkCtx->draw(static_cast<void*>(&drawCtx));
+		m_vkCtx->postDraw();
 		m_framesSinceLastFpsRead++;
 		m_totalFrames++;
 		std::this_thread::yield();

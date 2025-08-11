@@ -18,7 +18,9 @@ float4 main(BasePSIn input) : SV_Target
 		? float4(matInstance.baseColor, matInstance.transparency)
 		: textures[matInstance.textures.albedoId].Sample(smp, float2(input.texCoord.x, 1.0 - input.texCoord.y));
 	
-    return diffuse + RetainGlobals();
+	
+	
+    return float4(diffuse.rgb * ambient, diffuse.a) + RetainGlobals();
 	
 	
 	

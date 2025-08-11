@@ -7,42 +7,137 @@
 
 #include "GlobalMacros.h"
 
-
-enum class LightType : uint32_t
+enum class LightType : uint8_t
 {
 	Directional = 0,
 	Point = 1,
-	Spot = 2
+	Spot = 2,
+	_ENUM_END
 };
 
-enum LightFlags : uint32_t
+constexpr static size_t NUM_OF_LIGHT_TYPES = (size_t)LightType::_ENUM_END;
+
+//enum LightType : uint32_t
+//{
+//	CastShadow = 1 << 0,
+//	// room for more: Static, Volumetric, ContactShadows...
+//};
+
+enum class ShadowType : uint32_t
 {
-	CastShadow = 1u << 0,
-	// room for more: Static, Volumetric, ContactShadows...
+	None,
+	DirCSM,
+	Spot2D,
+	PointCube
 };
 
-struct GPULight
+enum class LightFlags : uint32_t
 {
-	glm::vec4 positionVS;   // xyz: view-space position, w: radius (point)
-
-	glm::vec4 directionVS;  // xyz: view-space dir (unit), w: spotInnerCos (optional)
-
-	glm::vec4 color;        // rgb linear, a intensity
-
-	uint32_t  type;         // LightType
-	uint32_t  flags;        // LightFlags
-	float     spotOuterCos;
-	float	  _pad0;
-
-	// Shadow binding:
-	// For Directional: baseIndex into cascade matrices & atlas tiles
-	// For Spot: index of 2D/array layer
-	// For Point: baseIndex of cube faces (6 faces contiguous)
-	uint32_t  shadowIndex;  // 0xFFFFFFFF if none
-	uint32_t  shadowType;   // 0=none, 1=DirCSM, 2=Spot2D, 3=PointCube
-	uint32_t  shadowLayerCount; // 4 for CSM, 1 for spot, 6 for point
-	uint32_t  _pad1;
+	None = 0x00000000,
+	Enabled = 0x00000001,
+	Static = 0x00000002
 };
+
+INLINE auto operator|(LightFlags a, LightFlags b) {
+	return static_cast<uint32_t>(a) | static_cast<uint32_t>(b);
+}
+
+struct alignas(16) GPULight
+{
+	// 0..15
+	glm::vec3 positionVS{ 0.0f, 0.0f, 0.0f };
+	float radius{ 1.0f };
+
+	// 16..31
+	glm::vec3 directionVS{ 0.0f, 0.0f, -1.0f };
+	float spotInnerCos{ 1.0f };
+
+	// 32..47
+	glm::vec3 color{ 1.0f, 1.0f, 1.0f };;
+	float intensity{ 1.0f };
+
+	// 48..63
+	uint32_t lightType{ (uint32_t)LightType::Directional };
+	uint32_t lightFlags{ (uint32_t)(LightFlags::Enabled | LightFlags::Static)};
+	uint32_t cookieIndex{ UINT32_INVALID };
+	uint32_t shadowIndex{ UINT32_INVALID };
+
+	// 64..79
+	float spotOuterCos{ 1.0f };
+	float falloffExp{ 1.5f };
+	float invRange{ 1.0f };
+	float volumetricIntensity{ 1.0f };
+
+	// 80..95
+	float volumetricFalloff{ 1.0f };
+	float shadowBias{ 0.0f };
+	float shadowNormalBias{ 0.0f };
+	float _reserved0{ 0 };
+
+	// 96..111
+	uint32_t shadowType{ 0 };
+	uint32_t shadowLayerCount{ 0 };
+	uint32_t _reserved1{ 0 };;
+	uint32_t _reserved2{ 0 };;
+
+};
+
+static_assert(sizeof(GPULight) == 112, "GPULight must be 112 bytes");
+
+
+namespace LightFactory
+{
+	static const GPULight Point(
+		const glm::vec3& pos,
+		float radius,
+		const glm::vec3& color = { 1.0f, 1.0f, 1.0f },
+		float intensity = 1.0f) {
+		GPULight L{};
+		L.lightType = static_cast<uint32_t>(LightType::Point);
+		L.positionVS = pos;
+		L.radius = radius;
+		L.invRange = radius > 0.0f ? 1.0f / radius : 0.0f;
+		L.color = color;
+		L.intensity = intensity;
+		return L;
+	}
+
+	static const GPULight Spot(
+		const glm::vec3& pos,
+		const glm::vec3& dir,
+		float radius,
+		float innerDeg,
+		float outerDeg,
+		const glm::vec3& color = { 1.0f, 1.0f, 1.0f },
+		float intensity = 1.0f) {
+		GPULight L{};
+		L.lightType = static_cast<uint32_t>(LightType::Spot);
+		L.positionVS = pos;
+		L.directionVS = glm::normalize(dir);
+		L.radius = radius;
+		L.invRange = radius > 0.0f ? 1.0f / radius : 0.0f;
+		L.spotInnerCos = glm::cos(glm::radians(innerDeg));
+		L.spotOuterCos = glm::cos(glm::radians(outerDeg));
+		L.color = color;
+		L.intensity = intensity;
+		return L;
+	}
+
+	static const GPULight Directional(
+		const glm::vec3& dir,
+		const glm::vec3& color = { 1.0f, 1.0f, 1.0f },
+		float intensity = 1.0f) {
+		GPULight L{};
+		L.lightType = static_cast<uint32_t>(LightType::Directional);
+		L.directionVS = glm::normalize(dir);
+		L.radius = 0.0f;       // Infinite range
+		L.invRange = 0.0f;
+		L.color = color;
+		L.intensity = intensity;
+		return L;
+	}
+};
+
 
 struct ShadowMatrix { glm::mat4 viewProj; };
 
@@ -115,7 +210,7 @@ struct Index32
 private:
 	uint32_t m_value;
 public:
-
+	Index32() : m_value{0} {}
 	Index32(const Index32& value) :
 		m_value { value.m_value } {}
 
@@ -142,6 +237,32 @@ public:
 	uint32_t& operator/= (const uint32_t& rhs) { return m_value = m_value / rhs; }
 
 	uint32_t* data() { return &m_value; }
+};
+
+struct Index128
+{
+private:
+	Index32 m_value[4];
+public:
+
+	Index128(const Index128& value) {
+		std::memcpy(&m_value, &value.m_value, 4 * sizeof(Index32));
+	}
+
+	Index128& operator=(const Index128& other) {
+		std::memcpy(&m_value, &other.m_value, 4 * sizeof(Index32));
+		return *this;
+	}
+	Index128(const uint32_t* value) {
+		std::memcpy(&m_value, value, 4 * sizeof(Index32));
+	}
+	Index128& operator=(const uint32_t* other) {
+		std::memcpy(&m_value, other, 4 * sizeof(Index32));
+		return *this;
+	}
+
+
+	uint32_t* data() { return reinterpret_cast<uint32_t*>(&m_value); }
 };
 
 
@@ -199,7 +320,8 @@ struct CameraData
 		nearPlane = 0.1f;
 		farPlane = 1000.0f;
 		aspectRatio = 16.0f / 9.0f;
-		cameraPosition = { 0.0f, 0.0f, 5.0f, 1.0f };
+		cameraPosition = { 0.0f, 0.0f, 5.0f};
+		ambient = 0.00625f;
 		view = glm::lookAt(
 			glm::vec3(0.0f, 0.0f, 5.0f), // Camera position
 			glm::vec3(0.0f, 0.0f, 0.0f), // Target (look at)
@@ -219,7 +341,8 @@ struct CameraData
 
 	alignas (16) glm::mat4x4 view;
 	alignas (16) glm::mat4x4 proj;
-	alignas (16) glm::vec4 cameraPosition;
+	glm::vec3 cameraPosition;
+	float ambient;
 	float vFov;
 	float nearPlane;
 	float farPlane;

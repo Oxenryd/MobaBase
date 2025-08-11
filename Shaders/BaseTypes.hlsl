@@ -3,6 +3,56 @@
 
 #define UINT_INVALID 0xFFFFFFFF
 
+static const uint LightType_Directional = 0;
+static const uint LightType_Point = 1;
+static const uint LightType_Spot = 2;
+
+static const uint ShadowType_None = 0;
+static const uint ShadowType_DirCSM = 1;
+static const uint ShadowType_Spot2D = 2;
+static const uint ShadowType_PointCube = 3;
+
+struct GPULight
+{
+    // 0..15
+    float3 positionVS;
+    float radius;
+
+    // 16..31
+    float3 directionVS;
+    float spotInnerCos;
+
+    // 32..47
+    float3 color;
+    float intensity;
+
+    // 48..63
+    uint lightType;
+    uint lightFlags;
+    uint cookieIndex;
+    uint shadowIndex;
+
+    // 64..79
+    float spotOuterCos;
+    float falloffExp;
+    float invRange;
+    float volumetricIntensity;
+
+    // 80..95
+    float volumetricFalloff;
+    float shadowBias;
+    float shadowNormalBias;
+    float _reserved0;
+
+    // 96..111
+    uint shadowType;
+    uint shadowLayerCount;
+    uint _reserved1;
+    uint _reserved2;
+};
+
+
+
 static const float4 QUAD2D[6] =
 {
     float4(-0.5, -0.5, 0, 0),
@@ -98,26 +148,14 @@ struct LightType
     static const uint Spot = 2;
 };
 
-struct GPULight
-{
-    float4 positionVS;
-    float4 directionVS;
-    float4 color;
-    
-    uint type;
-    uint flags;
-    float spotOuterCos;
-    float _pad0;
-    
-    uint shadowIndex;
-    uint shadowType;
-    uint shadowLayerCount;
-    uint _pad1;
-};
-
 struct Index32
 {
-    uint i;
+    uint x;
+};
+
+struct Index128
+{
+    uint x, y, z, w;
 };
 
 struct BaseVSIn
@@ -167,7 +205,8 @@ cbuffer cameraData : register(b0, space0)
 {
     float4x4 worldToView;
     float4x4 projection;
-    float4 cameraPosition;
+    float3 cameraPosition;
+    float ambient;
     float vFov;
     float nearPlane;
     float farPlane;
@@ -181,9 +220,9 @@ cbuffer cameraData : register(b0, space0)
 [[vk::binding(2, 1)]] StructuredBuffer<BaseMaterialInstance> baseMatInstances: register(t0, space1);
 [[vk::binding(3, 1)]] Texture2D textures[] : register(t1, space1);
 
-[[vk::binding(0, 2)]] StructuredBuffer<GPULight> Lights : register(t1, space2);
-[[vk::binding(1, 2)]] StructuredBuffer<Index32> clusterLightCount : register(t1, space2);
-[[vk::binding(2, 2)]] StructuredBuffer<Index32> clusterLightIndices : register(t2, space2);
+[[vk::binding(0, 2)]] StructuredBuffer<GPULight> lights : register(t1, space2);
+[[vk::binding(1, 2)]] RWStructuredBuffer<Index32> clusterLightCount : register(u0, space2);
+[[vk::binding(2, 2)]] RWStructuredBuffer<Index32> clusterLightIndices : register(u1, space2);
 
 [[vk::binding(0, 3)]] StructuredBuffer<SpriteInstance> spriteInstances : register(t0, space2);
 [[vk::binding(1, 3)]] SamplerState spriteSmp : register(s0, space2);
@@ -200,8 +239,8 @@ float4 RetainGlobals()
     float dummy = cameraPosition.x * basePush.boneOffset;
     if (dummy == -9999999.0)
     {
-        float4 dummy2 = dummy.xxxx + textures[0].SampleLevel(smp, float2(0, 0), 0.0) * Lights[clusterLightCount[0].i].color;
-        float4 dummy3 = dummy2 + baseMatInstances[0].ambient.xyzx * clusterLightIndices[0].i;
+        float4 dummy2 = dummy.xxxx + textures[0].SampleLevel(smp, float2(0, 0), 0.0) * lights[clusterLightCount[0].x].color.rrgb;
+        float4 dummy3 = dummy2 + baseMatInstances[0].ambient.xyzx * clusterLightIndices[0].x;
         float4 dummy4 = mul(dummy3, modelMatrices[instanceData[0].matrixIndex].modelToWorld);
         return (float4) dummy4;
     }

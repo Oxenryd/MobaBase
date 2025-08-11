@@ -19,6 +19,7 @@ enum class TypeBase : uint8_t
 	Invalid,
 	Struct,
 	StructBuffer,
+	RWStructBuffer,
 	CBuffer,
 	VertexInput,
 	VertexOutput,
@@ -123,6 +124,7 @@ constexpr std::size_t array_size_v = array_size<std::remove_cv_t<T>>::value;
 
 
 using TypeBaseList = std::tuple<
+	void,
 	void,
 	void,
 	void,
@@ -239,6 +241,7 @@ inline static constexpr const char* TypeBaseToString(TypeBase base) {
 		case TypeBase::CBuffer:			return "CBuffer";
 		case TypeBase::Struct:			return "Struct";
 		case TypeBase::StructBuffer:	return "StructBuffer";
+		case TypeBase::RWStructBuffer:	return "RWStructBuffer";
 		case TypeBase::VertexInput:		return "VertexInput";
 		case TypeBase::VertexOutput:	return "VertexOutput";
 		case TypeBase::Bool:			return "Bool";
@@ -287,6 +290,7 @@ inline constexpr TypeBase stringToTypeBase(const std::string& s) {
 	if (s == "Invalid")			return TypeBase::Invalid;
 	if (s == "Struct")			return TypeBase::Struct;
 	if (s == "StructBuffer")	return TypeBase::StructBuffer;
+	if (s == "RWStructBuffer")	return TypeBase::StructBuffer;
 	if (s == "CBuffer")			return TypeBase::CBuffer;
 	if (s == "VertexInput")		return TypeBase::VertexInput;
 	if (s == "VertexOutput")	return TypeBase::VertexOutput;

@@ -12,6 +12,7 @@
 #include "TagSystem.hpp"
 #include "SceneRenderSystem.hpp"
 #include "BoundingSystem.h"
+#include "lightSystem.hpp"
 
 enum class SceneTransitionStatus
 {
@@ -48,6 +49,7 @@ protected:
     TransformSystem m_transformSys;
     GameObjectSystem m_gameObjectSys;
     BoundingSystem m_boundingSys;
+    LightSystem m_lightSys;
     
     
     
@@ -71,7 +73,8 @@ public:
         m_gameObjectSys{ sceneIndex, &m_reg},
         m_renderSys{ &m_reg, &m_arena, sceneIndex },
         m_boundingSys{&m_reg, &m_arena, sceneIndex },
-        m_sceneIndex{sceneIndex}
+        m_sceneIndex{sceneIndex},
+        m_lightSys{&m_reg, sceneIndex}
     {
         m_reg.storage<TransformComponent>().reserve(ECS_BASE_COMPONENTS_RESERVATION_COUNT);
         m_reg.storage<EnabledTag>().reserve(ECS_BASE_COMPONENTS_RESERVATION_COUNT);
@@ -99,9 +102,12 @@ public:
     GameObjectSystem& gameObjectSystem() { return m_gameObjectSys; }  
     BoundingSystem& boundingSystem() { return m_boundingSys; }
     SceneRenderSystem& sceneRender() { return m_renderSys; }
+    LightSystem& lightSystem() { return m_lightSys; }
     void setUnload() { m_pendingUnload = true; }
     uint32_t sceneIndex() const { return m_sceneIndex; }
     bool pendingUnload() const { return m_pendingUnload; }
+
+
 };
 
 template<typename Derived>

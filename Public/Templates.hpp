@@ -12,6 +12,7 @@ private:
     uint64_t m_drawHash{ 0 };
     std::string m_name{ "TestObject" };
     GameObject m_go;
+    entt::entity m_skyLight;
     uint32_t m_camIndex{};
     float m_camSpeed = 12.5f;
 
@@ -25,6 +26,12 @@ public:
 
     void start() {
         
+        m_skyLight = m_reg.create();
+        m_reg.emplace<TransformComponent>(m_skyLight, TransformComponent{});
+        auto dirLight = LightFactory::Directional(glm::normalize(glm::vec3{-1, -1, 0}));
+        auto& lightRef = lightSystem().registerLight(dirLight, m_skyLight);
+
+
         m_go = gameObjectSystem().createGameObject<GameObject>(m_name);
         MeshDescription meshInfo{};
         const std::string path = std::format("{}{}", ASSETS_DIR, "crytek-sponza-hd/sponza.obj"); //"Cube/cube.obj" //"crytek-sponza-hd/sponza.obj"

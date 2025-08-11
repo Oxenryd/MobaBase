@@ -111,7 +111,7 @@ add_executable (MobaBase
 	"Public/Shader.h"
 	"Public/ArenaAllocator.hpp"
 	"Public/MemoryProviderConcept.h"
-	"Public/BaseTypesHLSL.h"
+	
 	"Public/RenderManager.h"
 	"Public/ErrorCodes.hpp"
 	"Public/FileSys.h"
@@ -153,7 +153,8 @@ add_executable (MobaBase
 	"Public/stb_image.h"
 	"Public/stb_image_write.h"
 	"Public/BoundingSystem.h"
-	"Private/Mesh.cpp"
+	"Public/LightSystem.hpp"
+	"Public/Light.hpp"
 
 
 	"Private/Engine.cpp"
@@ -173,7 +174,10 @@ add_executable (MobaBase
 	"Private/GlobalComponents.cpp"
 	"Private/Camera.cpp"
 	"Private/Timing.cpp"
-	"Private/Texture.cpp" )
+	"Private/Texture.cpp"
+	"Private/LightSystem.cpp"
+	"Private/Mesh.cpp"
+	"Private/Light.cpp")
 
 
 
@@ -255,6 +259,18 @@ target_compile_definitions(MobaBase PRIVATE
 	MAT_BASE_MAT_INSTANCES_NAME=\"baseMatInstances\"
 	MAT_BASE_MAT_INSTANCES_SET=1
 	MAT_BASE_MAT_INSTANCES_BIND=2
+
+	MAT_GPULIGHTS_NAME=\"lights\"
+	MAT_GPULIGHTS_SET=2
+	MAT_GPULIGHTS_BIND=0
+
+	MAT_CLUSTER_LIGHTCOUNT_NAME=\"clusterLightCount\"
+	MAT_CLUSTER_LIGHTCOUNT_SET=2
+	MAT_CLUSTER_LIGHTCOUNT_BIND=1
+
+	MAT_CLUSTER_LIGHTINDICES_NAME=\"clusterLightIndices\"
+	MAT_CLUSTER_LIGHTINDICES_SET=2
+	MAT_CLUSTER_LIGHTINDICES_BIND=2
 
 	# Data types settings
 	FIXED_STRINGS_MAX_LENGTH=63

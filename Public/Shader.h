@@ -35,6 +35,7 @@ struct ShaderBinding
 {
     std::string name;
     SpvReflectTypeDescription spvTypeDesc;
+    SpvReflectResourceType spvResourceType;
     uint32_t set;
     uint32_t binding;
     VkDescriptorType descriptorType;
@@ -42,6 +43,7 @@ struct ShaderBinding
     uint32_t count = 1;
     uint32_t offset = 0;
     std::vector<ShaderBinding> members;
+
 };
 
 struct ShaderPushConstant
@@ -134,7 +136,7 @@ public:
 
 
     inline static TypeBase parseReflectedTypeDesc(
-        const SpvReflectTypeDescription* typeDesc, const VkDescriptorType* vkDescType) {
+        const SpvReflectTypeDescription* typeDesc, const VkDescriptorType* vkDescType, uint32_t resourceFlags) {
         
         if (!typeDesc)
             return TypeBase::Invalid;
@@ -150,7 +152,12 @@ public:
                             return TypeBase::CBuffer;
 
                         case VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
-                            return TypeBase::StructBuffer;
+                        {
+                            if (resourceFlags & MatParam::UAV)
+                                return TypeBase::RWStructBuffer;
+                            else
+                                return TypeBase::StructBuffer;
+                        }
                     }
                 }
                 return TypeBase::Struct;

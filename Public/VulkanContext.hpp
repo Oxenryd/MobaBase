@@ -27,6 +27,7 @@
 #include <vector>
 #include <array>
 #include <unordered_map>
+#include <queue>
 
 #include "DrawCommand.hpp"
 #include "WindowSurface.h"
@@ -691,6 +692,55 @@ private:
 						pendingWrites.back().write.pBufferInfo = &pendingWrites.back().bufferInfo;
 
 					}
+				} else if (set == MAT_GPULIGHTS_SET && renderMan->getParamName(key.nameIndices[i]) == MAT_GPULIGHTS_NAME) {
+
+					rBind.handle = reinterpret_cast<uint64_t>(this);
+					layoutHandle = 0;
+					
+				} else if (set == MAT_CLUSTER_LIGHTCOUNT_SET && renderMan->getParamName(key.nameIndices[i]) == MAT_CLUSTER_LIGHTCOUNT_NAME) {
+					rBind.handle = reinterpret_cast<uint64_t>(this);
+					layoutHandle = 0;
+
+					for (size_t j = 0; j < VULKAN_FRAMES_IN_FLIGHT; j++) {
+
+						PendingWrite pw{};
+
+						pw.bufferInfo.buffer = lightsClusterCountBuffer[j];
+						pw.bufferInfo.offset = 0;
+						pw.bufferInfo.range = VK_WHOLE_SIZE;
+
+						pw.write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+						pw.write.dstSet = reinterpret_cast<VkDescriptorSet>(j); //hacky workaround for init
+						pw.write.dstBinding = key.bindings[i];
+						pw.write.dstArrayElement = 0;
+						pw.write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+						pw.write.descriptorCount = 1;
+
+						pendingWrites.push_back(pw);
+						pendingWrites.back().write.pBufferInfo = &pendingWrites.back().bufferInfo;
+					}
+				} else if (set == MAT_CLUSTER_LIGHTINDICES_SET && renderMan->getParamName(key.nameIndices[i]) == MAT_CLUSTER_LIGHTINDICES_NAME) {
+					rBind.handle = reinterpret_cast<uint64_t>(this);
+					layoutHandle = 0;
+
+					for (size_t j = 0; j < VULKAN_FRAMES_IN_FLIGHT; j++) {
+
+						PendingWrite pw{};
+
+						pw.bufferInfo.buffer = lightsClusterIndicesBuffer[j];
+						pw.bufferInfo.offset = 0;
+						pw.bufferInfo.range = VK_WHOLE_SIZE;
+
+						pw.write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+						pw.write.dstSet = reinterpret_cast<VkDescriptorSet>(j); //hacky workaround for init
+						pw.write.dstBinding = key.bindings[i];
+						pw.write.dstArrayElement = 0;
+						pw.write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+						pw.write.descriptorCount = 1;
+
+						pendingWrites.push_back(pw);
+						pendingWrites.back().write.pBufferInfo = &pendingWrites.back().bufferInfo;
+					}
 				}
 
 				descSetKey.bindings.push_back(rBind);
@@ -864,7 +914,7 @@ public:
 	//constexpr static const size_t DESCPOOL_BASE_INDEX = 0;
 	//constexpr static const size_t DESCPOOL_INSTANCE_INDEX = 1;
 	//constexpr static const size_t DESCPOOL_TEXTURES_INDEX = 2;
-	std::array<VkDescriptorPool, 2> descriptorPoolsDefault;
+	std::array<VkDescriptorPool, 2> descriptorPoolsDefault{};
 	std::vector<VkDescriptorPool> descriptorPoolsDynamic;
 
 
@@ -906,6 +956,21 @@ public:
 	std::vector<BaseMaterialInstance> matData_baseMatInstances;
 	VkBuffer matBuf_baseMatInstances[VULKAN_FRAMES_IN_FLIGHT] = { nullptr, nullptr };
 	VkDeviceMemory matDevMem_baseMatInstances[VULKAN_FRAMES_IN_FLIGHT] = { nullptr, nullptr };
+
+	std::vector<GPULight> lightsData;
+	VkBuffer lightsBuffer[VULKAN_FRAMES_IN_FLIGHT] = { nullptr, nullptr };
+	VkDeviceMemory lightsMemory[VULKAN_FRAMES_IN_FLIGHT] = { nullptr, nullptr };
+	std::vector<Index32> lightsClusterIndicesData;
+	VkBuffer lightsClusterIndicesBuffer[VULKAN_FRAMES_IN_FLIGHT] = { nullptr, nullptr };
+	VkDeviceMemory lightsClusterIndicesMemory[VULKAN_FRAMES_IN_FLIGHT] = { nullptr, nullptr };
+
+	std::vector<Index32> lightsClusterCountData;
+	VkBuffer lightsClusterCountBuffer[VULKAN_FRAMES_IN_FLIGHT] = { nullptr, nullptr };
+	VkDeviceMemory lightsClusterCountMemory[VULKAN_FRAMES_IN_FLIGHT] = { nullptr, nullptr };
+
+	std::vector<GPULight> pendingLightUpdates;
+
+
 
 	uint32_t registerBaseMaterialInstance(const BaseMaterialInstance* const matInstance) {
 		auto index = matData_baseMatInstances.size();
@@ -949,9 +1014,12 @@ public:
 		renderPassIndex{},
 		camData{}
 	{
-		//pipelineLayouts.reserve(2048);
+		pendingLightUpdates.reserve(256);
 		rendPasses.reserve(2048);
-		//pipelines.reserve(2048);
+	}
+
+	INLINE void registerNewLight(const GPULight& light) {
+		pendingLightUpdates.push_back(light);
 	}
 
 	INLINE uint32_t lastDrawcallCount() const { return m_lastDrawcallCount; }
@@ -1029,6 +1097,61 @@ public:
 
 			// Only update what changed
 			vkUpdateDescriptorSets(m_vkDevice, 1, &instanceDataWrite, 0, nullptr);
+
+		}
+
+		return VK_SUCCESS;
+	}
+
+	INLINE VkResult updateLightsData() {
+		VkResult vkResult{};
+
+		for (size_t i = 0; i < VULKAN_FRAMES_IN_FLIGHT; ++i) {
+			VkDeviceSize bufferSize = sizeof(GPULight) * this->lightsData.size();
+			VkBufferCreateInfo createInfo{};
+			createInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+			createInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+			createInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+			createInfo.size = bufferSize;
+
+			Vk_CHECK(vkResult, vkCreateBuffer(m_vkDevice, &createInfo, nullptr, &lightsBuffer[i]));
+			VkMemoryRequirements lightDataBufferMemReq{};
+			vkGetBufferMemoryRequirements(m_vkDevice, lightsBuffer[i], &lightDataBufferMemReq);
+			VkMemoryAllocateInfo lightDataAllocInfo{};
+			lightDataAllocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+			lightDataAllocInfo.allocationSize = lightDataBufferMemReq.size;
+			lightDataAllocInfo.memoryTypeIndex = findMemoryType(
+				lightDataBufferMemReq.memoryTypeBits,
+				VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+				m_phyDevice
+			);
+			Vk_CHECK(vkResult, vkAllocateMemory(m_vkDevice, &lightDataAllocInfo, nullptr, &lightsMemory[i]));
+			Vk_CHECK(vkResult, vkBindBufferMemory(m_vkDevice, lightsBuffer[i], lightsMemory[i], 0));
+
+			// Update descriptor sets
+			VkDescriptorSet set = bindingToDescriptorSet[{MAT_GPULIGHTS_BIND, MAT_GPULIGHTS_SET, 0}][i];
+			// Only update the buffers that changed
+			std::vector<VkWriteDescriptorSet> descriptorWrites;
+
+			// Say only your instance data changed this frame
+			VkDescriptorBufferInfo lightsDataBufferInfo{};
+			lightsDataBufferInfo.buffer = lightsBuffer[i];
+			lightsDataBufferInfo.offset = 0;
+			lightsDataBufferInfo.range = VK_WHOLE_SIZE;
+
+			VkWriteDescriptorSet instanceDataWrite{};
+			instanceDataWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+			instanceDataWrite.dstSet = set;
+			instanceDataWrite.dstBinding = MAT_GPULIGHTS_BIND;
+			instanceDataWrite.dstArrayElement = 0;
+			instanceDataWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+			instanceDataWrite.descriptorCount = 1;
+			instanceDataWrite.pBufferInfo = &lightsDataBufferInfo;
+
+			// Only update what changed
+			vkUpdateDescriptorSets(m_vkDevice, 1, &instanceDataWrite, 0, nullptr);
+
+
 
 		}
 
@@ -1908,7 +2031,7 @@ public:
 			VkPushConstantRange range{};
 			range.offset = param.offset;
 			range.size = param.size;
-			range.stageFlags = MatParamStageToVkShaderStageFlagBits(param.stage);
+			range.stageFlags = MatParamStageToVkShaderStageFlagBits(param.stage, param.resourceType);
 			pushConstantRanges.push_back(range);
 		}
 
@@ -2341,7 +2464,7 @@ public:
 					vkCmdPushConstants(
 						cmd,
 						pipelineLayouts[material->pipelineLayoutId],
-						MatParamStageToVkShaderStageFlagBits(param.stage),
+						MatParamStageToVkShaderStageFlagBits(param.stage, param.resourceType),
 						param.offset,
 						static_cast<uint32_t>(param.size),
 						static_cast<const uint8_t*>(pushConstData) + param.offset
@@ -2648,6 +2771,10 @@ public:
 
 		return transferTextureData(tex.texelData(), texture.image, mipLevels, tex.width, tex.height, 4, commandPool, m_graphicsQueue);
 	}
+
+
+	void preDraw();
+	void postDraw();
 };
 #pragma warning(pop)
 #endif
