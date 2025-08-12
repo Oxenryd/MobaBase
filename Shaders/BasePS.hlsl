@@ -10,36 +10,68 @@
 
 float4 main(BasePSIn input) : SV_Target
 {
+    float2 fixedTexUV = float2(input.texCoord.x, 1.0 - input.texCoord.y);
 
-    float ambient = camPos_amb.w;
+    
     uint matIndex = basePush.matInstanceIndex != UINT_INVALID ? basePush.matInstanceIndex : 0;
     BaseMaterialInstance M = baseMatInstances[matIndex];
+    
+    // Ambient
+    float ambient = camPos_amb.w * M.ambientIntensity;
     
 	// Albedo
 	float4 albedoSample = M.textures.albedoId == UINT_INVALID
 		? float4(M.baseColor, M.transparency)
-		: textures[M.textures.albedoId].Sample(smp, float2(input.texCoord.x, 1.0 - input.texCoord.y));
+		: textures[M.textures.albedoId].Sample(smp, fixedTexUV);
 	
     float3 baseColor = albedoSample.rgb * M.albedoStrength;
     float alpha = albedoSample.a;
 	
+    // Specular
+    float4 specSample = M.textures.specularId == UINT_INVALID
+        ? float4(M.specular, M.transparency)
+        : textures[M.textures.specularId].Sample(smp, fixedTexUV);
+    float3 specColor = specSample.rgb;
 	
-	// Normals: assume IN.normal is world-space; transform to view-space if needed
-    float3 Nw = normalize(input.normal);
+    // Normals
+    float3 normalSample = M.textures.normalId == UINT_INVALID
+    ? float3(0.5, 0.5, 1.0) // Default normal map (pointing up in tangent space)
+    : textures[M.textures.normalId].Sample(smp, fixedTexUV).rgb;
+
+    // Convert from [0,1] to [-1,1] range
+    float3 tangentNormal = normalize(normalSample * 2.0 - 1.0);
+
+    // Build tangent-to-world matrix (assuming your tangent/binormal are world space)
+    float3 T = normalize(input.tangent);
+    float3 B = normalize(input.binormal);
+    float3 N_world = normalize(input.normal);
+    //N_world.x = -N_world.x;
+
+    // If you need to handle flipped tangent space (common in some assets):
+    //T = normalize(T - N_world * dot(T, N_world)); // Gram-Schmidt orthogonalization
+    //B = cross(N_world, T) * sign(dot(B, cross(N_world, T))); // Ensure correct handedness
+
+    float3x3 TBN = float3x3(T, B, N_world);
+
+    // Transform tangent-space normal to world space
+    float3 worldNormal = mul(tangentNormal, TBN);
+
+    // Transform world normal to view space for lighting
+    float3 N = normalize(mul((float3x3) worldToView, worldNormal));
     
-    float3 N = normalize(mul((float3x3) worldToView, Nw)); // if worldToView is orthonormal, this is fine
-    float3 Pw = input.worldPos;
-    float3 Pvs = mul(worldToView, float4(Pw, 1)).xyz;
+    
+    
+    float3 Pvs = mul(worldToView, float4(input.worldPos, 1)).xyz;
     float3 V = normalize(-Pvs);
 	
 	
-	// Ambient
-    float3 color = baseColor * ambient * M.ambientIntensity;
+	// Color
+    float3 color = baseColor * ambient;
 	
 	
 	// Forward+ cluster lookup
     float2 screenSize = screenSizes.xy;
-    uint3 cid = ComputeClusterCoord(input.pos.xy, /*zVS=*/-mul(worldToView, float4(Pw, 1)).z,
+    uint3 cid = ComputeClusterCoord(input.pos.xy, /*zVS=*/-mul(worldToView, float4(input.worldPos, 1)).z,
                                     screenSize, clustersX, clustersY, clustersZ, nearPlane, farPlane);
     uint clusterIndex = ComputeClusterIndex(cid, clustersX, clustersY);
 		
@@ -55,34 +87,28 @@ float4 main(BasePSIn input) : SV_Target
     uint spotCount = counts.z;
 	        	
 	// Material terms for Phong
-    PhongTerms T;
-    T.N = N;
-    T.V = V;
-    T.baseColor = baseColor;
-    T.specularColor = M.specular * M.specularStrength;
-    T.shininess = max(1.0, M.shininess);
-    T.specularStrength = M.specularStrength;
-    T.albedoStrength = M.albedoStrength;
-    T.ambientIntensity = M.ambientIntensity;
+    PhongTerms pT;
+    pT.N = N;
+    pT.V = V;
+    pT.baseColor = baseColor;
+    pT.specularColor = specColor;
+    pT.shininess = max(1.0, M.shininess);
+    pT.specularStrength = M.specularStrength;
+    pT.albedoStrength = M.albedoStrength;
+    pT.ambientIntensity = M.ambientIntensity;
 	
 	[loop]
     for (uint i = 0; i < dirCount; ++i)
     {
         uint li = clusterLightIndices[baseOff + i].x;
         GPULight L = lights[li];
-        color += ShadeDirectional(L, T, worldToView);
+        color += ShadeDirectional(L, pT, worldToView);
     }
 	
+    
     return float4(color, alpha) + RetainGlobals();
 	
-    //return float4(albedoSample.rgb * ambient, albedoSample.a) + RetainGlobals();
-	
-	
-	
-	
-	
-	
-	
+
 
 	
 	
