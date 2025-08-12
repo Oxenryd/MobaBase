@@ -3,6 +3,12 @@
 
 #define UINT_INVALID 0xFFFFFFFF
 
+#define MAX_LIGHTS_PER_CLUSTER 512
+#define CLUSTER_THREADS_X 4
+#define CLUSTER_THREADS_Y 4
+#define CLUSTER_THREADS_Z 4
+
+
 static const uint LightType_Directional = 0;
 static const uint LightType_Point = 1;
 static const uint LightType_Spot = 2;
@@ -27,8 +33,8 @@ struct GPULight
     float intensity;
 
     // 48..63
-    uint lightType;
-    uint lightFlags;
+    uint type;
+    uint flags;
     uint cookieIndex;
     uint shadowIndex;
 
@@ -119,6 +125,19 @@ struct BaseMaterialInstance
 
 };
 
+struct PhongTerms
+{
+    float3 N;
+    float3 V;
+    float3 baseColor;
+    float3 specularColor;
+    float shininess;
+    float specularStrength;
+    float albedoStrength;
+    float ambientIntensity;
+};
+
+
 struct BaseMatPush
 {
     float4x4    modelToWorld;
@@ -151,6 +170,19 @@ struct LightType
 struct Index32
 {
     uint x;
+};
+
+struct Index64
+{
+    uint x;
+    uint y;
+};
+
+struct Index96
+{
+    uint x;
+    uint y;
+    uint z;
 };
 
 struct Index128
@@ -194,6 +226,12 @@ struct SpritebatchVSOutput
     [[vk::location(2)]] uint instanceId : TEXCOORD1;
 };
 
+
+struct ClusterFrustum
+{
+    float4 planes[6]; // Left, Right, Bottom, Top, Near, Far
+};
+
 // BINDINGS
 
 [[vk::push_constant]]
@@ -204,13 +242,30 @@ BaseMatPush basePush;
 cbuffer cameraData : register(b0, space0)
 {
     float4x4 worldToView;
+    
     float4x4 projection;
+    
+    float4x4 invProjection;
+    
     float3 cameraPosition;
     float ambient;
+    
+    float2 screenSize;
+    float2 invScreenSize;
+    
     float vFov;
     float nearPlane;
     float farPlane;
     float aspectRatio;
+    
+    uint numLights;
+    uint clustersX;
+    uint clustersY;
+    uint clustersZ;
+    
+    float clusterNearK; // Logarithmic depth slice distribution factor
+    float clusterLogBase; // Base for logarithmic depth slicing (typically 1.1-2.0)
+    float2 padding; // Alignment padding
 };
 
 [[vk::binding(2, 0)]] StructuredBuffer<ModelTransform> modelMatrices : register(t0, space0);
@@ -221,7 +276,7 @@ cbuffer cameraData : register(b0, space0)
 [[vk::binding(3, 1)]] Texture2D textures[] : register(t1, space1);
 
 [[vk::binding(0, 2)]] StructuredBuffer<GPULight> lights : register(t1, space2);
-[[vk::binding(1, 2)]] RWStructuredBuffer<Index32> clusterLightCount : register(u0, space2);
+[[vk::binding(1, 2)]] RWStructuredBuffer<Index128> clusterLightCount : register(u0, space2);
 [[vk::binding(2, 2)]] RWStructuredBuffer<Index32> clusterLightIndices : register(u1, space2);
 
 [[vk::binding(0, 3)]] StructuredBuffer<SpriteInstance> spriteInstances : register(t0, space2);

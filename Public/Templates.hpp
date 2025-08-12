@@ -28,13 +28,14 @@ public:
         
         m_skyLight = m_reg.create();
         m_reg.emplace<TransformComponent>(m_skyLight, TransformComponent{});
-        auto dirLight = LightFactory::Directional(glm::normalize(glm::vec3{-1, -1, 0}));
+        auto dirLight = LightFactory::Directional(glm::vec3{-1, -1, 0});
+        dirLight.positionVS = glm::vec3{0, 20, 0};
         auto& lightRef = lightSystem().registerLight(dirLight, m_skyLight);
 
 
         m_go = gameObjectSystem().createGameObject<GameObject>(m_name);
         MeshDescription meshInfo{};
-        const std::string path = std::format("{}{}", ASSETS_DIR, "crytek-sponza-hd/sponza.obj"); //"Cube/cube.obj" //"crytek-sponza-hd/sponza.obj"
+        const std::string path = std::format("{}{}", ASSETS_DIR, "Cube/cube.obj"); //"Cube/cube.obj" //"crytek-sponza-hd/sponza.obj"
 
         Mesh modelMesh{};
         sceneRender().createMeshFromModel(path, &modelMesh, &m_go);

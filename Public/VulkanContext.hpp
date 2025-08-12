@@ -696,6 +696,26 @@ private:
 
 					rBind.handle = reinterpret_cast<uint64_t>(this);
 					layoutHandle = 0;
+
+					//for (size_t j = 0; j < VULKAN_FRAMES_IN_FLIGHT; j++) {
+
+					//	PendingWrite pw{};
+
+					//	pw.bufferInfo.buffer = lightsBuffer[j];
+					//	pw.bufferInfo.offset = 0;
+					//	pw.bufferInfo.range = VK_WHOLE_SIZE;
+
+					//	pw.write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+					//	pw.write.dstSet = reinterpret_cast<VkDescriptorSet>(j); //hacky workaround for init
+					//	pw.write.dstBinding = key.bindings[i];
+					//	pw.write.dstArrayElement = 0;
+					//	pw.write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+					//	pw.write.descriptorCount = 1;
+
+					//	pendingWrites.push_back(pw);
+					//	pendingWrites.back().write.pBufferInfo = &pendingWrites.back().bufferInfo;
+					//}
+
 					
 				} else if (set == MAT_CLUSTER_LIGHTCOUNT_SET && renderMan->getParamName(key.nameIndices[i]) == MAT_CLUSTER_LIGHTCOUNT_NAME) {
 					rBind.handle = reinterpret_cast<uint64_t>(this);
@@ -911,17 +931,8 @@ public:
 
 
 	///// DESCRIPTOR POOLS //////////////////////////////////////////////////
-	//constexpr static const size_t DESCPOOL_BASE_INDEX = 0;
-	//constexpr static const size_t DESCPOOL_INSTANCE_INDEX = 1;
-	//constexpr static const size_t DESCPOOL_TEXTURES_INDEX = 2;
 	std::array<VkDescriptorPool, 2> descriptorPoolsDefault{};
 	std::vector<VkDescriptorPool> descriptorPoolsDynamic;
-
-
-	//VkDescriptorPool currentDescPool = nullptr;
-
-
-
 
 	VkCommandPool commandPool = nullptr;
 	
@@ -964,13 +975,16 @@ public:
 	VkBuffer lightsClusterIndicesBuffer[VULKAN_FRAMES_IN_FLIGHT] = { nullptr, nullptr };
 	VkDeviceMemory lightsClusterIndicesMemory[VULKAN_FRAMES_IN_FLIGHT] = { nullptr, nullptr };
 
-	std::vector<Index32> lightsClusterCountData;
+	std::vector<Index128> lightsClusterCountData;
 	VkBuffer lightsClusterCountBuffer[VULKAN_FRAMES_IN_FLIGHT] = { nullptr, nullptr };
 	VkDeviceMemory lightsClusterCountMemory[VULKAN_FRAMES_IN_FLIGHT] = { nullptr, nullptr };
 
 	std::vector<GPULight> pendingLightUpdates;
 
-
+	VkPipelineLayout lightCluster_pipelineLayout;
+	VkPipeline lightCluster_pipeline;
+	std::array<std::vector<VkDescriptorSet>, VULKAN_FRAMES_IN_FLIGHT> lightCluster_descSets;
+	bool lightCluster_pipelineCreated = false;
 
 	uint32_t registerBaseMaterialInstance(const BaseMaterialInstance* const matInstance) {
 		auto index = matData_baseMatInstances.size();
@@ -1019,6 +1033,8 @@ public:
 	}
 
 	INLINE void registerNewLight(const GPULight& light) {
+
+
 		pendingLightUpdates.push_back(light);
 	}
 
@@ -1259,6 +1275,7 @@ public:
 		Vk_CHECK(vk, createDescriptorPool());
 		Vk_CHECK(vk, setupVertexBuffer());
 		Vk_CHECK(vk, createGlobalBuffers());
+		//Vk_CHECK(vk, createLightClusterPipeline());
 
 		isClean = false;
 
@@ -1311,7 +1328,190 @@ public:
 		return VK_SUCCESS;
 	}
 
-	inline VkResult createGlobalBuffers() {
+	INLINE VkResult createLightClusterPipeline(Shader* const lightCsShader) {
+		VkResult vkResult{};
+
+		std::vector< VkDescriptorSetLayoutBinding> lightsBindings;
+		lightsBindings.push_back({ MAT_GPULIGHTS_BIND, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1,
+					VK_SHADER_STAGE_COMPUTE_BIT, nullptr });
+		lightsBindings.push_back({ MAT_CLUSTER_LIGHTCOUNT_BIND, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1,
+					VK_SHADER_STAGE_COMPUTE_BIT, nullptr });
+		lightsBindings.push_back({ MAT_CLUSTER_LIGHTINDICES_BIND, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1,
+					VK_SHADER_STAGE_COMPUTE_BIT, nullptr });
+
+		VkDescriptorSetLayoutCreateInfo dslCI_lights{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
+		dslCI_lights.bindingCount = (uint32_t)lightsBindings.size();
+		dslCI_lights.pBindings = lightsBindings.data();
+
+		VkDescriptorSetLayout setLayoutLights;
+		Vk_CHECK(vkResult, vkCreateDescriptorSetLayout(m_vkDevice, &dslCI_lights, nullptr, &setLayoutLights));
+
+
+
+		VkDescriptorSetLayoutCreateInfo emptyCI{ VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO };
+		emptyCI.bindingCount = 0;
+		emptyCI.pBindings = nullptr;
+
+		VkDescriptorSetLayout emptySet1;
+		vkCreateDescriptorSetLayout(m_vkDevice, &emptyCI, nullptr, &emptySet1);
+
+
+
+		std::vector<VkDescriptorSetLayoutBinding> camBindings;
+		camBindings.push_back({ MAT_CAMERADATA_BIND, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1,
+					VK_SHADER_STAGE_COMPUTE_BIT, nullptr });
+
+		VkDescriptorSetLayoutCreateInfo dslCI_cam{ VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO };
+		dslCI_cam.bindingCount = (uint32_t)camBindings.size();
+		dslCI_cam.pBindings = camBindings.data();
+
+		VkDescriptorSetLayout setLayoutCam;
+		Vk_CHECK(vkResult, vkCreateDescriptorSetLayout(m_vkDevice, &dslCI_cam, nullptr, &setLayoutCam));
+
+		std::array<VkDescriptorSetLayout, 3> setLayouts{ setLayoutCam, emptySet1, setLayoutLights };
+
+		VkPipelineLayoutCreateInfo plCI{ VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO };
+		plCI.setLayoutCount = (uint32_t)setLayouts.size();
+		plCI.pSetLayouts = setLayouts.data();
+
+		VkPipelineLayout pipelineLayout;
+		Vk_CHECK(vkResult, vkCreatePipelineLayout(m_vkDevice, &plCI, nullptr, &pipelineLayout));
+		lightCluster_pipelineLayout = pipelineLayout;
+
+
+
+
+		VkShaderModule csModule{};
+		VkShaderModuleCreateInfo createInfo{};
+		createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+		createInfo.codeSize = lightCsShader->bytecode.size() * sizeof(uint32_t);
+		createInfo.pCode = lightCsShader->bytecode.data();
+		Vk_CHECK(vkResult, vkCreateShaderModule(m_vkDevice, &createInfo, nullptr, &csModule));
+
+
+		VkPipelineShaderStageCreateInfo stageCI{};
+		stageCI.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+		stageCI.stage = VK_SHADER_STAGE_COMPUTE_BIT;
+		stageCI.module = csModule;
+		stageCI.pName = lightCsShader->entryPoint.c_str();
+
+		VkComputePipelineCreateInfo cpCI{
+			VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO
+		};
+		cpCI.stage = stageCI;
+		cpCI.layout = pipelineLayout;
+
+		VkPipeline computePipeline;
+		Vk_CHECK(vkResult, vkCreateComputePipelines(m_vkDevice, VK_NULL_HANDLE, 1, &cpCI, nullptr, &computePipeline));
+		lightCluster_pipeline = computePipeline;
+
+		for (size_t i = 0; i < VULKAN_FRAMES_IN_FLIGHT; ++i) {
+			VkDescriptorSetAllocateInfo allocInfo1{ VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO };
+			allocInfo1.descriptorPool = descriptorPoolsDynamic.back();
+			allocInfo1.descriptorSetCount = 1;
+			allocInfo1.pSetLayouts = &setLayouts[0];
+			VkDescriptorSet descSet1;
+			Vk_CHECK(vkResult, vkAllocateDescriptorSets(m_vkDevice, &allocInfo1, &descSet1));
+
+			VkDescriptorSetAllocateInfo allocInfo2{ VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO };
+			allocInfo2.descriptorPool = descriptorPoolsDynamic.back();
+			allocInfo2.descriptorSetCount = 1;
+			allocInfo2.pSetLayouts = &setLayouts[1];
+			VkDescriptorSet descSet2;
+			Vk_CHECK(vkResult, vkAllocateDescriptorSets(m_vkDevice, &allocInfo2, &descSet2));
+
+			VkDescriptorSetAllocateInfo allocInfo3{ VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO };
+			allocInfo3.descriptorPool = descriptorPoolsDynamic.back();
+			allocInfo3.descriptorSetCount = 1;
+			allocInfo3.pSetLayouts = &setLayouts[2];
+			VkDescriptorSet descSet3;
+			Vk_CHECK(vkResult, vkAllocateDescriptorSets(m_vkDevice, &allocInfo3, &descSet3));
+
+
+
+			lightCluster_descSets[i].push_back(descSet1);
+			lightCluster_descSets[i].push_back(descSet2);
+			lightCluster_descSets[i].push_back(descSet3);
+
+
+
+			VkDescriptorBufferInfo buffInfo1{};
+			buffInfo1.buffer = camDataBuffer[i];
+			buffInfo1.offset = 0;
+			buffInfo1.range = sizeof(CameraData);
+
+			VkWriteDescriptorSet write1{};
+			write1.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+			write1.dstSet = lightCluster_descSets[i][0];
+			write1.dstBinding = MAT_CAMERADATA_BIND;
+			write1.dstArrayElement = 0;
+			write1.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+			write1.descriptorCount = 1;
+			write1.pNext = nullptr;
+			write1.pBufferInfo = &buffInfo1;
+
+
+
+			VkDescriptorBufferInfo buffInfo2{};
+			buffInfo2.buffer = lightsBuffer[i];
+			buffInfo2.offset = 0;
+			buffInfo2.range = VK_WHOLE_SIZE;
+
+			VkWriteDescriptorSet write2{};
+			write2.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+			write2.dstSet = lightCluster_descSets[i][2];
+			write2.dstBinding = MAT_GPULIGHTS_BIND;
+			write2.dstArrayElement = 0;
+			write2.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+			write2.descriptorCount = 1;
+			write2.pNext = nullptr;
+			write2.pBufferInfo = &buffInfo2;
+
+
+
+			VkDescriptorBufferInfo buffInfo3{};
+			buffInfo3.buffer = lightsClusterCountBuffer[i];
+			buffInfo3.offset = 0;
+			buffInfo3.range = VK_WHOLE_SIZE;
+
+			VkWriteDescriptorSet write3{};
+			write3.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+			write3.dstSet = lightCluster_descSets[i][2];
+			write3.dstBinding = MAT_CLUSTER_LIGHTCOUNT_BIND;
+			write3.dstArrayElement = 0;
+			write3.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+			write3.descriptorCount = 1;
+			write3.pNext = nullptr;
+			write3.pBufferInfo = &buffInfo3;
+
+
+
+			VkDescriptorBufferInfo buffInfo4{};
+			buffInfo4.buffer = lightsClusterIndicesBuffer[i];
+			buffInfo4.offset = 0;
+			buffInfo4.range = VK_WHOLE_SIZE;
+
+			VkWriteDescriptorSet write4{};
+			write4.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+			write4.dstSet = lightCluster_descSets[i][2];
+			write4.dstBinding = MAT_CLUSTER_LIGHTINDICES_BIND;
+			write4.dstArrayElement = 0;
+			write4.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+			write4.descriptorCount = 1;
+			write4.pNext = nullptr;
+			write4.pBufferInfo = &buffInfo4;
+
+			std::vector<VkWriteDescriptorSet> writes{ write1, write2, write3, write4 };
+
+			vkUpdateDescriptorSets(m_vkDevice, (uint32_t)writes.size(), writes.data(), 0, nullptr);
+		}
+
+		lightCluster_pipelineCreated = true;
+
+		return VK_SUCCESS;
+	}
+
+	INLINE VkResult createGlobalBuffers() {
 		VkResult vkResult;
 		LOGLINE(LogType::Info, LogMod::Vulkan, "Creating and binding global buffers... ");
 
@@ -1381,6 +1581,52 @@ public:
 
 			Vk_CHECK(vkResult, vkAllocateMemory(m_vkDevice, &indexAllocInfo, nullptr, &instanceIndexStageMemory[i]));
 			Vk_CHECK(vkResult, vkBindBufferMemory(m_vkDevice, instanceIndexStageBuffer[i], instanceIndexStageMemory[i], 0));
+
+
+
+
+
+
+			// Lights buffers
+			uint32_t maxClusters = VULKAN_LIGHT_CLUSTERS_X * VULKAN_LIGHT_CLUSTERS_Y * VULKAN_LIGHT_CLUSTERS_Z;
+
+			VkBufferCreateInfo lightsCountBufferInfo{};
+			lightsCountBufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+			lightsCountBufferInfo.size = sizeof(Index128) * maxClusters;
+			lightsCountBufferInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+			lightsCountBufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+			Vk_CHECK(vkResult, vkCreateBuffer(m_vkDevice, &lightsCountBufferInfo, nullptr, &lightsClusterCountBuffer[i]));
+
+			vkGetBufferMemoryRequirements(m_vkDevice, lightsClusterCountBuffer[i], &memRequirements);
+
+			VkMemoryAllocateInfo lCountsAllocInfo{};
+			lCountsAllocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+			lCountsAllocInfo.allocationSize = memRequirements.size;
+			lCountsAllocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits,
+															  VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+															m_phyDevice);
+			Vk_CHECK(vkResult, vkAllocateMemory(m_vkDevice, &lCountsAllocInfo, nullptr, &lightsClusterCountMemory[i]));
+			Vk_CHECK(vkResult, vkBindBufferMemory(m_vkDevice, lightsClusterCountBuffer[i], lightsClusterCountMemory[i], 0));
+
+
+
+			VkBufferCreateInfo lightsIndicesBufferInfo{};
+			lightsIndicesBufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+			lightsIndicesBufferInfo.size = sizeof(uint32_t) * maxClusters;
+			lightsIndicesBufferInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+			lightsIndicesBufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+			Vk_CHECK(vkResult, vkCreateBuffer(m_vkDevice, &lightsCountBufferInfo, nullptr, &lightsClusterIndicesBuffer[i]));
+
+			vkGetBufferMemoryRequirements(m_vkDevice, lightsClusterIndicesBuffer[i], &memRequirements);
+
+			VkMemoryAllocateInfo lIndexAllocInfo{};
+			lIndexAllocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+			lIndexAllocInfo.allocationSize = memRequirements.size;
+			lIndexAllocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits,
+															  VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+															  m_phyDevice);
+			Vk_CHECK(vkResult, vkAllocateMemory(m_vkDevice, &lIndexAllocInfo, nullptr, &lightsClusterIndicesMemory[i]));
+			Vk_CHECK(vkResult, vkBindBufferMemory(m_vkDevice, lightsClusterIndicesBuffer[i], lightsClusterIndicesMemory[i], 0));
 
 		}
 
@@ -1642,12 +1888,17 @@ public:
 		queueCreateInfo.queueCount = 1;
 		queueCreateInfo.pQueuePriorities = &queuePriority;
 
+		VkPhysicalDeviceVulkan12Features v12{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES };
+		v12.scalarBlockLayout = VK_TRUE;
+
 		VkPhysicalDeviceDescriptorIndexingFeatures indexingFeatures{};
 		indexingFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;
 		indexingFeatures.runtimeDescriptorArray = VK_TRUE;
 		indexingFeatures.shaderSampledImageArrayNonUniformIndexing = VK_TRUE;
 		indexingFeatures.descriptorBindingPartiallyBound = VK_TRUE;
 		indexingFeatures.descriptorBindingVariableDescriptorCount = VK_TRUE;
+		indexingFeatures.pNext = &v12;
+
 
 		VkPhysicalDeviceVulkan13Features features13{};
 		features13.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
@@ -2773,7 +3024,7 @@ public:
 	}
 
 
-	void preDraw();
+	void preDraw(RenderManager* const renderMan);
 	void postDraw();
 };
 #pragma warning(pop)

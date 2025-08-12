@@ -134,8 +134,8 @@ ErrorCode AssetLoader::loadModel(
 Material& AssetLoader::createMaterial(const aiMaterial* aiMat) {
 	std::string matName = aiMat->GetName().C_Str();
 	LOGLINE(LogType::Info, LogMod::Assets, std::format("Creating material {}... ", matName));
-	auto* baseVs = Engine::getInstance()->getRenderManager()->getShader(MAT_BASE_VS);
-	auto* basePs = Engine::getInstance()->getRenderManager()->getShader(MAT_BASE_PS);	
+	auto* baseVs = Engine::getInstance()->getRenderManager()->getShader(SHADER_BASE_VS);
+	auto* basePs = Engine::getInstance()->getRenderManager()->getShader(SHADER_BASE_PS);	
 	auto& mat = Material::createMaterial(matName, *baseVs, *basePs );
 	//mat.createInstance();
 	LOG(LogType::Success, "Done.");

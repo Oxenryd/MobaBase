@@ -240,6 +240,7 @@ ErrorCode DxcWin32VulkanShaderCompiler::compile(Shader& shader) {
 	std::stringstream cmd;
 	cmd << dxcDir.string() << "/dxc.exe";
 	cmd << " -spirv -fspv-target-env=vulkan1.3";
+	cmd << " -fvk-use-dx-layout";
 	cmd << " -T " << target;
 	cmd << " -E main";
 	//cmd << " -O0"; // debug
@@ -249,6 +250,7 @@ ErrorCode DxcWin32VulkanShaderCompiler::compile(Shader& shader) {
 	//cmd << " -D USE_VULKAN";
 	cmd << " " << shader.sourcePath.string();
 	
+	//-fvk-use-dx-layout
 
 	ErrorCode EC{};
 	std::string cmpError{};

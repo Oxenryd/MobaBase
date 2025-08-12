@@ -89,7 +89,12 @@ public:
             );
             m_camData.proj[1][1] *= -1;
 
-
+            m_camData.invProj = glm::mat4(0.0f);
+            m_camData.invProj[0][0] = 1.0f / m_camData.proj[0][0];
+            m_camData.invProj[1][1] = 1.0f / m_camData.proj[1][1];
+            m_camData.invProj[2][3] = 1.0f;
+            m_camData.invProj[3][2] = 1.0f / m_camData.proj[2][3];
+            m_camData.invProj[3][3] = -m_camData.proj[2][2] / m_camData.proj[2][3];
             m_projDirty = false;
         }
         return m_camData.proj;
@@ -114,7 +119,9 @@ public:
     INLINE glm::mat4 viewProjection() {
         return projection() * worldToView();
     }
-
+    INLINE glm::mat4& inverseProjection() const {
+        return const_cast<glm::mat4&>(m_camData.invProj);
+    }
 
     INLINE void setFOV(float fov) {
         m_camData.vFov = fov;

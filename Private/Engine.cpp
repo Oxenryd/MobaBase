@@ -138,13 +138,14 @@ ErrorCode Engine::_initBaseShaders() {
 	}
 
 	// Create Base Materials
-	auto* baseVs = getRenderManager()->getShader(MAT_BASE_VS);
-	auto* basePs = getRenderManager()->getShader(MAT_BASE_PS);
+	auto* baseVs = getRenderManager()->getShader(SHADER_BASE_VS);
+	auto* basePs = getRenderManager()->getShader(SHADER_BASE_PS);
 	auto& baseMat = Material::createMaterial("BaseMaterialUnlit", *baseVs, *basePs);//Material{ "BaseMaterialUnlit", *baseVs, *basePs };
 	baseMat.createInstance();
 	m_vkCtx->createPipelineFromMaterial(m_renderMan, baseMat);
 	std::cout << "\n";
 	baseMat.debugPrintMaterialInfo();
+
 
 	//auto* spriteVs = getRenderManager()->getShader("SpriteBatchVS");
 	//auto* spritePs = getRenderManager()->getShader("SpriteBatchPS");
@@ -279,7 +280,7 @@ inline void Engine::_run() {
 		VulkanContext::RenderContext drawCtx{};	
 		drawCtx.frameCount = m_totalFrames;
 
-		m_vkCtx->preDraw();
+		m_vkCtx->preDraw(getRenderManager());
 		m_vkCtx->draw(static_cast<void*>(&drawCtx));
 		m_vkCtx->postDraw();
 		m_framesSinceLastFpsRead++;

@@ -239,30 +239,49 @@ public:
 	uint32_t* data() { return &m_value; }
 };
 
+
+struct Index64
+{
+	uint32_t x;
+	uint32_t y;
+};
+
+struct Index96
+{
+	uint32_t x;
+	uint32_t y;
+	uint32_t z;
+};
+
 struct Index128
 {
-private:
-	Index32 m_value[4];
-public:
-
+	union
+	{
+		Index32 value[4];
+		struct
+		{
+			uint32_t x, y, z, w;
+		};
+	};
+	
 	Index128(const Index128& value) {
-		std::memcpy(&m_value, &value.m_value, 4 * sizeof(Index32));
+		std::memcpy(&this->value, &value.value, 4 * sizeof(Index32));
 	}
 
 	Index128& operator=(const Index128& other) {
-		std::memcpy(&m_value, &other.m_value, 4 * sizeof(Index32));
+		std::memcpy(&value, &other.value, 4 * sizeof(Index32));
 		return *this;
 	}
 	Index128(const uint32_t* value) {
-		std::memcpy(&m_value, value, 4 * sizeof(Index32));
+		std::memcpy(&this->value, value, 4 * sizeof(Index32));
 	}
 	Index128& operator=(const uint32_t* other) {
-		std::memcpy(&m_value, other, 4 * sizeof(Index32));
+		std::memcpy(&value, other, 4 * sizeof(Index32));
 		return *this;
 	}
 
 
-	uint32_t* data() { return reinterpret_cast<uint32_t*>(&m_value); }
+	uint32_t* data() { return reinterpret_cast<uint32_t*>(&value); }
 };
 
 
@@ -336,17 +355,37 @@ struct CameraData
 		);
 		proj[1][1] *= -1;
 
+		clustersX = VULKAN_LIGHT_CLUSTERS_X;
+		clustersY = VULKAN_LIGHT_CLUSTERS_Y;
+		clustersZ = VULKAN_LIGHT_CLUSTERS_Z;
+
 	}
 	CameraData(const CameraData& other) = default;
 
 	alignas (16) glm::mat4x4 view;
+
 	alignas (16) glm::mat4x4 proj;
+
+	alignas (16) glm::mat4x4 invProj;
+
 	glm::vec3 cameraPosition;
 	float ambient;
+
+	glm::vec2 screenSize;
+	glm::vec2 invScreenSize;
+
 	float vFov;
 	float nearPlane;
 	float farPlane;
 	float aspectRatio;
+
+	uint32_t numLights;
+	uint32_t clustersX, clustersY, clustersZ;
+
+	float clusterNearK;
+	float clusterLogBase;
+	float _pad0;
+	float _pad1;
 };
 
 struct alignas (16) SpriteInstance

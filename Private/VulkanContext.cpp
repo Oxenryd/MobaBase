@@ -94,14 +94,36 @@ void VulkanContext::draw(void* rendCtx) {
 
 
 	// Camera
-	const auto mainCam = Engine::getInstance()->mainCamera();
+	auto mainCam = Engine::getInstance()->mainCamera();
+	auto& camData = mainCam->cameraData();
+	camData.numLights = static_cast<uint32_t>(lightsData.size());
+	camData.screenSize = { viewport.width, viewport.height };
+	camData.invScreenSize = { 1.0f / camData.screenSize.x, 1.0f / camData.screenSize.y };
+	camData.clustersX = VULKAN_LIGHT_CLUSTERS_X;
+	camData.clustersY = VULKAN_LIGHT_CLUSTERS_Y;
+	camData.clustersZ = VULKAN_LIGHT_CLUSTERS_Z;
 	Frustum f = mainCam->getFrustumSIMD();
 
 	// Update CameraData cBuffer
 	void* mappedData = nullptr;
 	vkMapMemory(m_vkDevice, camDataMemory[currentFrame], 0, sizeof(CameraData), 0, &mappedData);
-	memcpy(mappedData, &mainCam->cameraData(), sizeof(CameraData));
+	memcpy(mappedData, &camData, sizeof(CameraData));
 	vkUnmapMemory(m_vkDevice, camDataMemory[currentFrame]);
+
+
+	// Dispatch light cluster CS
+	vkCmdBindPipeline(frame.cmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, lightCluster_pipeline);
+	vkCmdBindDescriptorSets(frame.cmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE,
+							lightCluster_pipelineLayout, 0, 1, &lightCluster_descSets[currentFrame][0],
+							0, nullptr);
+
+	vkCmdBindDescriptorSets(frame.cmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE,
+							lightCluster_pipelineLayout, 2, 1, &lightCluster_descSets[currentFrame][2],
+							0, nullptr);
+	vkCmdDispatch(frame.cmdBuffer,
+				  VULKAN_LIGHT_CLUSTER_THREADS_X,
+				  VULKAN_LIGHT_CLUSTER_THREADS_Y,
+				  VULKAN_LIGHT_CLUSTER_THREADS_Z);
 
 
 	// Check the draw commands and issue binds and draw calls
@@ -236,7 +258,7 @@ void VulkanContext::draw(void* rendCtx) {
 	currentFrame = (currentFrame + 1) % VULKAN_FRAMES_IN_FLIGHT;
 }
 
-void VulkanContext::preDraw() {
+void VulkanContext::preDraw(RenderManager* const renderMan) {
 
 	
 
@@ -248,6 +270,12 @@ void VulkanContext::preDraw() {
 
 	if (!pendingLightUpdates.empty())
 		updateLightsData();
+
+	if (!lightCluster_pipelineCreated) {
+		auto* lightClusterCs = renderMan->getShader(SHADER_BASE_LIGHTCLUSTER_CS);
+		createLightClusterPipeline(lightClusterCs);
+	}
+
 
 	// Reset stuff
 	pendingLightUpdates.clear();
