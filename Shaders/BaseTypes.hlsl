@@ -21,16 +21,13 @@ static const uint ShadowType_PointCube = 3;
 struct GPULight
 {
     // 0..15
-    float3 positionVS;
-    float radius;
+    float4 posVS_radius;
 
     // 16..31
-    float3 directionVS;
-    float spotInnerCos;
+    float4 dirVS_spotInnerCos;
 
     // 32..47
-    float3 color;
-    float intensity;
+    float4 color_intensity;
 
     // 48..63
     uint type;
@@ -55,6 +52,7 @@ struct GPULight
     uint shadowLayerCount;
     uint _reserved1;
     uint _reserved2;
+    
 };
 
 
@@ -247,11 +245,9 @@ cbuffer cameraData : register(b0, space0)
     
     float4x4 invProjection;
     
-    float3 cameraPosition;
-    float ambient;
-    
-    float2 screenSize;
-    float2 invScreenSize;
+    float4 camPos_amb;
+
+    float4 screenSizes;
     
     float vFov;
     float nearPlane;
@@ -291,10 +287,10 @@ cbuffer cameraData : register(b0, space0)
 
 float4 RetainGlobals()
 {
-    float dummy = cameraPosition.x * basePush.boneOffset;
+    float dummy = camPos_amb.x * basePush.boneOffset;
     if (dummy == -9999999.0)
     {
-        float4 dummy2 = dummy.xxxx + textures[0].SampleLevel(smp, float2(0, 0), 0.0) * lights[clusterLightCount[0].x].color.rrgb;
+        float4 dummy2 = dummy.xxxx + textures[0].SampleLevel(smp, float2(0, 0), 0.0) * lights[clusterLightCount[0].x].color_intensity.rrgb;
         float4 dummy3 = dummy2 + baseMatInstances[0].ambient.xyzx * clusterLightIndices[0].x;
         float4 dummy4 = mul(dummy3, modelMatrices[instanceData[0].matrixIndex].modelToWorld);
         return (float4) dummy4;

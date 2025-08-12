@@ -35,22 +35,6 @@ void VulkanContext::draw(void* rendCtx) {
 	vkResetCommandBuffer(frame.cmdBuffer, 0);
 	recordCommandBuffer(frame.cmdBuffer, currentFrame);
 
-	// Begin Render Pass
-	VkClearValue clearValues[2] = {};
-	clearValues[0].color = { ctx->clearColor[0], ctx->clearColor[1], ctx->clearColor[2], ctx->clearColor[3] };
-	clearValues[1].depthStencil = { 1.0f, 0 };
-
-
-	VkRenderPassBeginInfo renderPassInfo{};
-	renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-	renderPassInfo.renderPass = rendPasses[ctx->renderPassIndex];
-	renderPassInfo.framebuffer = swapChainFramebuffers[imageIndex];
-	renderPassInfo.renderArea.offset = { 0, 0 };
-	renderPassInfo.renderArea.extent = swapchainExtent;
-	renderPassInfo.clearValueCount = 2;
-	renderPassInfo.pClearValues = clearValues;
-	vkCmdBeginRenderPass(frame.cmdBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
-
 	// Set Dynamic state
 	VkViewport viewport{};
 	viewport.x = ctx->vPortPos[0];
@@ -66,6 +50,114 @@ void VulkanContext::draw(void* rendCtx) {
 	scissor.extent = swapchainExtent;
 	vkCmdSetScissor(frame.cmdBuffer, 0, 1, &scissor);
 
+	// Camera
+	auto mainCam = Engine::getInstance()->mainCamera();
+	auto& camData = mainCam->cameraData();
+	camData.numLights = static_cast<uint32_t>(lightsData.size());
+	camData.screenSize = { viewport.width, viewport.height };
+	camData.invScreenSize = { 1.0f / camData.screenSize.x, 1.0f / camData.screenSize.y };
+	camData.clustersX = VULKAN_LIGHT_CLUSTERS_X;
+	camData.clustersY = VULKAN_LIGHT_CLUSTERS_Y;
+	camData.clustersZ = VULKAN_LIGHT_CLUSTERS_Z;
+	Frustum f = mainCam->getFrustumSIMD();
+
+	// Update CameraData cBuffer
+	void* mappedData = nullptr;
+	vkMapMemory(m_vkDevice, camDataMemory[currentFrame], 0, sizeof(CameraData), 0, &mappedData);
+	memcpy(mappedData, &camData, sizeof(CameraData));
+	vkUnmapMemory(m_vkDevice, camDataMemory[currentFrame]);
+
+
+	// Dispatch light cluster CS
+	vkCmdBindPipeline(frame.cmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, lightCluster_pipeline);
+	vkCmdBindDescriptorSets(frame.cmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE,
+							lightCluster_pipelineLayout, 0, 3, lightCluster_descSets[currentFrame].data(),
+							0, nullptr);
+
+	// Compute proper group counts from clusters and shader local size
+	constexpr uint32_t LOCAL_X = VULKAN_LIGHT_CLUSTER_THREADS_X; // matches [numthreads(…)]
+	constexpr uint32_t LOCAL_Y = VULKAN_LIGHT_CLUSTER_THREADS_Y;
+	constexpr uint32_t LOCAL_Z = VULKAN_LIGHT_CLUSTER_THREADS_Z;
+	auto ceilDiv = [](uint32_t a, uint32_t b) { return (a + b - 1) / b; };
+
+	const uint32_t groupsX = ceilDiv(camData.clustersX, LOCAL_X);
+	const uint32_t groupsY = ceilDiv(camData.clustersY, LOCAL_Y);
+	const uint32_t groupsZ = ceilDiv(camData.clustersZ, LOCAL_Z);
+
+	vkCmdDispatch(frame.cmdBuffer, VULKAN_LIGHT_CLUSTERS_X, VULKAN_LIGHT_CLUSTERS_Y, VULKAN_LIGHT_CLUSTERS_Z);
+
+	// Barrier: make compute writes visible to graphics reads
+#if VK_HEADER_VERSION >= 230  // assuming you have 1.3 / sync2
+	VkMemoryBarrier2 memBarrier{ VK_STRUCTURE_TYPE_MEMORY_BARRIER_2 };
+	memBarrier.srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
+	memBarrier.srcAccessMask = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT; // writes in CS
+	memBarrier.dstStageMask = VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
+	memBarrier.dstAccessMask = VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_UNIFORM_READ_BIT;
+
+	VkDependencyInfo dep{ VK_STRUCTURE_TYPE_DEPENDENCY_INFO };
+	dep.memoryBarrierCount = 1;
+	dep.pMemoryBarriers = &memBarrier;
+
+	vkCmdPipelineBarrier2(frame.cmdBuffer, &dep);
+#else
+	VkMemoryBarrier mem{};
+	mem.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+	mem.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+	mem.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_UNIFORM_READ_BIT;
+
+	vkCmdPipelineBarrier(
+		cmd,
+		VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+		VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+		0,
+		1, &mem,
+		0, nullptr,
+		0, nullptr);
+#endif
+
+
+
+
+	//// In updateLightsData(), after vkBindBufferMemory
+	//void* mappedData2 = nullptr;
+	//vkMapMemory(m_vkDevice, lightsMemory[currentFrame], 0, sizeof(GPULight) * lightsData.size(), 0, &mappedData2);
+	//memcpy(mappedData2, lightsData.data(), sizeof(GPULight) * lightsData.size());
+	//vkUnmapMemory(m_vkDevice, lightsMemory[currentFrame]);
+	//// DEBUG: Verify the data
+	//GPULight* uploadedLights = (GPULight*)mappedData2;
+	//for (size_t j = 0; j < lightsData.size(); j++) {
+	//	printf("Light %zu: type=%d, pos=(%f,%f,%f) flags:%zu\n", j, uploadedLights[j].type,
+	//		   uploadedLights[j].positionVS.x, uploadedLights[j].positionVS.y, uploadedLights[j].positionVS.z,
+	//		   uploadedLights[j].flags);
+	//}
+
+	
+
+
+
+
+
+
+
+
+
+
+
+
+	// Begin Render Pass
+	VkClearValue clearValues[2] = {};
+	clearValues[0].color = { ctx->clearColor[0], ctx->clearColor[1], ctx->clearColor[2], ctx->clearColor[3] };
+	clearValues[1].depthStencil = { 1.0f, 0 };
+
+	VkRenderPassBeginInfo renderPassInfo{};
+	renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+	renderPassInfo.renderPass = rendPasses[ctx->renderPassIndex];
+	renderPassInfo.framebuffer = swapChainFramebuffers[imageIndex];
+	renderPassInfo.renderArea.offset = { 0, 0 };
+	renderPassInfo.renderArea.extent = swapchainExtent;
+	renderPassInfo.clearValueCount = 2;
+	renderPassInfo.pClearValues = clearValues;
+	vkCmdBeginRenderPass(frame.cmdBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
 	// bind vertex buffer
 	VkDeviceSize offsets[] = { 0 };
@@ -91,39 +183,6 @@ void VulkanContext::draw(void* rendCtx) {
 	size_t firstSet = 0;
 	size_t setCount = 0;
 	bool pendingRebind = false;
-
-
-	// Camera
-	auto mainCam = Engine::getInstance()->mainCamera();
-	auto& camData = mainCam->cameraData();
-	camData.numLights = static_cast<uint32_t>(lightsData.size());
-	camData.screenSize = { viewport.width, viewport.height };
-	camData.invScreenSize = { 1.0f / camData.screenSize.x, 1.0f / camData.screenSize.y };
-	camData.clustersX = VULKAN_LIGHT_CLUSTERS_X;
-	camData.clustersY = VULKAN_LIGHT_CLUSTERS_Y;
-	camData.clustersZ = VULKAN_LIGHT_CLUSTERS_Z;
-	Frustum f = mainCam->getFrustumSIMD();
-
-	// Update CameraData cBuffer
-	void* mappedData = nullptr;
-	vkMapMemory(m_vkDevice, camDataMemory[currentFrame], 0, sizeof(CameraData), 0, &mappedData);
-	memcpy(mappedData, &camData, sizeof(CameraData));
-	vkUnmapMemory(m_vkDevice, camDataMemory[currentFrame]);
-
-
-	// Dispatch light cluster CS
-	vkCmdBindPipeline(frame.cmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, lightCluster_pipeline);
-	vkCmdBindDescriptorSets(frame.cmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE,
-							lightCluster_pipelineLayout, 0, 1, &lightCluster_descSets[currentFrame][0],
-							0, nullptr);
-
-	vkCmdBindDescriptorSets(frame.cmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE,
-							lightCluster_pipelineLayout, 2, 1, &lightCluster_descSets[currentFrame][2],
-							0, nullptr);
-	vkCmdDispatch(frame.cmdBuffer,
-				  VULKAN_LIGHT_CLUSTER_THREADS_X,
-				  VULKAN_LIGHT_CLUSTER_THREADS_Y,
-				  VULKAN_LIGHT_CLUSTER_THREADS_Z);
 
 
 	// Check the draw commands and issue binds and draw calls

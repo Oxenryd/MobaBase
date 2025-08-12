@@ -11,7 +11,7 @@
 float4 main(BasePSIn input) : SV_Target
 {
 
-	
+    float ambient = camPos_amb.w;
     uint matIndex = basePush.matInstanceIndex != UINT_INVALID ? basePush.matInstanceIndex : 0;
     BaseMaterialInstance M = baseMatInstances[matIndex];
     
@@ -38,20 +38,12 @@ float4 main(BasePSIn input) : SV_Target
 	
 	
 	// Forward+ cluster lookup
-    float2 screenSize = float2(screenSize.x, screenSize.y);
+    float2 screenSize = screenSizes.xy;
     uint3 cid = ComputeClusterCoord(input.pos.xy, /*zVS=*/-mul(worldToView, float4(Pw, 1)).z,
                                     screenSize, clustersX, clustersY, clustersZ, nearPlane, farPlane);
     uint clusterIndex = ComputeClusterIndex(cid, clustersX, clustersY);
-	
-	
-    float maxCluster = clustersX * clustersY * clustersZ;
-	
+		
     
-    float2 testUV = input.pos.xy / screenSize;
-    return float4(testUV, 0, 1) + RetainGlobals();
-	
-    return float4((float) clusterIndex, (float) clusterIndex, (float) clusterIndex, 1) + RetainGlobals();
-	
 	// Per-type counts for this cluster (dir, point, spot, unused)
     Index128 counts = clusterLightCount[clusterIndex]; // Index128: x=dir, y=point, z=spot
 	
@@ -61,9 +53,7 @@ float4 main(BasePSIn input) : SV_Target
     uint dirCount = counts.x;
     uint pointCount = counts.y;
     uint spotCount = counts.z;
-	
-    return float4((float) counts.x, (float) counts.y, (float) counts.z, 1.0f) + RetainGlobals();
-	
+	        	
 	// Material terms for Phong
     PhongTerms T;
     T.N = N;
@@ -80,10 +70,7 @@ float4 main(BasePSIn input) : SV_Target
     {
         uint li = clusterLightIndices[baseOff + i].x;
         GPULight L = lights[li];
-        color += ShadeDirectional(L, T);
-        
-		
-		color = float3(1, 0, 0); // DEBUG!!
+        color += ShadeDirectional(L, T, worldToView);
     }
 	
     return float4(color, alpha) + RetainGlobals();

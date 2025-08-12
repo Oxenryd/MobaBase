@@ -41,21 +41,24 @@ float SpotAngularAtten(float3 Ldir, float3 toP, float innerCos, float outerCos)
     return a;
 }
 
-float3 ShadeDirectional(const GPULight Lgt, PhongTerms T)
+float3 ShadeDirectional(const GPULight Lgt, PhongTerms T, const float4x4 wtv)
 {
-    float3 L = normalize(-Lgt.directionVS); // light dir towards surface
+    float3 worldLightDir = Lgt.dirVS_spotInnerCos.rgb; // Actually world space now
+    float3 viewLightDir = mul((float3x3) wtv, worldLightDir);
+    
+    float3 L = normalize(-viewLightDir); // light dir towards surface
     float NdotL = saturate(dot(T.N, L));
     float3 H = normalize(L + T.V);
     float NdotH = saturate(dot(T.N, H));
     float spec = (T.specularStrength > 0.0 && T.shininess > 0.0) ? pow(NdotH, T.shininess) : 0.0;
     float3 diff = T.baseColor * NdotL;
     float3 specCol = T.specularColor * spec;
-    return (diff + specCol) * (Lgt.color * Lgt.intensity);
+    return (diff + specCol) * (Lgt.color_intensity.rgb * Lgt.color_intensity.w);
 }
 
 float3 ShadePoint(const GPULight Lgt, float3 Pvs, PhongTerms T)
 {
-    float3 Lvec = Lgt.positionVS.xyz - Pvs;
+    float3 Lvec = Lgt.posVS_radius.xyz - Pvs;
     float d = length(Lvec);
     if (d <= 1e-4)
         return 0.xxx;
@@ -73,12 +76,12 @@ float3 ShadePoint(const GPULight Lgt, float3 Pvs, PhongTerms T)
     float3 diff = T.baseColor * NdotL;
     float3 specCol = T.specularColor * spec;
 
-    return (diff + specCol) * (Lgt.color * Lgt.intensity) * atten;
+    return (diff + specCol) * (Lgt.color_intensity.rgb * Lgt.color_intensity.a) * atten;
 }
 
 float3 ShadeSpot(const GPULight Lgt, float3 Pvs, PhongTerms T)
 {
-    float3 toP = Pvs - Lgt.positionVS.xyz; // from light to point (view space)
+    float3 toP = Pvs - Lgt.posVS_radius.xyz; // from light to point (view space)
     float d = length(toP);
     if (d <= 1e-4)
         return 0.xxx;
@@ -89,7 +92,7 @@ float3 ShadeSpot(const GPULight Lgt, float3 Pvs, PhongTerms T)
         return 0.xxx;
 
     // Angular attenuation
-    float ang = SpotAngularAtten(Lgt.directionVS, -toP, Lgt.spotInnerCos, Lgt.spotOuterCos);
+    float ang = SpotAngularAtten(Lgt.posVS_radius.xyz, -toP, Lgt.dirVS_spotInnerCos.a, Lgt.spotOuterCos);
     if (ang <= 0.0)
         return 0.xxx;
 
@@ -101,5 +104,17 @@ float3 ShadeSpot(const GPULight Lgt, float3 Pvs, PhongTerms T)
     float3 diff = T.baseColor * NdotL;
     float3 specCol = T.specularColor * spec;
 
-    return (diff + specCol) * (Lgt.color * Lgt.intensity) * (atten * ang);
+    return (diff + specCol) * (Lgt.color_intensity.rgb * Lgt.color_intensity.a) * (atten * ang);
+}
+
+float4 DebugCID(uint3 cid)
+{
+    // Normalize to 0..1 for display
+    float3 c = float3(
+    (clustersX > 1) ? (cid.x / float(clustersX - 1)) : 0.0,
+    (clustersY > 1) ? (cid.y / float(clustersY - 1)) : 0.0,
+    (clustersZ > 1) ? (cid.z / float(clustersZ - 1)) : 0.0
+        );
+    
+    return float4(c, 1);
 }

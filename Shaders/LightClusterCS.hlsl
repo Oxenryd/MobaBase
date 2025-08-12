@@ -128,29 +128,30 @@ bool LightIntersectsFrustum(GPULight light, ClusterFrustum frustum)
     }
     else if (light.type == 1) // Point light
     {
-        return SphereIntersectsFrustum(light.positionVS, light.radius, frustum);
+        return SphereIntersectsFrustum(light.posVS_radius.rgb, light.posVS_radius.a, frustum);
     }
     else if (light.type == 2) // Spot light
     {
         // Use cone intersection for spot lights
-        return ConeIntersectsFrustum(light.positionVS, light.directionVS,
-                                    light.radius, light.spotOuterCos, frustum);
+        return ConeIntersectsFrustum(light.posVS_radius.rgb, light.dirVS_spotInnerCos.rgb,
+                                    light.posVS_radius.a, light.spotOuterCos, frustum);
     }
     return false;
 }
 
-
-[numthreads(CLUSTER_THREADS_X, CLUSTER_THREADS_Y, CLUSTER_THREADS_Z)]
+//[numthreads(CLUSTER_THREADS_X, CLUSTER_THREADS_Y, CLUSTER_THREADS_Z)]
+[numthreads(1, 1, 1)]
 void main(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID)
 {
     // Calculate actual cluster ID
-    uint3 cid = gid * uint3(CLUSTER_THREADS_X, CLUSTER_THREADS_Y, CLUSTER_THREADS_Z) + tid;
+    uint3 cid = gid * uint3(1, 1, 1) + tid;
     
     // Check bounds
     if (any(cid >= uint3(clustersX, clustersY, clustersZ)))
         return;
     
     uint cluster = cid.x + cid.y * clustersX + cid.z * clustersX * clustersY;
+       
     
     // Build frustum once for this cluster
     ClusterFrustum frustum = BuildClusterFrustum(cid);

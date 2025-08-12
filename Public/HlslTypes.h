@@ -45,20 +45,44 @@ INLINE auto operator|(LightFlags a, LightFlags b) {
 struct alignas(16) GPULight
 {
 	// 0..15
-	glm::vec3 positionVS{ 0.0f, 0.0f, 0.0f };
-	float radius{ 1.0f };
+	union
+	{
+		glm::vec4 positionVS_radius{ 0.0f, 0.0f, 0.0f, 1.0f };
+		struct
+		{
+			glm::vec3 positionVS;
+			float radius;
+		};
+	};
+
 
 	// 16..31
-	glm::vec3 directionVS{ 0.0f, 0.0f, -1.0f };
-	float spotInnerCos{ 1.0f };
+	union
+	{
+		glm::vec4 directionVS_spotInnerCos{ 0.0f, 0.0f, -1.0f, 1.0f };
+		struct
+		{
+			glm::vec3 directionVS;
+			float spotInnerCos;
+		};
+	};
+
 
 	// 32..47
-	glm::vec3 color{ 1.0f, 1.0f, 1.0f };;
-	float intensity{ 1.0f };
+	union
+	{
+		glm::vec4 color_intensity{ 1.0f, 1.0f, 1.0f, 1.0f };
+		struct
+		{
+			glm::vec3 color;
+			float intensity;
+		};
+	};
+
 
 	// 48..63
-	uint32_t lightType{ (uint32_t)LightType::Directional };
-	uint32_t lightFlags{ (uint32_t)(LightFlags::Enabled | LightFlags::Static)};
+	uint32_t type{ (uint32_t)LightType::Directional };
+	uint32_t flags{ (uint32_t)(LightFlags::Enabled | LightFlags::Static)};
 	uint32_t cookieIndex{ UINT32_INVALID };
 	uint32_t shadowIndex{ UINT32_INVALID };
 
@@ -93,7 +117,7 @@ namespace LightFactory
 		const glm::vec3& color = { 1.0f, 1.0f, 1.0f },
 		float intensity = 1.0f) {
 		GPULight L{};
-		L.lightType = static_cast<uint32_t>(LightType::Point);
+		L.type = static_cast<uint32_t>(LightType::Point);
 		L.positionVS = pos;
 		L.radius = radius;
 		L.invRange = radius > 0.0f ? 1.0f / radius : 0.0f;
@@ -111,7 +135,7 @@ namespace LightFactory
 		const glm::vec3& color = { 1.0f, 1.0f, 1.0f },
 		float intensity = 1.0f) {
 		GPULight L{};
-		L.lightType = static_cast<uint32_t>(LightType::Spot);
+		L.type = static_cast<uint32_t>(LightType::Spot);
 		L.positionVS = pos;
 		L.directionVS = glm::normalize(dir);
 		L.radius = radius;
@@ -128,7 +152,7 @@ namespace LightFactory
 		const glm::vec3& color = { 1.0f, 1.0f, 1.0f },
 		float intensity = 1.0f) {
 		GPULight L{};
-		L.lightType = static_cast<uint32_t>(LightType::Directional);
+		L.type = static_cast<uint32_t>(LightType::Directional);
 		L.directionVS = glm::normalize(dir);
 		L.radius = 0.0f;       // Infinite range
 		L.invRange = 0.0f;
@@ -368,11 +392,26 @@ struct CameraData
 
 	alignas (16) glm::mat4x4 invProj;
 
-	glm::vec3 cameraPosition;
-	float ambient;
+	union
+	{
+		alignas (16) glm::vec4 camPos_amb;
+		struct
+		{
+			glm::vec3 cameraPosition;
+			float ambient;
+		};
+	};
 
-	glm::vec2 screenSize;
-	glm::vec2 invScreenSize;
+	union
+	{
+		alignas (16) glm::vec4 screenSizes;
+		struct
+		{
+			glm::vec2 screenSize;
+			glm::vec2 invScreenSize;
+		};
+	};
+	
 
 	float vFov;
 	float nearPlane;

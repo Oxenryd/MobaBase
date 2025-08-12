@@ -1168,7 +1168,10 @@ public:
 			vkUpdateDescriptorSets(m_vkDevice, 1, &instanceDataWrite, 0, nullptr);
 
 
-
+			void* mappedData = nullptr;
+			vkMapMemory(m_vkDevice, lightsMemory[i], 0, bufferSize, 0, &mappedData);
+			memcpy(mappedData, this->lightsData.data(), bufferSize);
+			vkUnmapMemory(m_vkDevice, lightsMemory[i]);
 		}
 
 		return VK_SUCCESS;
@@ -1359,7 +1362,7 @@ public:
 
 		std::vector<VkDescriptorSetLayoutBinding> camBindings;
 		camBindings.push_back({ MAT_CAMERADATA_BIND, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1,
-					VK_SHADER_STAGE_COMPUTE_BIT, nullptr });
+					VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_COMPUTE_BIT, nullptr });
 
 		VkDescriptorSetLayoutCreateInfo dslCI_cam{ VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO };
 		dslCI_cam.bindingCount = (uint32_t)camBindings.size();
@@ -1521,7 +1524,7 @@ public:
 			VkBufferCreateInfo camDatabufferInfo{};
 			camDatabufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
 			camDatabufferInfo.size = sizeof(CameraData);
-			camDatabufferInfo.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+			camDatabufferInfo.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 			camDatabufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 			Vk_CHECK(vkResult, vkCreateBuffer(m_vkDevice, &camDatabufferInfo, nullptr, &camDataBuffer[i]));
 
@@ -1876,64 +1879,138 @@ public:
 		return VK_SUCCESS;
 	}
 
-	inline VkResult createLogicalDevice() {
+	INLINE VkResult createLogicalDevice() {
 		VkResult vkResult{};
 
-		// Create logical device
 		LOGLINE(LogType::Info, LogMod::Vulkan, "Creating logical device... ");
+
+		// --- Queue ---
 		float queuePriority = 1.0f;
-		VkDeviceQueueCreateInfo queueCreateInfo = {};
-		queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-		queueCreateInfo.queueFamilyIndex = m_graphicsQueueFamilyIndex;
-		queueCreateInfo.queueCount = 1;
-		queueCreateInfo.pQueuePriorities = &queuePriority;
+		VkDeviceQueueCreateInfo queueCI{ VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO };
+		queueCI.queueFamilyIndex = m_graphicsQueueFamilyIndex;
+		queueCI.queueCount = 1;
+		queueCI.pQueuePriorities = &queuePriority;
 
-		VkPhysicalDeviceVulkan12Features v12{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES };
-		v12.scalarBlockLayout = VK_TRUE;
+		// --- Query support (1.3 -> 1.2 chain). Do NOT include legacy feature structs. ---
+		VkPhysicalDeviceVulkan13Features supp13{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES };
+		VkPhysicalDeviceVulkan12Features supp12{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES };
 
-		VkPhysicalDeviceDescriptorIndexingFeatures indexingFeatures{};
-		indexingFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;
-		indexingFeatures.runtimeDescriptorArray = VK_TRUE;
-		indexingFeatures.shaderSampledImageArrayNonUniformIndexing = VK_TRUE;
-		indexingFeatures.descriptorBindingPartiallyBound = VK_TRUE;
-		indexingFeatures.descriptorBindingVariableDescriptorCount = VK_TRUE;
-		indexingFeatures.pNext = &v12;
+		supp13.pNext = &supp12;
 
+		VkPhysicalDeviceFeatures2 supp{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2 };
+		supp.pNext = &supp13;
 
-		VkPhysicalDeviceVulkan13Features features13{};
-		features13.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
-		features13.shaderDemoteToHelperInvocation = VK_TRUE;
+		vkGetPhysicalDeviceFeatures2(m_phyDevice, &supp);
 
-		// Chain features together
-		features13.pNext = &indexingFeatures;
+		// --- Require what you actually use ---
+		// Descriptor indexing subset (core in 1.2)
+		if (!supp12.descriptorIndexing ||
+			!supp12.runtimeDescriptorArray ||
+			!supp12.shaderSampledImageArrayNonUniformIndexing ||
+			!supp12.descriptorBindingPartiallyBound ||
+			!supp12.descriptorBindingVariableDescriptorCount) {
+			LOG(LogType::Error, "Required descriptor indexing features not supported.");
+			return VK_ERROR_FEATURE_NOT_PRESENT;
+		}
 
-		// Wrap in PhysicalDeviceFeatures2 to query support
-		VkPhysicalDeviceFeatures2 features2{};
-		features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
-		features2.pNext = &features13;
+		// Scalar block layout (needed for -fvk-use-dx-layout)
+		if (!supp12.scalarBlockLayout) {
+			LOG(LogType::Error, "scalarBlockLayout not supported.");
+			return VK_ERROR_FEATURE_NOT_PRESENT;
+		}
 
-		// Query supported features from the physical device
-		vkGetPhysicalDeviceFeatures2(m_phyDevice, &features2);
+		// --- Build ENABLE chain (separate structs from the query) ---
+		VkPhysicalDeviceVulkan12Features en12{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES };
+		en12.descriptorIndexing = VK_TRUE;
+		en12.runtimeDescriptorArray = VK_TRUE;
+		en12.shaderSampledImageArrayNonUniformIndexing = VK_TRUE;
+		en12.descriptorBindingPartiallyBound = VK_TRUE;
+		en12.descriptorBindingVariableDescriptorCount = VK_TRUE;
+		en12.scalarBlockLayout = VK_TRUE;
 
-		const char* deviceExtensions[] = { 
-			VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-			"VK_EXT_descriptor_indexing"
-		};
+		VkPhysicalDeviceVulkan13Features en13{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES };
+		en13.shaderDemoteToHelperInvocation = supp13.shaderDemoteToHelperInvocation; // enable if supported
+		en13.synchronization2 = VK_TRUE;
+		en13.pNext = &en12;
 
-		VkDeviceCreateInfo deviceCreateInfo = {};
-		deviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-		deviceCreateInfo.queueCreateInfoCount = 1;
-		deviceCreateInfo.pQueueCreateInfos = &queueCreateInfo;
-		deviceCreateInfo.enabledExtensionCount = std::size(deviceExtensions);
-		deviceCreateInfo.ppEnabledExtensionNames = deviceExtensions;
-		deviceCreateInfo.pNext = &features2;
+		VkPhysicalDeviceFeatures2 enable{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2 };
+		enable.pNext = &en13;
+		enable.features.samplerAnisotropy = VK_TRUE;
+		enable.features.vertexPipelineStoresAndAtomics = VK_TRUE;
+		enable.features.fragmentStoresAndAtomics = VK_TRUE;
+		// If you also need base features (e.g. samplerAnisotropy): enable.features.samplerAnisotropy = VK_TRUE;
 
-		Vk_CHECK(vkResult, vkCreateDevice(m_phyDevice, &deviceCreateInfo, nullptr, &m_vkDevice));
+		// --- Extensions: swapchain is enough on 1.2+; DO NOT enable VK_EXT_descriptor_indexing here. ---
+		std::vector<const char*> exts;
+		exts.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+
+		VkDeviceCreateInfo devCI{ VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO };
+		devCI.queueCreateInfoCount = 1;
+		devCI.pQueueCreateInfos = &queueCI;
+		devCI.enabledExtensionCount = static_cast<uint32_t>(exts.size());
+		devCI.ppEnabledExtensionNames = exts.data();
+		devCI.pNext = &enable;
+
+		Vk_CHECK(vkResult, vkCreateDevice(m_phyDevice, &devCI, nullptr, &m_vkDevice));
 		vkGetDeviceQueue(m_vkDevice, m_graphicsQueueFamilyIndex, 0, &m_graphicsQueue);
 
 		LOG(LogType::Success, "Done.");
 		return VK_SUCCESS;
 	}
+
+	//inline VkResult createLogicalDevice() {
+	//	VkResult vkResult{};
+
+	//	// Create logical device
+	//	LOGLINE(LogType::Info, LogMod::Vulkan, "Creating logical device... ");
+	//	float queuePriority = 1.0f;
+	//	VkDeviceQueueCreateInfo queueCreateInfo = {};
+	//	queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+	//	queueCreateInfo.queueFamilyIndex = m_graphicsQueueFamilyIndex;
+	//	queueCreateInfo.queueCount = 1;
+	//	queueCreateInfo.pQueuePriorities = &queuePriority;
+
+	//	VkPhysicalDeviceDescriptorIndexingFeatures indexingFeatures{};
+	//	indexingFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;
+	//	indexingFeatures.runtimeDescriptorArray = VK_TRUE;
+	//	indexingFeatures.shaderSampledImageArrayNonUniformIndexing = VK_TRUE;
+	//	indexingFeatures.descriptorBindingPartiallyBound = VK_TRUE;
+	//	indexingFeatures.descriptorBindingVariableDescriptorCount = VK_TRUE;
+
+	//	VkPhysicalDeviceVulkan13Features features13{};
+	//	features13.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
+	//	features13.shaderDemoteToHelperInvocation = VK_TRUE;
+
+	//	// Chain features together
+	//	features13.pNext = &indexingFeatures;
+
+	//	// Wrap in PhysicalDeviceFeatures2 to query support
+	//	VkPhysicalDeviceFeatures2 features2{};
+	//	features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+	//	features2.pNext = &features13;
+
+	//	// Query supported features from the physical device
+	//	vkGetPhysicalDeviceFeatures2(m_phyDevice, &features2);
+
+	//	const char* deviceExtensions[] = { 
+	//		VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+	//		"VK_EXT_descriptor_indexing"
+	//	};
+
+	//	VkDeviceCreateInfo deviceCreateInfo = {};
+	//	deviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+	//	deviceCreateInfo.queueCreateInfoCount = 1;
+	//	deviceCreateInfo.pQueueCreateInfos = &queueCreateInfo;
+	//	deviceCreateInfo.enabledExtensionCount = std::size(deviceExtensions);
+	//	deviceCreateInfo.ppEnabledExtensionNames = deviceExtensions;
+	//	deviceCreateInfo.pNext = &features2;
+
+	//	Vk_CHECK(vkResult, vkCreateDevice(m_phyDevice, &deviceCreateInfo, nullptr, &m_vkDevice));
+	//	vkGetDeviceQueue(m_vkDevice, m_graphicsQueueFamilyIndex, 0, &m_graphicsQueue);
+
+	//	LOG(LogType::Success, "Done.");
+	//	return VK_SUCCESS;
+	//}
 
 
 	inline VkResult createSwapchain() {

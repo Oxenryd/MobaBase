@@ -35,7 +35,7 @@ public:
 
         m_go = gameObjectSystem().createGameObject<GameObject>(m_name);
         MeshDescription meshInfo{};
-        const std::string path = std::format("{}{}", ASSETS_DIR, "Cube/cube.obj"); //"Cube/cube.obj" //"crytek-sponza-hd/sponza.obj"
+        const std::string path = std::format("{}{}", ASSETS_DIR, "crytek-sponza-hd/sponza.obj"); //"Cube/cube.obj" //"crytek-sponza-hd/sponza.obj"
 
         Mesh modelMesh{};
         sceneRender().createMeshFromModel(path, &modelMesh, &m_go);
