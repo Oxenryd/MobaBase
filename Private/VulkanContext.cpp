@@ -299,7 +299,6 @@ void VulkanContext::draw(void* rendCtx) {
 		for (auto [entity, bound, transform] : view.each()) {
 
 			AABB local = scene->boundingSystem().cachedLocals()[bound.coarseIndex];
-			//std::cout << "\nW: " << std::to_string(local.width()) << " H: " << std::to_string(local.height()) << " D: " << std::to_string(local.depth());
 			glm::vec3 mn{ local.frontTopLeft.x,  local.backBottomRight.y, local.backBottomRight.z };
 			glm::vec3 mx{ local.backBottomRight.x, local.frontTopLeft.y,  local.frontTopLeft.z };
 
