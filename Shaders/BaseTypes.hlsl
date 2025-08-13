@@ -231,9 +231,10 @@ struct ClusterFrustum
 };
 
 // BINDINGS
-
+#ifdef USE_BASE_PUSH
 [[vk::push_constant]]
 BaseMatPush basePush;
+#endif
 
 
 [[vk::binding(0, 0)]]
@@ -287,7 +288,11 @@ cbuffer cameraData : register(b0, space0)
 
 float4 RetainGlobals()
 {
-    float dummy = camPos_amb.x * basePush.boneOffset;
+    //#ifdef USE_BASE_PUSH
+    //    float dummy = camPos_amb.x * basePush.boneOffset;
+    //#else
+        float dummy = camPos_amb.x;
+   // #endif
     if (dummy == -9999999.0)
     {
         float4 dummy2 = dummy.xxxx + textures[0].SampleLevel(smp, float2(0, 0), 0.0) * lights[clusterLightCount[0].x].color_intensity.rrgb;

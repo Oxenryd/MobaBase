@@ -4,8 +4,25 @@
 #include <cstdint>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtx/quaternion.hpp>
 
 #include "GlobalMacros.h"
+
+struct ShapeRendAABB
+{
+	glm::vec3 mn;
+	glm::vec3 mx;
+};
+
+struct ShapePush
+{
+	glm::mat4x4 modelToWorld;
+	glm::vec4 color;
+	ShapeRendAABB aabb;
+	glm::quat rotation;
+	uint32_t drawNumber;
+};
+
 
 enum class LightType : uint8_t
 {

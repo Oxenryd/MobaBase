@@ -13,13 +13,28 @@ struct ColorRGBA_f
 {
 	~ColorRGBA_f() = default;
 	ColorRGBA_f() = default;
+	ColorRGBA_f(float R, float G, float B, float A = 1.0f) {
+		r = R;
+		b = B;
+		g = G;
+		a = A;	
+	}
+		
 	ColorRGBA_f(const ColorRGBA_f& other) = default;
 	ColorRGBA_f& operator=(const ColorRGBA_f& other) = default;
 
-	float r{ 0.5f };
-	float g{ 0.5f };
-	float b{ 0.5f };
-	float a{ 0.5f };
+	union
+	{
+		float raw[4]{ 0.5f, 0.5f, 0.5f, 1.0f };
+		struct
+		{
+			float r;
+			float g;
+			float b;
+			float a;
+		};
+	};
+
 
 	float& operator[] (size_t idx) {
 		if (idx > 3) idx = 3;
@@ -155,7 +170,7 @@ struct BSphere
 
 	static constexpr BoundingShape shape() { return BoundingShape::BSphere; }
 
-	void encapsule(const std::span<BaseVSIn> vertices) {
+	void encloseLocal(const std::span<BaseVSIn> vertices) {
 
 		float maxDistSqr = std::numeric_limits<float>::min();
 
@@ -170,15 +185,107 @@ struct BSphere
 
 struct AABB
 {
-	glm::vec3 frontTopLeft{ -0.5f, 0.5f, 0.5f };
-	glm::vec3 backBottomRight{0.5f, -0.5f, -0.5f};
+	union
+	{
+		float raw[6]{ -0.5f, 0.5f, 0.5f,	0.5f, -0.5f, -0.5f };
+		struct
+		{
+			glm::vec3 frontTopLeft;
+			glm::vec3 backBottomRight;
+		};
+	};
+
+	std::vector<glm::vec3> getVertices() {
+		glm::vec3 mn{ frontTopLeft.x,  backBottomRight.y, backBottomRight.z };
+		glm::vec3 mx{ backBottomRight.x, frontTopLeft.y,  frontTopLeft.z };
+
+		std::vector<glm::vec3> verts;
+		verts.emplace_back(glm::vec3{ mn.x, mx.y, mx.z });
+		verts.emplace_back(glm::vec3{ mx.x, mx.y, mx.z });
+		verts.emplace_back(glm::vec3{ mn.x, mn.y, mx.z });
+		verts.emplace_back(glm::vec3{ mx.x, mn.y, mx.z });
+		verts.emplace_back(glm::vec3{ mn.x, mx.y, mn.z });
+		verts.emplace_back(glm::vec3{ mx.x, mx.y, mn.z });
+		verts.emplace_back(glm::vec3{ mn.x, mn.y, mn.z });
+		verts.emplace_back(glm::vec3{ mx.x, mn.y, mn.z });
+
+
+		return verts;
+	}
+
 	static constexpr BoundingShape shape() { return BoundingShape::AABB; }
+
+	INLINE void encloseLocal(const std::span<BaseVSIn> vertices) {
+
+		if (vertices.empty()) return;
+
+		glm::vec3 vmin(std::numeric_limits<float>::max());
+		glm::vec3 vmax(-std::numeric_limits<float>::max());
+
+		for (const auto& v : vertices) {
+			vmin = glm::min(vmin, v.pos);
+			vmax = glm::max(vmax, v.pos);
+		}
+
+		frontTopLeft = { vmin.x, vmax.y, vmax.z };
+		backBottomRight = { vmax.x, vmin.y, vmin.z };
+	}
+
+	
+	INLINE void encloseWorld(const AABB& local, const glm::mat4x4& trs) {
+
+		const glm::vec3 localMin{ local.frontTopLeft.x,  local.backBottomRight.y, local.backBottomRight.z };
+		const glm::vec3 localMax{ local.backBottomRight.x, local.frontTopLeft.y,  local.frontTopLeft.z };
+
+		const glm::vec3 c = 0.5f * (localMin + localMax);
+		const glm::vec3 e = 0.5f * (localMax - localMin);
+
+		const glm::vec3 wc = glm::vec3(trs * glm::vec4(c, 1.0f));
+		const glm::mat3 M = glm::mat3(trs);
+		auto A = glm::mat3(
+			glm::abs(M[0]),
+			glm::abs(M[1]),
+			glm::abs(M[2])
+		);
+		const glm::vec3 we = A * e;
+
+		const glm::vec3 wmin = wc - we;
+		const glm::vec3 wmax = wc + we;
+
+		frontTopLeft = { wmin.x, wmax.y, wmax.z };
+		backBottomRight = { wmax.x, wmin.y, wmin.z };
+	}
+	INLINE void encloseWorld_fromLocal(const glm::mat4x4& trs) { encloseWorld(*this, trs); }
+
+	INLINE float width() const {
+		return backBottomRight.x - frontTopLeft.x;
+	}
+	INLINE float height() const {
+		return frontTopLeft.y - backBottomRight.y;
+	}
+	INLINE float depth() const {
+		return frontTopLeft.z - backBottomRight.z;
+	}
+	INLINE float volume() const {
+		return width() * height() * depth();
+	}
+
+	INLINE void* data() {
+		return raw;
+	}
 };
 
 struct OBB
 {
-	glm::vec3 frontTopLeft{ -0.5f, 0.5f, 0.5f };
-	glm::vec3 backBottomRight{ 0.5f, -0.5f, -0.5f };
+	union
+	{
+		float raw[6]{ -0.5f, 0.5f, 0.5f,	0.5f, -0.5f, -0.5f };
+		struct
+		{
+			glm::vec3 frontTopLeft;
+			glm::vec3 backBottomRight;
+		};
+	};
 	glm::quat rotation;
 	static constexpr BoundingShape shape() { return BoundingShape::OBB; }
 };
@@ -190,11 +297,11 @@ struct BoundingVolumeComponent
 
 	~BoundingVolumeComponent() = default;
 	BoundingVolumeComponent() :
-		fineRawData{0}, coarseIndex{ UINT32_INVALID } {}
+		rawData{0}, coarseIndex{ UINT32_INVALID } {}
 	BoundingVolumeComponent(const uint32_t coarseIndex) :
-		fineRawData{ 0 }, coarseIndex{coarseIndex} {}
+		rawData{ 0 }, coarseIndex{coarseIndex} {}
 	BoundingVolumeComponent(const uint32_t coarseIndex, const BoundingShape firstShape, const uint32_t firstFineIndex) :
-		fineRawData{ 0 },
+		rawData{ 0 },
 		coarseIndex{ coarseIndex }
 	{
 		fineCount = 1;
@@ -203,7 +310,7 @@ struct BoundingVolumeComponent
 		fineEnabled0 = 1;
 	}
 	BoundingVolumeComponent(const BoundingVolumeComponent& other) {
-		fineRawData = other.fineRawData;
+		rawData = other.rawData;
 		coarseIndex = other.coarseIndex;
 		std::memcpy(fineIndex, other.fineIndex, 6 * sizeof(uint32_t));
 	}
@@ -211,7 +318,7 @@ struct BoundingVolumeComponent
 		if (&rhs == this)
 			return *this;
 
-		fineRawData = rhs.fineRawData;
+		rawData = rhs.rawData;
 		coarseIndex = rhs.coarseIndex;
 		std::memcpy(fineIndex, rhs.fineIndex, 6 * sizeof(uint32_t));
 
@@ -219,7 +326,7 @@ struct BoundingVolumeComponent
 	}
 	bool operator==(const BoundingVolumeComponent& rhs) const {
 		return
-			fineRawData == rhs.fineRawData &&
+			rawData == rhs.rawData &&
 			std::memcmp(fineIndex, rhs.fineIndex, 6 * sizeof(uint32_t)) == 0 &&
 			coarseIndex == rhs.coarseIndex;
 	}
@@ -245,11 +352,11 @@ struct BoundingVolumeComponent
 		shapes.push_back(static_cast<BoundingShape>(fineType3));
 		if (fineCount == count)
 			return shapes;
-		count++;
-		shapes.push_back(static_cast<BoundingShape>(fineType4));
-		if (fineCount == count)
-			return shapes;
-		shapes.push_back(static_cast<BoundingShape>(fineType5));
+		//count++;
+		//shapes.push_back(static_cast<BoundingShape>(fineType4));
+		//if (fineCount == count)
+		//	return shapes;
+		//shapes.push_back(static_cast<BoundingShape>(fineType5));
 		
 		return shapes;
 	}
@@ -275,11 +382,11 @@ struct BoundingVolumeComponent
 		shapes.push_back({ static_cast<BoundingShape>(fineType3), fineIndex[3] });
 		if (fineCount == count)
 			return shapes;
-		count++;
-		shapes.push_back({ static_cast<BoundingShape>(fineType4), fineIndex[4] });
-		if (fineCount == count)
-			return shapes;
-		shapes.push_back({ static_cast<BoundingShape>(fineType5), fineIndex[5] });
+		//count++;
+		//shapes.push_back({ static_cast<BoundingShape>(fineType4), fineIndex[4] });
+		//if (fineCount == count)
+		//	return shapes;
+		//shapes.push_back({ static_cast<BoundingShape>(fineType5), fineIndex[5] });
 
 		return shapes;
 	}
@@ -291,8 +398,8 @@ struct BoundingVolumeComponent
 			case 1: if (fineCount >= 2) fineEnabled1 = onOff ? 1 : 0; return;
 			case 2: if (fineCount >= 3) fineEnabled2 = onOff ? 1 : 0; return;
 			case 3: if (fineCount >= 4) fineEnabled3 = onOff ? 1 : 0; return;
-			case 4: if (fineCount >= 5) fineEnabled4 = onOff ? 1 : 0; return;
-			case 5: if (fineCount >= 6) fineEnabled5 = onOff ? 1 : 0; return;
+			//case 4: if (fineCount >= 5) fineEnabled4 = onOff ? 1 : 0; return;
+			//case 5: if (fineCount >= 6) fineEnabled5 = onOff ? 1 : 0; return;
 		}
 	}
 
@@ -303,14 +410,14 @@ struct BoundingVolumeComponent
 			case 1: return (fineEnabled1 ==  1 ? true : false) && fineCount >= 2;
 			case 2: return (fineEnabled2 ==  1 ? true : false) && fineCount >= 3;
 			case 3: return (fineEnabled3 ==  1 ? true : false) && fineCount >= 4;
-			case 4: return (fineEnabled4 ==  1 ? true : false) && fineCount >= 5;
-			case 5: return (fineEnabled5 ==  1 ? true : false) && fineCount >= 6;
+			//case 4: return (fineEnabled4 ==  1 ? true : false) && fineCount >= 5;
+			//case 5: return (fineEnabled5 ==  1 ? true : false) && fineCount >= 6;
 		}
 	}
 
 	bool addFine(const BoundingShape& shape, uint32_t index) {
 		auto lastCount = fineCount;
-		fineCount = std::min(fineCount + 1, (uint32_t)6);
+		fineCount = std::min(fineCount + 1, (uint32_t)4); // max here
 		switch (fineCount) {
 			default: fineCount = lastCount; return false;
 
@@ -334,16 +441,16 @@ struct BoundingVolumeComponent
 				fineType3 = static_cast<uint32_t>(shape);
 				fineEnabled3 = 1;
 			} break;
-			case 5:
-			{
-				fineType4 = static_cast<uint32_t>(shape);
-				fineEnabled4 = 1;
-			} break;
-			case 6:
-			{
-				fineType5 = static_cast<uint32_t>(shape);
-				fineEnabled5 = 1;
-			} break;
+			//case 5:
+			//{
+			//	fineType4 = static_cast<uint32_t>(shape);
+			//	fineEnabled4 = 1;
+			//} break;
+			//case 6:
+			//{
+			//	fineType5 = static_cast<uint32_t>(shape);
+			//	fineEnabled5 = 1;
+			//} break;
 		}
 		fineIndex[fineCount - 1] = index;
 		return true;
@@ -351,7 +458,7 @@ struct BoundingVolumeComponent
 
 	union
 	{
-		uint32_t fineRawData;
+		uint64_t rawData;
 		struct
 		{
 			uint32_t fineCount		: 4;
@@ -359,20 +466,22 @@ struct BoundingVolumeComponent
 			uint32_t fineType1		: 2;
 			uint32_t fineType2		: 2;
 			uint32_t fineType3		: 2;
-			uint32_t fineType4		: 2;
-			uint32_t fineType5		: 2;
+			//uint32_t fineType4		: 2;
+			//uint32_t fineType5		: 2;
 			uint32_t fineEnabled0	: 1;
 			uint32_t fineEnabled1	: 1;
 			uint32_t fineEnabled2	: 1;
 			uint32_t fineEnabled3	: 1;
-			uint32_t fineEnabled4	: 1;
-			uint32_t fineEnabled5	: 1;
+			//uint32_t fineEnabled4	: 1;
+			//uint32_t fineEnabled5	: 1;
+			uint32_t _pad0			: 16;
+			uint32_t layermask		: 32;
 		};
 	};
-	uint32_t fineIndex[6]{
-		UINT32_INVALID, UINT32_INVALID, UINT32_INVALID, UINT32_INVALID, UINT32_INVALID, UINT32_INVALID,
+	uint32_t fineIndex[4]{
+		UINT32_INVALID, UINT32_INVALID, UINT32_INVALID, UINT32_INVALID, //UINT32_INVALID, UINT32_INVALID,
 	};
-	uint32_t coarseIndex; // <- this is always a BSphere
+	uint32_t coarseIndex; // <- this is always a AABB
 	// The whole struct fits in 32bytes, and most of the time
 	// 'fineCount' can be 0 and therefore no more checks will
 	// be made, but the datatype allows for easy extension

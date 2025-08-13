@@ -242,6 +242,8 @@ target_compile_definitions(MobaBase PRIVATE
 	SHADER_BASE_LIGHTCLUSTER_CS=\"LightClusterCS\"
 	SHADER_BASE_VS=\"BaseVS\"
 	SHADER_BASE_PS=\"BasePS\"
+	SHADER_SHAPERENDERER_VS=\"ShapeRendererVS\"
+	SHADER_SHAPERENDERER_PS=\"ShapeRendererPS\"
 
 
 	# Built In Mat Properties

@@ -1,3 +1,4 @@
+#define USE_BASE_PUSH
 #include "ShaderUtils.hlsl"
 
 #pragma ShaderType:Fragment

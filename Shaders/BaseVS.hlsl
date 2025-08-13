@@ -1,3 +1,4 @@
+#define USE_BASE_PUSH
 #include "BaseTypes.hlsl"
 
 #pragma ShaderType:Vertex

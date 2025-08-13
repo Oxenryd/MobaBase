@@ -829,6 +829,13 @@ private:
 
 			// for later mapping
 			for (auto& binding : key.bindings) {
+				if (material.name() == "ShapeRendererMaterial") {
+					for (size_t k = 0; k < VULKAN_FRAMES_IN_FLIGHT; ++k) {
+						shapeRendererDescSet[k] = descriptorSet[k];
+					}
+					break;;
+				}
+
 				BindSetCombo combo{ static_cast<uint8_t>(binding), static_cast<uint8_t>(set), layoutHandle };
 				auto insertResult = bindingToDescriptorSet.insert({ combo, descriptorSet });
 				descriptorSetsList.push_back(combo);
@@ -940,6 +947,14 @@ public:
 	std::vector<VkFramebuffer> swapChainFramebuffers;	
 	std::array<FrameSync, VULKAN_FRAMES_IN_FLIGHT> frameSync;
 	std::vector<VkSemaphore> imageRenderFinished;
+
+	// Shape Rendering
+	VkDescriptorSet shapeRendererDescSet[VULKAN_FRAMES_IN_FLIGHT] = { nullptr, nullptr };
+	VkBuffer shapeVertexBuffer[VULKAN_FRAMES_IN_FLIGHT] = { nullptr, nullptr };
+	VkBuffer shapeIndexBuffer[VULKAN_FRAMES_IN_FLIGHT] = { nullptr, nullptr };
+	VkDeviceMemory shapeVertexMemory[VULKAN_FRAMES_IN_FLIGHT] = { nullptr, nullptr };
+	VkDeviceMemory shapeIndexMemory[VULKAN_FRAMES_IN_FLIGHT] = { nullptr, nullptr };
+
 
 	// Global Material Buffers
 	std::vector<BaseVSIn> vertices;
@@ -1631,6 +1646,46 @@ public:
 			Vk_CHECK(vkResult, vkAllocateMemory(m_vkDevice, &lIndexAllocInfo, nullptr, &lightsClusterIndicesMemory[i]));
 			Vk_CHECK(vkResult, vkBindBufferMemory(m_vkDevice, lightsClusterIndicesBuffer[i], lightsClusterIndicesMemory[i], 0));
 
+
+
+			// Shapes
+			VkBufferCreateInfo shapeVertbufferInfo{};
+			shapeVertbufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+			shapeVertbufferInfo.size = sizeof(glm::vec3) * 128;
+			shapeVertbufferInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+			shapeVertbufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+			Vk_CHECK(vkResult, vkCreateBuffer(m_vkDevice, &shapeVertbufferInfo, nullptr, &shapeVertexBuffer[i]));
+
+			vkGetBufferMemoryRequirements(m_vkDevice, shapeVertexBuffer[i], &memRequirements);
+
+			VkMemoryAllocateInfo shapeVertAllocInfo{};
+			shapeVertAllocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+			shapeVertAllocInfo.allocationSize = memRequirements.size;
+			shapeVertAllocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits,
+																 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+																 m_phyDevice);
+
+			Vk_CHECK(vkResult, vkAllocateMemory(m_vkDevice, &shapeVertAllocInfo, nullptr, &shapeVertexMemory[i]));
+			Vk_CHECK(vkResult, vkBindBufferMemory(m_vkDevice, shapeVertexBuffer[i], shapeVertexMemory[i], 0));
+
+			VkBufferCreateInfo shapeIndexbufferInfo{};
+			shapeIndexbufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+			shapeIndexbufferInfo.size = sizeof(uint32_t) * 512;
+			shapeIndexbufferInfo.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
+			shapeIndexbufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+			Vk_CHECK(vkResult, vkCreateBuffer(m_vkDevice, &shapeIndexbufferInfo, nullptr, &shapeIndexBuffer[i]));
+
+			vkGetBufferMemoryRequirements(m_vkDevice, shapeIndexBuffer[i], &memRequirements);
+
+			VkMemoryAllocateInfo shapeIndexAllocInfo{};
+			shapeIndexAllocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+			shapeIndexAllocInfo.allocationSize = memRequirements.size;
+			shapeIndexAllocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits,
+																VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+																m_phyDevice);
+
+			Vk_CHECK(vkResult, vkAllocateMemory(m_vkDevice, &shapeIndexAllocInfo, nullptr, &shapeIndexMemory[i]));
+			Vk_CHECK(vkResult, vkBindBufferMemory(m_vkDevice, shapeIndexBuffer[i], shapeIndexMemory[i], 0));
 		}
 
 		LOG(LogType::Success, "Done.");

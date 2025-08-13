@@ -137,7 +137,7 @@ ErrorCode Engine::_initBaseShaders() {
 		return (ErrorCode)EC;
 	}
 
-	// Create Base Materials
+	// Create Base Materials          
 	auto* baseVs = getRenderManager()->getShader(SHADER_BASE_VS);
 	auto* basePs = getRenderManager()->getShader(SHADER_BASE_PS);
 	auto& baseMat = Material::createMaterial("BaseMaterialUnlit", *baseVs, *basePs);//Material{ "BaseMaterialUnlit", *baseVs, *basePs };
@@ -145,6 +145,15 @@ ErrorCode Engine::_initBaseShaders() {
 	m_vkCtx->createPipelineFromMaterial(m_renderMan, baseMat);
 	std::cout << "\n";
 	baseMat.debugPrintMaterialInfo();
+
+
+	auto* shapeVS = getRenderManager()->getShader(SHADER_SHAPERENDERER_VS);
+	auto* shapePS = getRenderManager()->getShader(SHADER_SHAPERENDERER_PS);
+	auto& shapeMat = Material::createMaterial("ShapeRendererMaterial", *shapeVS, *shapePS);
+	shapeMat.createInstance();
+	m_vkCtx->createPipelineFromMaterial(m_renderMan, shapeMat);
+	std::cout << "\n";
+	shapeMat.debugPrintMaterialInfo();
 
 
 	//auto* spriteVs = getRenderManager()->getShader("SpriteBatchVS");

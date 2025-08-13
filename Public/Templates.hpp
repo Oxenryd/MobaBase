@@ -25,7 +25,7 @@ public:
     }
 
     void start() {
-        
+       
         m_skyLight = m_reg.create();
         m_reg.emplace<TransformComponent>(m_skyLight, TransformComponent{});
         auto dirLight = LightFactory::Directional(glm::vec3{-1, -0.85, -0.25});
@@ -35,7 +35,9 @@ public:
 
         m_go = gameObjectSystem().createGameObject<GameObject>(m_name);
         MeshDescription meshInfo{};
-        const std::string path = std::format("{}{}", ASSETS_DIR, "Cube/cube.obj"); //"Cube/cube.obj" //"crytek-sponza-hd/sponza.obj"
+
+        //"Cube/cube.obj" //"crytek-sponza-hd/sponza.obj" //"SmallRoom/smallRoom_mirror_window.obj"    //"Sphere/sphere.obj"
+        const std::string path = std::format("{}{}", ASSETS_DIR, "crytek-sponza-hd/sponza.obj");
 
         Mesh modelMesh{};
         sceneRender().createMeshFromModel(path, &modelMesh, &m_go);
@@ -64,6 +66,13 @@ public:
                            }
                               
                        });
+
+        Engine::getInstance()->getInputManager()->
+              onKeyDown.subscribe([this](KeyCode code) -> void
+                                  {
+                                      if (code == KeyCode::B)
+                                          sceneRender().setDrawAABBs(!sceneRender().drawAbbs());
+                                  });
 
 
         Engine::getInstance()->getInputManager()->

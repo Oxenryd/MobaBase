@@ -50,6 +50,8 @@ private:
 	ArenaVector<uint32_t> m_indices;
 	//ArenaVector<Camera> m_cameras;
 
+	bool m_drawAabbs = false;
+
 public:
 	~SceneRenderSystem() {
 		s_threadIndex.clear();
@@ -159,6 +161,10 @@ public:
 	//std::span<Camera> getCameras() { return std::span<Camera>(m_cameras); }
 
 	ErrorCode createMeshFromModel(const std::string& path, Mesh* outMesh, const GameObject* go = nullptr);
+
+	void setDrawAABBs(bool state) { m_drawAabbs = state; }
+	bool drawAbbs() const { return m_drawAabbs; }
+
 };
 
 #endif

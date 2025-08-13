@@ -318,24 +318,49 @@ public:
     }
 
 private:
-    INLINE static bool _aabbVisibleSIMDPlane(const float* plane, const glm::vec3& min, const glm::vec3& max) {
-        __m128 vplane = _mm_loadu_ps(plane); // [nx, ny, nz, d]
-        __m128 vmin = _mm_set_ps(0.0f, min.z, min.y, min.x);
-        __m128 vmax = _mm_set_ps(0.0f, max.z, max.y, max.x);
-        // For each axis, select min or max based on sign of plane normal
-        __m128 mask = _mm_cmpge_ps(vplane, _mm_setzero_ps()); // >=0? mask 0xFFFFFFFF else 0x0
-        __m128 p = _mm_or_ps(_mm_and_ps(mask, vmin), _mm_andnot_ps(mask, vmax)); // blend
-        // Dot product
-        __m128 dp = _mm_dp_ps(vplane, p, 0x71); // x,y,z
-        float dist;
-        _mm_store_ss(&dist, dp);
-        dist += plane[3];
-        return dist >= 0.0f;
+    //INLINE static bool _aabbVisibleSIMDPlane(const float* plane, const glm::vec3& min, const glm::vec3& max) {
+    //    __m128 vplane = _mm_loadu_ps(plane); // [nx, ny, nz, d]
+    //    __m128 vmin = _mm_set_ps(0.0f, min.z, min.y, min.x);
+    //    __m128 vmax = _mm_set_ps(0.0f, max.z, max.y, max.x);
+    //    // For each axis, select min or max based on sign of plane normal
+    //    __m128 mask = _mm_cmpge_ps(vplane, _mm_setzero_ps()); // >=0? mask 0xFFFFFFFF else 0x0
+    //    __m128 p = _mm_or_ps(_mm_and_ps(mask, vmin), _mm_andnot_ps(mask, vmax)); // blend
+    //    // Dot product
+    //    __m128 dp = _mm_dp_ps(vplane, p, 0x71); // x,y,z
+    //    float dist;
+    //    _mm_store_ss(&dist, dp);
+    //    dist += plane[3];
+    //    return dist >= 0.0f;
+    //}
+    INLINE static bool _aabbVisibleSIMDPlane_mul(const float* plane,
+                                                 const glm::vec3& mn,
+                                                 const glm::vec3& mx) {
+        const __m128 n_d = _mm_loadu_ps(plane);                 // [nx, ny, nz, d]
+        const __m128 vmin = _mm_set_ps(0.0f, mn.z, mn.y, mn.x);  // [x,y,z,0]
+        const __m128 vmax = _mm_set_ps(0.0f, mx.z, mx.y, mx.x);  // [x,y,z,0]
+
+        // choose max where n>=0, else min  (p-vertex)
+        const __m128 mask = _mm_cmpge_ps(n_d, _mm_setzero_ps());
+        const __m128 p = _mm_or_ps(_mm_and_ps(mask, vmax),
+                                   _mm_andnot_ps(mask, vmin));
+
+        // dot3 = sum(x,y,z) of (n * p)  -- SSE2 reduction
+        __m128 mul = _mm_mul_ps(n_d, p);                        // [nx*px, ny*py, nz*pz, 0]
+        __m128 shuf = _mm_shuffle_ps(mul, mul, _MM_SHUFFLE(2, 1, 0, 3)); // [nz*pz, ny*py, nx*px, 0]
+        __m128 sum = _mm_add_ps(mul, shuf);                     // [(x+z), (y+0), (z+x), 0]
+        shuf = _mm_shuffle_ps(sum, sum, _MM_SHUFFLE(1, 0, 3, 2)); // [(y+0), (x+z), ..., ...]
+        __m128 dpv = _mm_add_ss(sum, shuf);                     // [x+y+z, ...]
+        float dist = _mm_cvtss_f32(dpv) + plane[3];             // + d
+
+        return dist >= 0.0f;  // flip sign if your plane convention is opposite
     }
+
 public:
     INLINE static bool aabbVisibleSIMD(const AABB& box, Frustum& frustum) {
+        glm::vec3 mn{ box.frontTopLeft.x,   box.backBottomRight.y, box.backBottomRight.z };
+        glm::vec3 mx{ box.backBottomRight.x, box.frontTopLeft.y,   box.frontTopLeft.z };
         for (size_t i = 0; i < 6; ++i) {
-            if (!_aabbVisibleSIMDPlane(frustum.planes[i].raw, box.frontTopLeft, box.backBottomRight))
+            if (!_aabbVisibleSIMDPlane_mul(frustum.planes[i].raw, mn, mx))
                 return false;
         }
         return true;

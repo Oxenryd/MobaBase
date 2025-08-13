@@ -190,14 +190,17 @@ void VulkanContext::draw(void* rendCtx) {
 	uint32_t pipelinesCount = 0;
 	for (const auto& cmd : drawCmds) {
 
-		// Frustum culling
+		
 		auto* scene = Engine::getInstance()->getScene(cmd.sceneIndex);
+
+		// Frustum culling
 		const auto [bound, transform] = scene
 			->registry().try_get<BoundingVolumeComponent, TransformComponent>(cmd.subMeshEntity);
 		if (transform) {
-			auto coarse = scene->boundingSystem().bSpheres()[bound->coarseIndex];
+			auto local = scene->boundingSystem().cachedLocals()[bound->coarseIndex];
+			
 			//coarse.center += transform->position;
-			if (!Camera::sphereVisible(coarse, f))
+			if (!Camera::aabbVisibleSIMD(local, f))
 				continue;
 		}
 
@@ -259,6 +262,62 @@ void VulkanContext::draw(void* rendCtx) {
 		vkCmdDrawIndexed(frame.cmdBuffer, indexCount, 1, indexOffset, vertexOffset, 0);
 		drawCount++;
 	}
+
+
+	// Debug AABBs
+	bool anyAabbsDrawn = false;
+	Material* shapeMat;
+	uint32_t shapeDraws = 0;
+	for (auto* scene : Engine::getInstance()->getActiveScenes()) {
+		if (!scene->sceneRender().drawAbbs())
+			continue;
+
+		if (!anyAabbsDrawn) {
+
+			void* shapeIndexData = nullptr;
+			vkMapMemory(m_vkDevice, shapeIndexMemory[currentFrame], 0, sizeof(CameraData), 0, &shapeIndexData);
+			memcpy(shapeIndexData, &AaBbTriIndices, sizeof(uint32_t) * 36);
+			vkUnmapMemory(m_vkDevice, shapeIndexMemory[currentFrame]);
+
+			vkCmdBindIndexBuffer(frame.cmdBuffer, shapeIndexBuffer[currentFrame], 0, VK_INDEX_TYPE_UINT32);
+			shapeMat = RenderManager::getInstance()->getMaterial("ShapeRendererMaterial");
+			vkCmdBindPipeline(frame.cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines[shapeMat->pipelineId]);
+
+			vkCmdBindDescriptorSets(frame.cmdBuffer,
+									VK_PIPELINE_BIND_POINT_GRAPHICS,
+									pipelineLayouts[shapeMat->pipelineLayoutId],
+									0,
+									1,
+									&shapeRendererDescSet[currentFrame],
+									0, nullptr);
+			pipelinesCount++;
+			setCount++;
+			anyAabbsDrawn = true;
+		}
+
+		auto view = scene->registry().view<BoundingVolumeComponent, TransformComponent>();
+		for (auto [entity, bound, transform] : view.each()) {
+
+			AABB local = scene->boundingSystem().cachedLocals()[bound.coarseIndex];
+			//std::cout << "\nW: " << std::to_string(local.width()) << " H: " << std::to_string(local.height()) << " D: " << std::to_string(local.depth());
+			glm::vec3 mn{ local.frontTopLeft.x,  local.backBottomRight.y, local.backBottomRight.z };
+			glm::vec3 mx{ local.backBottomRight.x, local.frontTopLeft.y,  local.frontTopLeft.z };
+
+			ShapePush shapePush{};
+			shapePush.modelToWorld = transform.trs();
+			shapePush.color = { 0.02f, 1.0f, 0.02f, 0.01f };
+			shapePush.rotation = glm::quat();
+			shapePush.aabb = { mn, mx };
+			shapePush.drawNumber = shapeDraws++;
+
+			vkCmdPushConstants(frame.cmdBuffer, pipelineLayouts[shapeMat->pipelineLayoutId], VK_SHADER_STAGE_VERTEX_BIT,
+							   0, sizeof(ShapePush), &shapePush);
+
+			vkCmdDrawIndexed(frame.cmdBuffer, 36, 1, 0, 0, 0);
+			drawCount++;
+		}
+	}
+
 
 	m_lastDrawcallCount = drawCount;
 	m_lastPipelineSwitches = pipelinesCount;

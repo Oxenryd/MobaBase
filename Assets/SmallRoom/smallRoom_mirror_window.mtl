@@ -1,0 +1,30 @@
+newmtl smallRoom_mirror:phong1SG
+illum 4
+Kd 0.50 0.50 0.50
+Ka 0.00 0.00 0.00
+Tf 1.00 1.00 1.00
+map_Ks stones_specular.png
+Ni 1.00
+Ks 0.50 0.50 0.50
+map_bump stones_normal.png
+Ns 18.00
+refl 0.00
+newmtl smallRoom_mirror:spegel
+illum 4
+Kd 1.00 1.00 1.00
+Ka 0.00 0.00 0.00
+Tf 1.00 1.00 1.00
+Ni 1.00
+Ks 0.50 0.50 0.50
+Ns 35.00
+refl 1.00
+newmtl window
+illum 4
+Kd 1.00 0.80 0.95
+Ka 0.00 0.00 0.00
+Tf 1.00 1.00 1.00
+Ni 1.50
+Ks 0.50 0.50 0.50
+Ns 18.00
+refl 0.50
+d 0.15
