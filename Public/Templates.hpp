@@ -34,15 +34,15 @@ public:
 
 
         m_go = gameObjectSystem().createGameObject<GameObject>(m_name);
-        MeshDescription meshInfo{};
+        MeshComponent meshInfo{};
 
         //"Cube/cube.obj" //"crytek-sponza-hd/sponza.obj" //"SmallRoom/smallRoom_mirror_window.obj"    //"Sphere/sphere.obj"
         const std::string path = std::format("{}{}", ASSETS_DIR, "crytek-sponza-hd/sponza.obj");
 
         Mesh modelMesh{};
-        sceneRender().createMeshFromModel(path, &modelMesh, &m_go);
+        sceneRender().createMeshFromModel(path, &modelMesh, m_go.entity());
 
-        sceneRender().submitPersistent(m_go, meshInfo.meshIndex, 512);
+        //sceneRender().submitPersistent(m_go, meshInfo.meshIndex, 512);
         m_camIndex = sceneRender().addCamera();
         Engine::getInstance()->setMainCamera(m_sceneIndex, m_camIndex);
 

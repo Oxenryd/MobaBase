@@ -418,7 +418,7 @@ public:
 		return width() * height() * depth();
 	}
 	INLINE glm::vec3 center() const {
-		return (min + max) * 0.5f;
+		return min + (max - min) * 0.5f;
 	}
 	INLINE glm::vec3 size() const {
 		return max - min;

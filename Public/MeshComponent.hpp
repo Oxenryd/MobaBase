@@ -9,31 +9,31 @@
 #include "HlslTypes.h"
 #include "Transform.hpp"
 
-struct MeshDescription
-{
-	uint32_t meshIndex;
-	uint32_t subMeshOffset;
-	uint32_t subMeshCount;
-};
+//struct MeshDescription
+//{
+//	uint32_t subMeshOffset;
+//	uint32_t subMeshCount;
+//};
 
-struct MeshComponent
-{
-	uint32_t meshIndex;
-};
+//struct MeshComponent
+//{
+//	uint32_t meshIndex;
+//};
 
 struct SubMeshComponent
 {
 	uint32_t subMeshIndex;
 };
 
-struct MeshData
+struct MeshComponent
 {
-	size_t firstSubMeshIndex;
-	size_t subMeshCount;
+	uint32_t subMeshOffset;
+	uint32_t subMeshCount;
 };
 
-struct SubMesh
+struct SubMeshData
 {
+	entt::entity parent{ entt::null };
 	entt::entity entity{ entt::null };
 	uint32_t vertexOffset{ UINT32_INVALID };
 	uint32_t vertexCount{ UINT32_INVALID };
@@ -41,11 +41,19 @@ struct SubMesh
 	uint32_t indexCount{ UINT32_INVALID };
 	uint32_t materialIndex{ UINT32_INVALID };
 	uint32_t instanceIndex{ UINT32_INVALID };
+};
 
+
+struct SubMesh
+{
+private:
+	ArenaRegistry* m_reg;
+	entt::entity m_entity;
+
+public:
 	glm::vec3 getAvgCenter();
 	std::span<BaseVSIn> getVertices();
 };
-
 
 struct Mesh
 {
@@ -92,10 +100,10 @@ public:
 		return m_reg == rhs.m_reg && m_entity == rhs.m_entity;
 	}
 
-	MeshData& getMeshData();
+	MeshComponent& getMeshComponent();
 	glm::vec3 getAvgCenter();
 	std::span<BaseVSIn> getVertices();
-	std::span<SubMesh> getSubmeshes();
+	std::span<SubMeshData> getSubmeshes();
 	//void rigSubMeshTransforms();
 };
 

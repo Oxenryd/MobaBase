@@ -141,11 +141,18 @@ void VulkanContext::draw(const DrawContext& ctx) {
 
 		auto& reg = scene->registry();
 		for (auto& entity : scene->cullResults.visibleEntities) {
-			auto& meshComp = reg.get<MeshComponent>(entity);
-			auto& meshData = scene->sceneRender().getMeshes()[meshComp.meshIndex];
-			SubMesh& = [mesh.]
+
+			auto& subMeshComp = reg.get<SubMeshComponent>(entity);
+			SubMeshData& subMesh = scene->sceneRender().getSubMeshes()[subMeshComp.subMeshIndex];	
 			MeshDrawCommand cmd{};
-			
+			cmd.instanceIndex = subMesh.instanceIndex;
+			cmd.materialIndex = subMesh.materialIndex;
+			cmd.priority = 1.0f; //TODO
+			cmd.sceneIndex = scene->sceneIndex();
+			cmd.submeshOffset = subMeshComp.subMeshIndex;
+			cmd.subMeshEntity = subMesh.entity;
+
+			drawCmds.push_back(cmd);
 		}
 	}
 	std::sort(drawCmds.begin(), drawCmds.end());

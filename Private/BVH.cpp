@@ -1,6 +1,7 @@
 #include "BVH.hpp"
 #include "BoundingVolume.hpp"
 #include "Transform.hpp"
+#include "Frustum.hpp"
 
 uint32_t DualBVH::buildRecursive(std::vector<uint32_t>& primitiveIds, uint32_t depth, uint32_t parent) {
      if (primitiveIds.empty()) return 0;
@@ -125,6 +126,48 @@ uint32_t DualBVH::findBestSplit(const std::vector<uint32_t>& primitiveIds, int& 
     return bestCost;
 }
 
+void DualBVH::collectOccluders(const glm::vec3& cameraPos, const Frustum& frustum, std::vector<OccluderData>& occluders) const {
+
+    std::vector<uint32_t> nodeStack;
+    nodeStack.reserve(64);
+    nodeStack.push_back(rootIndex);
+
+    while (!nodeStack.empty()) {
+        uint32_t nodeIndex = nodeStack.back();
+        nodeStack.pop_back();
+
+        const BVHNode& node = nodes[nodeIndex];
+
+        if (!MMath::aabbVisible(node.bounds.min, node.bounds.max, frustum)) {
+            continue;
+        }
+
+        if (node.isLeaf()) {
+            for (uint32_t i = 0; i < node.primitiveCount; ++i) {
+
+                // ignore if cam is inside
+                if (node.bounds.contains(cameraPos))
+                    continue;
+
+                uint32_t primIndex = primitiveIndices[node.firstPrimitive + i];
+                const BVHPrimitive& prim = primitives[primIndex];
+
+                float depth = glm::length(prim.worldBounds.center() - cameraPos);
+                glm::vec3 size = prim.worldBounds.size();
+
+                // Heuristic: large objects close to camera are potential occluders
+                float volume = size.x * size.y * size.z;
+                bool isOccluder = (volume > 1.0f && depth < 50.0f) || volume > 10.0f;
+
+                occluders.emplace_back(prim.entity, prim.worldBounds, depth, isOccluder);
+            }
+        } else {
+            if (node.leftChild != 0) nodeStack.push_back(node.leftChild);
+            if (node.rightChild != 0) nodeStack.push_back(node.rightChild);
+        }
+    }
+}
+
 void DualBVH::build(ArenaRegistry& registry) {
     // Clear existing data
     nodes.clear();
@@ -207,7 +250,10 @@ void DualBVH::incrementalUpdate(ArenaRegistry& registry) {
     }
 }
 
-DualBVH::TraversalResult DualBVH::frustumCull(const glm::mat4& viewProjection, const Frustum& f) const {
+
+
+
+DualBVH::TraversalResult DualBVH::frustumCull(const Frustum& f) const {
     TraversalResult result;
     if (isEmpty()) return result;
 
@@ -238,6 +284,110 @@ DualBVH::TraversalResult DualBVH::frustumCull(const glm::mat4& viewProjection, c
             // Add children to stack (back-to-front for better culling)
             if (node.rightChild != 0) nodeStack.push_back(node.rightChild);
             if (node.leftChild != 0) nodeStack.push_back(node.leftChild);
+        }
+    }
+
+    return result;
+}
+
+DualBVH::TraversalResult DualBVH::frustumCullWithOcclusion(
+    //const glm::mat4& viewProjection,
+    const Frustum& frustum,
+    const glm::vec3& cameraPos,
+    OcclusionMethod method) const {
+
+    TraversalResult result;
+    if (isEmpty()) return result;
+
+    // Collect potential occluders first (front-to-back)
+    std::vector<OccluderData> potentialOccluders;
+    collectOccluders(cameraPos, frustum, potentialOccluders);
+
+    // Sort occluders front-to-back
+    std::sort(potentialOccluders.begin(), potentialOccluders.end(),
+              [](const OccluderData& a, const OccluderData& b) {
+                  return a.depth < b.depth;
+              });
+
+    // Build active occluder set (simplified - you'd want more sophisticated occlusion volumes)
+    std::vector<AABB> activeOccluders;
+    for (const auto& occluder : potentialOccluders) {
+        if (occluder.isOccluder) {                              //////////////////// TODO TODO TODO TODO!!!
+            activeOccluders.push_back(occluder.bounds);
+            // Limit number of active occluders for performance
+            if (activeOccluders.size() >= 8) break;
+        }
+    }
+
+    // Traverse with occlusion testing
+    struct TraversalNode
+    {
+        uint32_t nodeIndex;
+        float minDepth;
+        float maxDepth;
+    };
+
+    std::vector<TraversalNode> nodeStack;
+    nodeStack.reserve(64);
+
+    float rootMinDepth, rootMaxDepth;
+    computeNodeDepthRange(rootIndex, cameraPos, rootMinDepth, rootMaxDepth);
+    nodeStack.push_back({ rootIndex, rootMinDepth, rootMaxDepth });
+
+    while (!nodeStack.empty()) {
+        TraversalNode current = nodeStack.back();
+        nodeStack.pop_back();
+
+        const BVHNode& node = nodes[current.nodeIndex];
+        result.nodesVisited++;
+
+        // Frustum test first (cheapest)
+        if (!MMath::aabbVisible(node.bounds.min, node.bounds.max, frustum)) {
+            result.nodesCulledByFrustum++;
+            continue;
+        }
+
+        // Occlusion test
+        if (method != OcclusionMethod::NONE && !activeOccluders.empty()) {
+            if ( !node.bounds.contains(cameraPos) && 
+                 isOccluded(node.bounds, activeOccluders, cameraPos, current.minDepth) )
+            {
+                result.nodesCulledByOcclusion++;
+                continue;
+            }
+        }
+
+        if (node.isLeaf()) {
+            // Process leaf primitives
+            for (uint32_t i = 0; i < node.primitiveCount; ++i) {
+                uint32_t primIndex = primitiveIndices[node.firstPrimitive + i];
+                const BVHPrimitive& prim = primitives[primIndex];
+
+                // Fine-grained occlusion test for individual primitives
+                bool occluded = false;
+                if (method != OcclusionMethod::NONE && !activeOccluders.empty()) {
+                    float primDepth = glm::length(prim.worldBounds.center() - cameraPos);
+                    occluded = isOccluded(prim.worldBounds, activeOccluders, cameraPos, primDepth) &&
+                        !prim.worldBounds.contains(cameraPos);
+                }
+
+                if (!occluded) {
+                    result.visibleEntities.push_back(prim.entity);
+                }
+                result.primitivesVisited++;
+            }
+        } else {
+            // Add children to stack with depth ranges
+            if (node.leftChild != 0) {
+                float minDepth, maxDepth;
+                computeNodeDepthRange(node.leftChild, cameraPos, minDepth, maxDepth);
+                nodeStack.push_back({ node.leftChild, minDepth, maxDepth });
+            }
+            if (node.rightChild != 0) {
+                float minDepth, maxDepth;
+                computeNodeDepthRange(node.rightChild, cameraPos, minDepth, maxDepth);
+                nodeStack.push_back({ node.rightChild, minDepth, maxDepth });
+            }
         }
     }
 

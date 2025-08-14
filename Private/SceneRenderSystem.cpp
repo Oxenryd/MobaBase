@@ -9,13 +9,13 @@
 
 
 
-ErrorCode SceneRenderSystem::loadModel(const std::string& filename, MeshDescription* outMeshInfo) {
+ErrorCode SceneRenderSystem::loadModel(const std::string& filename, MeshComponent* outMeshInfo) {
 	
 	uint32_t startTexIndex = RenderManager::getInstance()->textures().size();
 
-	MeshDescription mInfo{};
+	MeshComponent mInfo{};
 	auto ec = AssetLoader::loadModel(filename,
-									 m_meshes, m_vertices, m_subMeshes, m_indices,
+									 m_vertices, m_subMeshes, m_indices,
 									 *RenderManager::getInstance(), &mInfo);
 
 	uint32_t endTexIndex = RenderManager::getInstance()->textures().size();
@@ -76,32 +76,32 @@ uint32_t SceneRenderSystem::addCamera(CameraData* initData) {
 	return index;
 }
 
-ErrorCode SceneRenderSystem::createMeshFromModel(const std::string& path, Mesh* outMesh, const GameObject* go) {
+ErrorCode SceneRenderSystem::createMeshFromModel(const std::string& path, Mesh* outMesh, const entt::entity parent) {
 
-	MeshDescription meshInfo{};
-	auto ec = loadModel(path, &meshInfo);
+	MeshComponent meshComp{};
+	auto ec = loadModel(path, &meshComp);
 	if (!EC_FAILED(ec)) {
 		Mesh newMesh{};
-		MeshComponent meshComp{};
-		meshComp.meshIndex = meshInfo.meshIndex;
-		if (go) {
-			meshComp = m_reg->emplace<MeshComponent>(go->entity(), meshComp);
-			newMesh = Mesh{ m_reg, go->entity() };
+		if (parent != entt::null) {
+			meshComp = m_reg->emplace<MeshComponent>(parent, meshComp);
+			newMesh = Mesh{ m_reg, parent };
 			if (outMesh) {
 				*outMesh = newMesh;
 			}
-		} else {
-			auto newEntity = m_reg->create();
-			meshComp = m_reg->emplace<MeshComponent>(newEntity, meshComp);
-			newMesh = Mesh{ m_reg, newEntity };
-			if (outMesh) {
-				*outMesh = newMesh;
-			}
-		}
+		} 
+		//else {
+		//	auto newEntity = m_reg->create();
+		//	meshComp = m_reg->emplace<MeshComponent>(newEntity, meshComp);
+		//	newMesh = Mesh{ m_reg, newEntity };
+		//	if (outMesh) {
+		//		*outMesh = newMesh;
+		//	}
+		//}
 
-		for (size_t i = meshInfo.subMeshOffset; i < meshInfo.subMeshOffset + meshInfo.subMeshCount; ++i) {
+		for (size_t i = meshComp.subMeshOffset; i < meshComp.subMeshOffset + meshComp.subMeshCount; ++i) {
 			auto& subMesh = m_subMeshes[i];
 			subMesh.entity = m_reg->create();
+
 			m_reg->emplace<SubMeshComponent>(subMesh.entity, SubMeshComponent{ static_cast<uint32_t>(i) });
 			
 			auto subVerts = std::span<BaseVSIn>(&m_vertices[subMesh.vertexOffset], subMesh.vertexCount);

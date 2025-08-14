@@ -54,7 +54,7 @@ struct BVHPrimitive
         : entity(e), localBounds(bounds), worldBounds(bounds), frameUpdated(0) {}
 };
 
-
+struct Frustum;
 
 // Thread-safe BVH with dual-purpose design
 class DualBVH
@@ -94,7 +94,30 @@ public:
         std::vector<std::pair<entt::entity, entt::entity>> collisionPairs;
         uint32_t nodesVisited = 0;
         uint32_t primitivesVisited = 0;
+        uint32_t nodesCulledByFrustum = 0;
+        uint32_t nodesCulledByOcclusion = 0;
     };
+
+    // Occlusion data
+    struct OccluderData
+    {
+        entt::entity entity;
+        AABB bounds;
+        float depth;  // Distance from camera
+        bool isOccluder;  // Can this entity occlude others?
+
+        OccluderData(entt::entity e, const AABB& b, float d, bool occluder = false)
+            : entity(e), bounds(b), depth(d), isOccluder(occluder) {}
+    };
+
+    enum class OcclusionMethod
+    {
+        NONE,
+        SIMPLE_DEPTH,     // Simple front-to-back + depth test
+        HIERARCHICAL_Z,   // Hierarchical Z-buffer (more advanced)
+        PORTAL_ZONES      // For indoor scenes with portals
+    };
+
 
     BuildSettings settings{};
 
@@ -182,6 +205,85 @@ private:
             glm::length(oldCenter - newCenter) > threshold;
     }
 
+    // Occlusion culling helper methods
+    void collectOccluders(const glm::vec3& cameraPos,
+                          const Frustum& frustum,
+                          std::vector<OccluderData>& occluders) const;
+
+    bool isOccluded(const AABB& bounds, const std::vector<AABB>& occluders,
+                    const glm::vec3& cameraPos, float objectDepth) const {
+
+        glm::vec3 objectCenter = bounds.center();
+        glm::vec3 viewDir = glm::normalize(objectCenter - cameraPos);
+
+        // Simple occlusion test: check if any occluder blocks the view to this object
+        for (const auto& occluder : occluders) {
+            glm::vec3 occluderCenter = occluder.center();
+            float occluderDepth = glm::length(occluderCenter - cameraPos);
+
+            // Only test occluders that are closer
+            if (occluderDepth >= objectDepth - 0.5f)
+                continue;
+
+            // Simple shadow volume test
+            if (isShadowedBy(bounds, occluder, cameraPos)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    bool isShadowedBy(const AABB& object, const AABB& occluder, const glm::vec3& cameraPos) const {
+        // Simplified shadow volume test
+        // In practice, you'd want more sophisticated occlusion testing
+
+        glm::vec3 objCenter = object.center();
+        glm::vec3 occCenter = occluder.center();
+        glm::vec3 objSize = object.size();
+        glm::vec3 occSize = occluder.size();
+
+        // Check if object is behind occluder from camera's perspective
+        glm::vec3 camToOcc = occCenter - cameraPos;
+        glm::vec3 camToObj = objCenter - cameraPos;
+
+        if (glm::dot(camToObj, camToOcc) <= 0) return false; // Object not behind occluder
+
+        // Project occluder bounds onto the plane containing the object
+        float t = glm::length(camToObj) / glm::length(camToOcc);
+        glm::vec3 projectedOccCenter = cameraPos + camToOcc * t;
+        glm::vec3 projectedOccSize = occSize * t; // Approximate projection scaling
+
+        // Check if projected occluder overlaps with object (simplified 2D test)
+        AABB projectedOccluder(projectedOccCenter - projectedOccSize * 0.5f,
+                               projectedOccCenter + projectedOccSize * 0.5f);
+
+        return projectedOccluder.intersects(object);
+    }
+
+    void computeNodeDepthRange(uint32_t nodeIndex, const glm::vec3& cameraPos,
+                               float& minDepth, float& maxDepth) const {
+        if (nodeIndex == 0) {
+            minDepth = maxDepth = 0.0f;
+            return;
+        }
+
+        const BVHNode& node = nodes[nodeIndex];
+        const AABB& bounds = node.bounds;
+
+        // Compute distance to all 8 corners of the AABB
+        auto corners = bounds.getVertices();
+
+        minDepth = FLT_MAX;
+        maxDepth = -FLT_MAX;
+
+        for (int i = 0; i < 8; ++i) {
+            float depth = glm::length(corners[i] - cameraPos);
+            minDepth = std::min(minDepth, depth);
+            maxDepth = std::max(maxDepth, depth);
+        }
+    }
+
 public:
     explicit DualBVH(const BuildSettings& settings = {}) : settings(settings) {
         nodes.reserve(1024);  // Pre-allocate for better performance
@@ -199,8 +301,11 @@ public:
 
 
     // Queries - these can run concurrently
-    TraversalResult frustumCull(const glm::mat4& viewProjection, const Frustum& f) const;
+    TraversalResult frustumCull(const Frustum& f) const;
 
+    TraversalResult frustumCullWithOcclusion(const Frustum& f,
+                                             const glm::vec3& cameraPos,
+                                             OcclusionMethod method) const;
 
     TraversalResult broadPhaseCollision() const;
 
@@ -385,8 +490,15 @@ public:
     }
 
     // Called from render thread
-    auto performFrustumCulling(const glm::mat4x4& viewProjection, const Frustum& f) const {
-        return bvh.frustumCull(viewProjection, f);
+    auto performFrustumCulling(const Frustum& f) const {
+        return bvh.frustumCull(f);
+    }
+
+    // Called from render thread with occlusion culling
+    auto performFrustumCullingWithOcclusion(const Frustum& f,
+                                            const glm::vec3& cameraPos,
+                                            DualBVH::OcclusionMethod method = DualBVH::OcclusionMethod::SIMPLE_DEPTH) const {
+        return bvh.frustumCullWithOcclusion(f, cameraPos, method);
     }
 
     // Called from physics thread (can be concurrent with frustum culling)

@@ -11,12 +11,12 @@
 
 ErrorCode AssetLoader::loadModel(
 	const std::string& filename,
-	ArenaVector<MeshData>& meshes,
+	//ArenaVector<MeshData>& meshes,
 	ArenaVector<BaseVSIn>& vertexBuffer,
-	ArenaVector<SubMesh>& subMeshBuffer,
+	ArenaVector<SubMeshData>& subMeshBuffer,
 	ArenaVector<uint32_t>& indexBuffer,
 	RenderManager& render,
-	MeshDescription* outMeshInfo) {
+	MeshComponent* outMeshInfo) {
 
 	LOGLINE(LogType::Info, LogMod::Assets, std::format("Loading '{}'... ", filename));
 
@@ -35,8 +35,8 @@ ErrorCode AssetLoader::loadModel(
 	} else if (!scene->mRootNode)
 		return _logReturnError(ErrorCode::ASSETS_MODEL_NO_ROOT, std::format("Assimp Error:  {}", importer.GetErrorString()));
 
-	MeshData mesh{};
-	mesh.firstSubMeshIndex = subMeshBuffer.size();
+	MeshComponent mesh{};
+	mesh.subMeshOffset = subMeshBuffer.size();
 	mesh.subMeshCount = scene->mNumMeshes;
 	size_t vertCount = 0;
 	size_t indexCount = 0;
@@ -45,7 +45,7 @@ ErrorCode AssetLoader::loadModel(
 	for (unsigned int i = 0; i < scene->mNumMeshes; ++i) {
 		const aiMesh* aiMesh = scene->mMeshes[i];
 
-		SubMesh subMesh{};
+		SubMeshData subMesh{};
 		subMesh.vertexOffset = vertexBuffer.size();
 
 		// Vertices
@@ -119,11 +119,9 @@ ErrorCode AssetLoader::loadModel(
 		subMeshBuffer.push_back(subMesh);
 	}
 	if (outMeshInfo) {
-		outMeshInfo->meshIndex = meshes.size();
-		outMeshInfo->subMeshCount = subMeshBuffer.size() - mesh.firstSubMeshIndex;
-		outMeshInfo->subMeshOffset = mesh.firstSubMeshIndex;
+		outMeshInfo->subMeshCount = subMeshBuffer.size() - mesh.subMeshOffset;
+		outMeshInfo->subMeshOffset = mesh.subMeshOffset;
 	}
-	meshes.push_back(mesh);
 
 	LOGLINE(LogType::Info, LogMod::Assets, std::format("\t{} meshes, {}/{} materials/new, {} total vertices... ",
 													   mesh.subMeshCount, scene->mNumMaterials, newMats, vertCount));

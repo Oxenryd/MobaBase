@@ -39,7 +39,6 @@ struct MeshDrawCommand
 {
 	uint32_t submeshOffset;
 	uint32_t materialIndex;
-	//entt::entity entityId;
 	entt::entity subMeshEntity;
 	uint32_t instanceIndex{UINT32_INVALID};
 	uint16_t sceneIndex;

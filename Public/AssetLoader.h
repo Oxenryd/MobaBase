@@ -46,12 +46,12 @@ private:
 public:
 	static ErrorCode loadModel(
 		const std::string& filename,
-		ArenaVector<MeshData>& meshes,
+		//ArenaVector<MeshData>& meshes,
 		ArenaVector<BaseVSIn>& vertexBuffer,
-		ArenaVector<SubMesh>& subMeshBuffer,
+		ArenaVector<SubMeshData>& subMeshBuffer,
 		ArenaVector<uint32_t>& indexBuffer,
 		RenderManager& render,
-		MeshDescription* outMeshInfo);
+		MeshComponent* outMeshInfo);
 
 	static Material& createMaterial(const aiMaterial* aiMat);
 

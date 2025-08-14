@@ -71,6 +71,8 @@ public:
 
             m_camData.view = rotMatrix;
             m_viewDirty = false;
+
+            m_cachedFrustum = MMath::getFrustum(viewProjection());
         }
         return m_camData.view;
     }
@@ -162,9 +164,6 @@ public:
 
     INLINE Frustum& getFrustum(bool normalize = true) {
 
-        if (m_viewDirty || m_projDirty) {
-            m_cachedFrustum = MMath::getFrustum(viewProjection());
-        }
         return m_cachedFrustum;
     }
 

@@ -82,7 +82,7 @@ public:
         m_reg.storage<EnabledTag>().reserve(ECS_BASE_COMPONENTS_RESERVATION_COUNT);
         m_reg.storage<BoundingVolumeComponent>().reserve(ECS_BASE_COMPONENTS_RESERVATION_COUNT);
         m_reg.storage<MeshComponent>().reserve(ECS_BASE_COMPONENTS_RESERVATION_COUNT);
-        m_reg.storage<SubMeshComponent>().reserve(ECS_BASE_COMPONENTS_RESERVATION_COUNT);
+       // m_reg.storage<SubMeshComponent>().reserve(ECS_BASE_COMPONENTS_RESERVATION_COUNT);
 
         cullResults.visibleEntities.reserve(1024);
         broadPhaseResults.collisionPairs.reserve(1024);

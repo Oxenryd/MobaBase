@@ -9,17 +9,18 @@ std::span<BaseVSIn> SubMesh::getVertices() {
 
 
 
-MeshData& Mesh::getMeshData() {
-	const auto& [meshComp, trans] = m_reg->get<MeshComponent, TransformComponent>(m_entity);
-	return Engine::getInstance()->getScene(trans.sceneIndex)->sceneRender().getMeshes()[meshComp.meshIndex];
+MeshComponent& Mesh::getMeshComponent() {
+	//const auto& [meshComp, trans] = m_reg->get<MeshComponent, TransformComponent>(m_entity);
+	return m_reg->get<MeshComponent>(m_entity);
+	//return Engine::getInstance()->getScene(trans.sceneIndex)->sceneRender().getMeshes()[meshComp.meshIndex];
 }
 
-std::span<SubMesh> Mesh::getSubmeshes() {
+std::span<SubMeshData> Mesh::getSubmeshes() {
 	const auto& [meshComp, trans] = m_reg->get<MeshComponent, TransformComponent>(m_entity);
-	auto& meshData = Engine::getInstance()->getScene(trans.sceneIndex)->sceneRender().getMeshes()[meshComp.meshIndex];
+	//auto& meshData = Engine::getInstance()->getScene(trans.sceneIndex)->sceneRender().getMeshes()[meshComp.meshIndex];
 	auto& subMeshes = Engine::getInstance()->getScene(trans.sceneIndex)->sceneRender().getSubMeshes();
 
-	return std::span<SubMesh>(&subMeshes[meshData.firstSubMeshIndex], meshData.subMeshCount);
+	return std::span<SubMeshData>(&subMeshes[meshComp.subMeshOffset], meshComp.subMeshCount);
 }
 
 
@@ -40,12 +41,12 @@ glm::vec3 Mesh::getAvgCenter() {
 std::span<BaseVSIn> Mesh::getVertices() {
 
 	const auto& [meshComp, trans] = m_reg->get<MeshComponent, TransformComponent>(m_entity);
-	auto& meshData = Engine::getInstance()->getScene(trans.sceneIndex)->sceneRender().getMeshes()[meshComp.meshIndex];
+	//auto& meshData = Engine::getInstance()->getScene(trans.sceneIndex)->sceneRender().getMeshes()[meshComp.meshIndex];
 	auto& subMeshes = Engine::getInstance()->getScene(trans.sceneIndex)->sceneRender().getSubMeshes();
 	auto& vertices = Engine::getInstance()->getScene(trans.sceneIndex)->sceneRender().getVertices();
 
-	auto& firstSub = subMeshes[meshData.firstSubMeshIndex];
-	auto& lastSub = subMeshes[meshData.firstSubMeshIndex + meshData.subMeshCount - 1];
+	auto& firstSub = subMeshes[meshComp.subMeshOffset];
+	auto& lastSub = subMeshes[meshComp.subMeshOffset + meshComp.subMeshCount - 1];
 
 	auto count = (lastSub.vertexOffset + lastSub.vertexCount) - firstSub.vertexOffset;
 	return std::span<BaseVSIn>(&vertices[firstSub.vertexOffset], count);

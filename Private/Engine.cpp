@@ -377,7 +377,11 @@ inline void Engine::_updateLate(double dt) {
 		} else {
 			auto viewProj = mainCamera()->viewProjection();
 			auto& f = mainCamera()->getFrustum();
-			m_scenes[index]->cullResults = m_scenes[index]->bvhSystem().performFrustumCulling(viewProj, f);
+
+			m_scenes[index]->cullResults = m_scenes[index]->
+				bvhSystem().performFrustumCulling(f);
+			//m_scenes[index]->cullResults = m_scenes[index]->
+			//	bvhSystem().performFrustumCullingWithOcclusion(f, mainCamera()->getPosition());
 		}
 	}
 	for (auto& index : removeIndices) {
