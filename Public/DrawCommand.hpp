@@ -39,7 +39,7 @@ struct MeshDrawCommand
 {
 	uint32_t submeshOffset;
 	uint32_t materialIndex;
-	entt::entity entityId;
+	//entt::entity entityId;
 	entt::entity subMeshEntity;
 	uint32_t instanceIndex{UINT32_INVALID};
 	uint16_t sceneIndex;
@@ -50,7 +50,7 @@ struct MeshDrawCommand
 	uint64_t hash() {
 		uint64_t seed = 0;
 		seed ^= std::hash<uint64_t>{}(submeshOffset + 0x9e3779b9 + (seed << 6) + (seed >> 2));
-		seed ^= std::hash<uint64_t>{}(static_cast<uint32_t>(entityId) + 0x9e3779b9 + (seed << 6) + (seed >> 2));
+		seed ^= std::hash<uint64_t>{}(static_cast<uint32_t>(subMeshEntity) + 0x9e3779b9 + (seed << 6) + (seed >> 2));
 		seed ^= std::hash<uint64_t>{}(materialIndex)+0x9e3779b9 + (seed << 6) + (seed >> 2);
 		seed ^= std::hash<uint64_t>{}(instanceIndex) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
 		seed ^= std::hash<uint64_t>{}(sceneIndex)+0x9e3779b9 + (seed << 6) + (seed >> 2);

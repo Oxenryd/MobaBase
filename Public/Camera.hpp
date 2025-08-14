@@ -24,6 +24,7 @@ class Camera : public GameObject
 private:
 	bool m_viewDirty = true;
 	bool m_projDirty = true;
+    Frustum m_cachedFrustum;
 
 	LayerMask m_layerMask{ 1 };
     CameraData m_camData{};
@@ -159,9 +160,12 @@ public:
     }
 
 
-    INLINE Frustum getFrustum(bool normalize = true) {
+    INLINE Frustum& getFrustum(bool normalize = true) {
 
-        return MMath::getFrustum(viewProjection());
+        if (m_viewDirty || m_projDirty) {
+            m_cachedFrustum = MMath::getFrustum(viewProjection());
+        }
+        return m_cachedFrustum;
     }
 
 

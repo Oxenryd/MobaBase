@@ -3,14 +3,13 @@
 #include <format>
 #include <chrono>
 
-void VulkanContext::draw(void* rendCtx) {
+void VulkanContext::draw(const DrawContext& ctx) {
 
 	if (isPendingExit()) {
 		vkDeviceWaitIdle(m_vkDevice);
 		return;
 	}
 
-	auto* ctx = static_cast<RenderContext*>(rendCtx);
 	auto& frame = frameSync[currentFrame];
 
 
@@ -37,16 +36,16 @@ void VulkanContext::draw(void* rendCtx) {
 
 	// Set Dynamic state
 	VkViewport viewport{};
-	viewport.x = ctx->vPortPos[0];
-	viewport.y = ctx->vPortPos[1];
-	viewport.width = ctx->vPortSize[0] < 0 ? static_cast<float>(swapchainExtent.width) : ctx->vPortSize[0];
-	viewport.height = ctx->vPortSize[1] < 0 ? static_cast<float>(swapchainExtent.height) : ctx->vPortSize[1];
-	viewport.minDepth = ctx->vPortMinDepth;
-	viewport.maxDepth = ctx->vPortMaxDepth;
+	viewport.x = ctx.vPortPos[0];
+	viewport.y = ctx.vPortPos[1];
+	viewport.width = ctx.vPortSize[0] < 0 ? static_cast<float>(swapchainExtent.width) : ctx.vPortSize[0];
+	viewport.height = ctx.vPortSize[1] < 0 ? static_cast<float>(swapchainExtent.height) : ctx.vPortSize[1];
+	viewport.minDepth = ctx.vPortMinDepth;
+	viewport.maxDepth = ctx.vPortMaxDepth;
 	vkCmdSetViewport(frame.cmdBuffer, 0, 1, &viewport);
 
 	VkRect2D scissor{};
-	scissor.offset = { ctx->sciOffset[0], ctx->sciOffset[1] };
+	scissor.offset = { ctx.sciOffset[0], ctx.sciOffset[1] };
 	scissor.extent = swapchainExtent;
 	vkCmdSetScissor(frame.cmdBuffer, 0, 1, &scissor);
 
@@ -59,7 +58,7 @@ void VulkanContext::draw(void* rendCtx) {
 	camData.clustersX = VULKAN_LIGHT_CLUSTERS_X;
 	camData.clustersY = VULKAN_LIGHT_CLUSTERS_Y;
 	camData.clustersZ = VULKAN_LIGHT_CLUSTERS_Z;
-	Frustum f = mainCam->getFrustum();
+	//Frustum& f = mainCam->getFrustum();
 
 	// Update CameraData cBuffer
 	void* mappedData = nullptr;
@@ -135,8 +134,21 @@ void VulkanContext::draw(void* rendCtx) {
 
 
 
+	// Find the draw commands
+	static std::vector<MeshDrawCommand> drawCmds;
+	drawCmds.clear();
+	for (auto& scene : Engine::getInstance()->getActiveScenes()) {
 
-
+		auto& reg = scene->registry();
+		for (auto& entity : scene->cullResults.visibleEntities) {
+			auto& meshComp = reg.get<MeshComponent>(entity);
+			auto& meshData = scene->sceneRender().getMeshes()[meshComp.meshIndex];
+			SubMesh& = [mesh.]
+			MeshDrawCommand cmd{};
+			
+		}
+	}
+	std::sort(drawCmds.begin(), drawCmds.end());
 
 
 
@@ -146,12 +158,12 @@ void VulkanContext::draw(void* rendCtx) {
 
 	// Begin Render Pass
 	VkClearValue clearValues[2] = {};
-	clearValues[0].color = { ctx->clearColor[0], ctx->clearColor[1], ctx->clearColor[2], ctx->clearColor[3] };
+	clearValues[0].color = { ctx.clearColor[0], ctx.clearColor[1], ctx.clearColor[2], ctx.clearColor[3] };
 	clearValues[1].depthStencil = { 1.0f, 0 };
 
 	VkRenderPassBeginInfo renderPassInfo{};
 	renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-	renderPassInfo.renderPass = rendPasses[ctx->renderPassIndex];
+	renderPassInfo.renderPass = rendPasses[0];//rendPasses[ctx.renderPassIndex];
 	renderPassInfo.framebuffer = swapChainFramebuffers[imageIndex];
 	renderPassInfo.renderArea.offset = { 0, 0 };
 	renderPassInfo.renderArea.extent = swapchainExtent;
@@ -164,17 +176,6 @@ void VulkanContext::draw(void* rendCtx) {
 	vkCmdBindVertexBuffers(frame.cmdBuffer, 0, 1, &vertexBuffer, offsets);
 	vkCmdBindIndexBuffer(frame.cmdBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT32);
 
-
-	static std::vector<MeshDrawCommand> drawCmds;
-	drawCmds.clear();
-	for (auto& scene : Engine::getInstance()->getActiveScenes()) {
-		for (auto& cmd : scene->sceneRender().persistentDrawCommands()) {
-			drawCmds.push_back(cmd);
-		}
-	}
-	std::sort(drawCmds.begin(), drawCmds.end());
-
-	//VkPipeline lastPipeline = VK_NULL_HANDLE;
 	uint32_t lastPipelineIndex = UINT32_INVALID - 1;
 	Material* lastMaterial = nullptr;
 	uint32_t lastDescCount = 0;
@@ -184,7 +185,6 @@ void VulkanContext::draw(void* rendCtx) {
 	size_t setCount = 0;
 	bool pendingRebind = false;
 
-
 	// Check the draw commands and issue binds and draw calls
 	uint32_t drawCount = 0;
 	uint32_t pipelinesCount = 0;
@@ -193,16 +193,16 @@ void VulkanContext::draw(void* rendCtx) {
 		
 		auto* scene = Engine::getInstance()->getScene(cmd.sceneIndex);
 
-		// Frustum culling
-		const auto [bound, transform] = scene
-			->registry().try_get<BoundingVolumeComponent, TransformComponent>(cmd.subMeshEntity);
-		if (transform) {
-			auto world = scene->boundingSystem().aabbs()[bound->coarseIndexWorld];
-			
-			//coarse.center += transform->position;
-			if (!MMath::aabbVisible(world.min, world.max, f))
-				continue;
-		}
+		//// Frustum culling
+		//const auto [bound, transform] = scene
+		//	->registry().try_get<BoundingVolumeComponent, TransformComponent>(cmd.subMeshEntity);
+		//if (transform) {
+		//	auto world = scene->boundingSystem().aabbs()[bound->coarseIndexWorld];
+		//	
+		//	//coarse.center += transform->position;
+		//	if (!MMath::aabbVisible(world.min, world.max, mainCam->getFrustum()))
+		//		continue;
+		//}
 
 
 
@@ -249,7 +249,8 @@ void VulkanContext::draw(void* rendCtx) {
 		BaseMatPush push{};
 		push.matrixIndex = UINT32_INVALID;
 		push.matInstanceIndex = cmd.instanceIndex;
-		push.modelToWorld = scene->registry().get<TransformComponent>(cmd.entityId).trs();
+		auto& transComp = scene->registry().get<TransformComponent>(cmd.subMeshEntity);
+		push.modelToWorld = scene->transformSystem().modelTransforms()[transComp.matrixIndex];
 		vkCmdPushConstants(frame.cmdBuffer, pipelineLayouts[matBase->pipelineLayoutId], VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
 						   0, sizeof(BaseMatPush), &push);
 
@@ -299,9 +300,6 @@ void VulkanContext::draw(void* rendCtx) {
 		for (auto [entity, bound, transform] : view.each()) {
 
 			AABB worldBox = scene->boundingSystem().aabbs()[bound.coarseIndexWorld];
-			//glm::vec3 mn{ local.frontTopLeft.x,  local.backBottomRight.y, local.backBottomRight.z };
-			//glm::vec3 mx{ local.backBottomRight.x, local.frontTopLeft.y,  local.frontTopLeft.z };
-
 			ShapePush shapePush{};
 			shapePush.modelToWorld = transform.trs();
 			shapePush.color = { 0.02f, 1.0f, 0.02f, 0.01f };

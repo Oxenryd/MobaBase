@@ -286,11 +286,11 @@ inline void Engine::_run() {
 		
 
 
-		VulkanContext::RenderContext drawCtx{};	
+		VulkanContext::DrawContext drawCtx{};	
 		drawCtx.frameCount = m_totalFrames;
 
 		m_vkCtx->preDraw(getRenderManager());
-		m_vkCtx->draw(static_cast<void*>(&drawCtx));
+		m_vkCtx->draw(drawCtx);
 		m_vkCtx->postDraw();
 		m_framesSinceLastFpsRead++;
 		m_totalFrames++;
@@ -374,6 +374,10 @@ inline void Engine::_updateLate(double dt) {
 			auto it = m_scenes.begin() + index;
 			m_scenes.erase(it);
 			removeIndices.push_back(index);
+		} else {
+			auto viewProj = mainCamera()->viewProjection();
+			auto& f = mainCamera()->getFrustum();
+			m_scenes[index]->cullResults = m_scenes[index]->bvhSystem().performFrustumCulling(viewProj, f);
 		}
 	}
 	for (auto& index : removeIndices) {

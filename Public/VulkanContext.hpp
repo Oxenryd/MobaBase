@@ -399,11 +399,9 @@ class VulkanContext
 {
 public:
 	//std::vector<DrawCommand> drawCommands;
-	struct RenderContext
+	struct DrawContext
 	{
 		float clearColor[4] = {0.0f, 0.12f, 0.55f, 1.0f};
-		uint16_t renderPassIndex = 0;
-		uint16_t pipelineIndex = 0;
 		float vPortPos[2] = {0,0};
 		float vPortSize[2] = {-1, -1};
 		float vPortMinDepth = 0.0f;
@@ -411,7 +409,7 @@ public:
 		int sciOffset[2] = {0,0};
 		int sciSize[2] = {-1, -1};
 		
-		uint64_t frameCount;
+		uint32_t frameCount;
 	};
 	struct FrameSync
 	{
@@ -2858,7 +2856,7 @@ public:
 	}
 
 
-	void draw(void* rendCtx);
+	void draw(const DrawContext& rendCtx);
 
 	inline void notifyViewResized(void* ctx, uint16_t width, uint16_t height) {
 		pendingResize = true;
