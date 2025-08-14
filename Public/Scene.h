@@ -11,8 +11,8 @@
 #include "GameObjectSystem.hpp"
 #include "TagSystem.hpp"
 #include "SceneRenderSystem.hpp"
-#include "BoundingSystem.h"
 #include "lightSystem.hpp"
+#include "BVH.hpp"
 
 enum class SceneTransitionStatus
 {
@@ -46,9 +46,11 @@ protected:
     ArenaRegistry m_reg;
     SceneRenderSystem m_renderSys;
     //TagSystem m_nameTagSys;
+    BoundingSystem m_boundingSys;
     TransformSystem m_transformSys;
     GameObjectSystem m_gameObjectSys;
-    BoundingSystem m_boundingSys;
+    BVHSystem m_bvhSys;
+    
     LightSystem m_lightSys;
     
     
@@ -69,10 +71,10 @@ public:
         
         m_arena{ arenaSize },
         m_reg{ ArenaAllocator<entt::entity>{&m_arena} },
+        m_boundingSys{ &m_reg, &m_arena, sceneIndex },
         m_transformSys{&m_reg, sceneIndex, &m_arena},
         m_gameObjectSys{ sceneIndex, &m_reg},
-        m_renderSys{ &m_reg, &m_arena, sceneIndex },
-        m_boundingSys{&m_reg, &m_arena, sceneIndex },
+        m_renderSys{ &m_reg, &m_arena, sceneIndex },  
         m_sceneIndex{sceneIndex},
         m_lightSys{&m_reg, sceneIndex}
     {
@@ -103,6 +105,7 @@ public:
     BoundingSystem& boundingSystem() { return m_boundingSys; }
     SceneRenderSystem& sceneRender() { return m_renderSys; }
     LightSystem& lightSystem() { return m_lightSys; }
+    BVHSystem& bvhSystem() { return m_bvhSys; }
     void setUnload() { m_pendingUnload = true; }
     uint32_t sceneIndex() const { return m_sceneIndex; }
     bool pendingUnload() const { return m_pendingUnload; }
@@ -146,7 +149,7 @@ public:
             static_cast<Derived&>(*this).update(dt);
             static_cast<Derived&>(*this).m_firstFrame = false;
         }
-        m_transformSys.run();
+        m_transformSys.run(m_boundingSys);
         m_gameObjectSys.run();
     }
 

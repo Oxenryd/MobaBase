@@ -1,39 +1,21 @@
 #ifndef TRANSFORM_HPP
 #define TRANSFORM_HPP
 
+#include "ArenaAllocator.hpp"
 #include <span>
 #include <optional>
 #include <glm/glm.hpp>
 #include <glm/gtx/quaternion.hpp>
 #include "Bits.hpp"
-#include "ArenaAllocator.hpp"
+
 #include "MobaMath.hpp"
 #include "ObjectState.hpp"
 #include "GlobalMacros.h"
+#include "TransformComponent.hpp"
 
 static const glm::vec3 DIR_FORWARD{ 0.0f, 0.0f, -1.0f };
 static const glm::vec3 DIR_RIGHT{ 1.0f, 0.0f, 0.0f };
 static const glm::vec3 DIR_UP{ 0.0f, 1.0f, 0.0f };
-
-struct TransformComponent
-{
-	uint32_t matrixIndex{ UINT32_INVALID };
-	glm::vec3 position{0, 0, 0};
-	glm::quat rotation{1, 0, 0, 0};
-	glm::vec3 scale{1,1,1};
-	uint16_t sceneIndex{ UINT16_INVALID };
-	StateField state{0};
-	void* callbackUserData = nullptr;
-	void (*onDirtyCallback)(void* userData) = nullptr;
-
-	INLINE glm::mat4x4 trs() {
-		return MMath::composeTRS(position, rotation, scale);
-	}
-
-	INLINE glm::mat4x4 trs_inv() {
-		return MMath::composeTRS_Inverse(position, rotation, scale);
-	}
-};
 
 struct Transform
 {
@@ -116,8 +98,8 @@ public:
 	INLINE const StateField& state() const { return m_reg->get<TransformComponent>(m_entity).state; }
 	INLINE const glm::vec3 eulerAngles() const { return glm::eulerAngles(m_reg->get<TransformComponent>(m_entity).rotation); }
 
-	INLINE const glm::mat4x4& localToWorld() const;
-	INLINE const glm::mat4x4 worldToLocal() const;
+	const glm::mat4x4& localToWorld() const;
+	const glm::mat4x4 worldToLocal() const;
 	INLINE glm::mat3 normalMatrix() const {
 
 		glm::mat3 rotScale = glm::mat3_cast(rotation());

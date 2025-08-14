@@ -7,7 +7,10 @@
 #include <span>
 #include <limits>
 
+
 #include "GlobalMacros.h"
+#include "MobaMath.hpp"
+
 
 struct ColorRGBA_f
 {
@@ -132,29 +135,26 @@ struct ColorRGBA
 };
 
 
-struct FrustumPlane
+struct Ray
 {
-	union
-	{
-		float raw[4]{};
-		struct
-		{
-			glm::vec3 normal;
-			float d;
-		};
-		struct
-		{
-			float x, y, z, d;
-		};
-		glm::vec4 vec;
-	};
+	~Ray() = default;
+	Ray() :
+		origin{0,0,0},
+		direction{0,0,-1},
+		invDirection{ 1.0f / direction } {}
+	Ray(const glm::vec3& start, const glm::vec3& direction) :
+		origin{start},
+		direction{glm::normalize(direction)},
+		invDirection{1.0f / direction} {}
+
+	Ray(const Ray& other) = default;
+	Ray& operator=(const Ray& rhs) = default;
+
+	glm::vec3 origin;
+	glm::vec3 direction;
+	glm::vec3 invDirection;
 };
 
-struct Frustum
-{
-	FrustumPlane planes[6];
-	enum { Left, Right, Bottom, Top, Near, Far };
-};
 
 enum class BoundingShape : uint8_t
 {
@@ -185,32 +185,133 @@ struct BSphere
 
 struct AABB
 {
+private:
+	INLINE void _getVerticesSoA(__m256& X, __m256& Y, __m256& Z, __m256& W) const {
+		const float xs[8] = { min.x, max.x, min.x, max.x, min.x, max.x, min.x, max.x };
+		const float ys[8] = { max.y, max.y, min.y, min.y, max.y, max.y, min.y, min.y };
+		const float zs[8] = { max.z, max.z, max.z, max.z, min.z, min.z, min.z, min.z };
+		X = _mm256_loadu_ps(xs);
+		Y = _mm256_loadu_ps(ys);
+		Z = _mm256_loadu_ps(zs);
+		W = _mm256_set1_ps(1.0f);
+	}
+
+public:
+	AABB() = default;
+	AABB(const glm::vec3& min, const glm::vec3& max) :
+		min{min}, max{max} {}
 	union
 	{
-		float raw[6]{ -0.5f, 0.5f, 0.5f,	0.5f, -0.5f, -0.5f };
+		float raw[6]{ -0.5f, -0.5f, -0.5f,	0.5f, 0.5f, 0.5f };
 		struct
 		{
-			glm::vec3 frontTopLeft;
-			glm::vec3 backBottomRight;
+			glm::vec3 min;
+			glm::vec3 max;
 		};
 	};
 
-	std::vector<glm::vec3> getVertices() {
-		glm::vec3 mn{ frontTopLeft.x,  backBottomRight.y, backBottomRight.z };
-		glm::vec3 mx{ backBottomRight.x, frontTopLeft.y,  frontTopLeft.z };
+	INLINE std::array<glm::vec3, 8> getVertices() const {
 
-		std::vector<glm::vec3> verts;
-		verts.emplace_back(glm::vec3{ mn.x, mx.y, mx.z });
-		verts.emplace_back(glm::vec3{ mx.x, mx.y, mx.z });
-		verts.emplace_back(glm::vec3{ mn.x, mn.y, mx.z });
-		verts.emplace_back(glm::vec3{ mx.x, mn.y, mx.z });
-		verts.emplace_back(glm::vec3{ mn.x, mx.y, mn.z });
-		verts.emplace_back(glm::vec3{ mx.x, mx.y, mn.z });
-		verts.emplace_back(glm::vec3{ mn.x, mn.y, mn.z });
-		verts.emplace_back(glm::vec3{ mx.x, mn.y, mn.z });
-
+		std::array<glm::vec3, 8> verts;
+		verts[0] = glm::vec3{ min.x, max.y, max.z };
+		verts[1] = glm::vec3{ max.x, max.y, max.z };
+		verts[2] = glm::vec3{ min.x, min.y, max.z };
+		verts[3] = glm::vec3{ max.x, min.y, max.z };
+		verts[4] = glm::vec3{ min.x, max.y, min.z };
+		verts[5] = glm::vec3{ max.x, max.y, min.z };
+		verts[6] = glm::vec3{ min.x, min.y, min.z };
+		verts[7] = glm::vec3{ max.x, min.y, min.z };
 
 		return verts;
+	}
+
+	INLINE AABB transformed_noPerspective(const glm::mat4x4& trs) const {
+
+		glm::vec3 c = 0.5f * (min + max);
+		glm::vec3 e = 0.5f * (max - min);
+		glm::mat3 A = glm::mat3(trs);
+		glm::vec3 nc = glm::vec3(trs * glm::vec4(c, 1.0f));
+
+		glm::mat3 B = glm::mat3(glm::abs(A[0]), glm::abs(A[1]), glm::abs(A[2]));
+		glm::vec3 ne = B * e;
+		return AABB(nc - ne, nc + ne);
+	}
+
+	INLINE AABB& transform_noPerspective(const glm::mat4x4& trs) {
+		glm::vec3 c = 0.5f * (min + max);
+		glm::vec3 e = 0.5f * (max - min);
+		glm::mat3 A = glm::mat3(trs);
+		glm::vec3 nc = glm::vec3(trs * glm::vec4(c, 1.0f));
+
+		glm::mat3 B = glm::mat3(glm::abs(A[0]), glm::abs(A[1]), glm::abs(A[2]));
+		glm::vec3 ne = B * e;
+
+		min = nc - ne;
+		max = nc + ne;
+		return *this;
+	}
+
+	INLINE static AABB transformed_noPerspective(const AABB& box, const glm::mat4x4& trs) {
+		glm::vec3 c = 0.5f * (box.min + box.max);
+		glm::vec3 e = 0.5f * (box.max - box.min);
+		glm::mat3 A = glm::mat3(trs);
+		glm::vec3 nc = glm::vec3(trs * glm::vec4(c, 1.0f));
+
+		glm::mat3 B = glm::mat3(glm::abs(A[0]), glm::abs(A[1]), glm::abs(A[2]));
+		glm::vec3 ne = B * e;
+		return AABB(nc - ne, nc + ne);
+	}
+
+	INLINE AABB transformed_perspective(const glm::mat4x4& M) const {
+		
+		__m256 X, Y, Z, W; _getVerticesSoA(X, Y, Z, W);
+		const float m00 = M[0][0], m01 = M[1][0], m02 = M[2][0], m03 = M[3][0];
+		const float m10 = M[0][1], m11 = M[1][1], m12 = M[2][1], m13 = M[3][1];
+		const float m20 = M[0][2], m21 = M[1][2], m22 = M[2][2], m23 = M[3][2];
+		const float m30 = M[0][3], m31 = M[1][3], m32 = M[2][3], m33 = M[3][3];
+
+		const __m256 r0x = _mm256_set1_ps(m00), r0y = _mm256_set1_ps(m01), r0z = _mm256_set1_ps(m02), r0w = _mm256_set1_ps(m03);
+		const __m256 r1x = _mm256_set1_ps(m10), r1y = _mm256_set1_ps(m11), r1z = _mm256_set1_ps(m12), r1w = _mm256_set1_ps(m13);
+		const __m256 r2x = _mm256_set1_ps(m20), r2y = _mm256_set1_ps(m21), r2z = _mm256_set1_ps(m22), r2w = _mm256_set1_ps(m23);
+		const __m256 r3x = _mm256_set1_ps(m30), r3y = _mm256_set1_ps(m31), r3z = _mm256_set1_ps(m32), r3w = _mm256_set1_ps(m33);
+
+#if defined(__FMA__) || (defined(_MSC_VER) && defined(__AVX2__))
+		auto fmadd = [](__m256 a, __m256 b, __m256 c) { return _mm256_fmadd_ps(a, b, c); };
+#else
+		auto fmadd = [](__m256 a, __m256 b, __m256 c) { return _mm256_add_ps(_mm256_mul_ps(a, b), c); };
+#endif
+
+		const __m256 Xp = fmadd(r0x, X, fmadd(r0y, Y, fmadd(r0z, Z, _mm256_mul_ps(r0w, W))));
+		const __m256 Yp = fmadd(r1x, X, fmadd(r1y, Y, fmadd(r1z, Z, _mm256_mul_ps(r1w, W))));
+		const __m256 Zp = fmadd(r2x, X, fmadd(r2y, Y, fmadd(r2z, Z, _mm256_mul_ps(r2w, W))));
+		const __m256 Wp = fmadd(r3x, X, fmadd(r3y, Y, fmadd(r3z, Z, _mm256_mul_ps(r3w, W))));
+
+		// Safe reciprocal of W (preserves sign, clamps |W| >= eps)
+		const __m256 eps = _mm256_set1_ps(1e-20f);
+		const __m256 signmsk = _mm256_set1_ps(-0.0f);                 // 0x80000000
+		const __m256 sign = _mm256_and_ps(Wp, signmsk);            // keep sign of W
+		const __m256 absv = _mm256_andnot_ps(signmsk, Wp);         // |W|
+		const __m256 mag = _mm256_max_ps(absv, eps);              // clamp
+		const __m256 Wsafe = _mm256_or_ps(sign, mag);               // restore sign
+		const __m256 invW = _mm256_div_ps(_mm256_set1_ps(1.0f), Wsafe);
+
+		const __m256 Xn = _mm256_mul_ps(Xp, invW);
+		const __m256 Yn = _mm256_mul_ps(Yp, invW);
+		const __m256 Zn = _mm256_mul_ps(Zp, invW);
+
+		float xmin, xmax, ymin, ymax, zmin, zmax;
+		MMath::hminmax8(Xn, xmin, xmax);
+		MMath::hminmax8(Yn, ymin, ymax);
+		MMath::hminmax8(Zn, zmin, zmax);
+
+		return AABB(glm::vec3{ xmin, ymin, zmin }, glm::vec3{ xmax, ymax, zmax });
+	}
+
+	INLINE AABB& transform_perspective(const glm::mat4x4& M) {
+		auto newAABB = transformed_perspective(M);
+		min = newAABB.min;
+		max = newAABB.max;
+		return *this;
 	}
 
 	static constexpr BoundingShape shape() { return BoundingShape::AABB; }
@@ -227,18 +328,65 @@ struct AABB
 			vmax = glm::max(vmax, v.pos);
 		}
 
-		frontTopLeft = { vmin.x, vmax.y, vmax.z };
-		backBottomRight = { vmax.x, vmin.y, vmin.z };
+		min = { vmin.x, vmin.y, vmin.z };
+		max = { vmax.x, vmax.y, vmax.z };
+	}
+
+	INLINE bool intersects(const AABB& box) const {
+		return (
+			min.x <= box.max.x &&
+			max.x >= box.min.x &&
+			min.y <= box.max.y &&
+			max.y >= box.min.y &&
+			min.z <= box.max.z &&
+			max.z >= box.min.z
+			);
+	}
+
+	INLINE bool intersects(const Ray& r) const {
+		double tmin = -INFINITY, tmax = INFINITY;
+
+		for (int i = 0; i < 3; ++i) {
+			double t1 = (min[i] - r.origin[i]) * r.invDirection[i];
+			double t2 = (max[i] - r.origin[i]) * r.invDirection[i];
+
+			tmin = std::max(tmin, std::min(t1, t2));
+			tmax = std::min(tmax, std::max(t1, t2));
+		}
+
+		return tmax > std::max(tmin, 0.0);
+	}
+
+	INLINE bool contains(const glm::vec3& point) const {
+		return
+			point.x >= min.x && point.x <= max.x &&
+			point.y >= min.y && point.y <= max.y &&
+			point.z >= min.z && point.z <= max.z;
+	}
+
+	INLINE bool contains(const AABB& box) const {
+		return
+			box.min.x >= min.x && box.max.x <= max.x &&
+			box.min.y >= min.y && box.max.y <= max.y &&
+			box.min.z >= min.z && box.max.z <= max.z;
 	}
 
 	
+	INLINE AABB& merge(const AABB& other) {
+		min = glm::min(min, other.min);
+		max = glm::max(max, other.max);
+		return *this;
+	}
+
+	static AABB merge(const AABB& a, const AABB& b) {
+		const AABB c{ glm::min(a.min, b.min) , glm::max(a.max, b.max) };
+		return c;
+	}
+
 	INLINE void encloseWorld(const AABB& local, const glm::mat4x4& trs) {
 
-		const glm::vec3 localMin{ local.frontTopLeft.x,  local.backBottomRight.y, local.backBottomRight.z };
-		const glm::vec3 localMax{ local.backBottomRight.x, local.frontTopLeft.y,  local.frontTopLeft.z };
-
-		const glm::vec3 c = 0.5f * (localMin + localMax);
-		const glm::vec3 e = 0.5f * (localMax - localMin);
+		const glm::vec3 c = 0.5f * (local.min + local.max);
+		const glm::vec3 e = 0.5f * (local.max - local.min);
 
 		const glm::vec3 wc = glm::vec3(trs * glm::vec4(c, 1.0f));
 		const glm::mat3 M = glm::mat3(trs);
@@ -252,22 +400,32 @@ struct AABB
 		const glm::vec3 wmin = wc - we;
 		const glm::vec3 wmax = wc + we;
 
-		frontTopLeft = { wmin.x, wmax.y, wmax.z };
-		backBottomRight = { wmax.x, wmin.y, wmin.z };
+		min = wmin;
+		max = wmax;
 	}
 	INLINE void encloseWorld_fromLocal(const glm::mat4x4& trs) { encloseWorld(*this, trs); }
 
 	INLINE float width() const {
-		return backBottomRight.x - frontTopLeft.x;
+		return max.x - min.x;
 	}
 	INLINE float height() const {
-		return frontTopLeft.y - backBottomRight.y;
+		return max.y - min.y;
 	}
 	INLINE float depth() const {
-		return frontTopLeft.z - backBottomRight.z;
+		return max.z - min.z;
 	}
 	INLINE float volume() const {
 		return width() * height() * depth();
+	}
+	INLINE glm::vec3 center() const {
+		return (min + max) * 0.5f;
+	}
+	INLINE glm::vec3 size() const {
+		return max - min;
+	}
+	INLINE float surfaceArea() const {
+		glm::vec3 extent = max - min;
+		return 2.0f * (extent.x * extent.y + extent.x * extent.z + extent.y * extent.z);
 	}
 
 	INLINE void* data() {
@@ -297,21 +455,29 @@ struct BoundingVolumeComponent
 
 	~BoundingVolumeComponent() = default;
 	BoundingVolumeComponent() :
-		rawData{0}, coarseIndex{ UINT32_INVALID } {}
-	BoundingVolumeComponent(const uint32_t coarseIndex) :
-		rawData{ 0 }, coarseIndex{coarseIndex} {}
-	BoundingVolumeComponent(const uint32_t coarseIndex, const BoundingShape firstShape, const uint32_t firstFineIndex) :
 		rawData{ 0 },
-		coarseIndex{ coarseIndex }
-	{
-		fineCount = 1;
-		fineIndex[0] = firstFineIndex;
-		fineType0 = static_cast<uint32_t>(firstShape);
-		fineEnabled0 = 1;
-	}
+		coarseIndexLocal{ UINT32_INVALID },
+		coarseIndexWorld{ UINT32_INVALID }
+	{}
+
+	BoundingVolumeComponent(const uint32_t coarseIndexLocal, const uint32_t coarseIndexWorld) :
+		rawData{ 0 },
+		coarseIndexLocal{coarseIndexLocal},
+		coarseIndexWorld{ coarseIndexWorld }
+	{}
+
+	//BoundingVolumeComponent(const uint32_t coarseIndex, const BoundingShape firstShape, const uint32_t firstFineIndex) :
+	//	rawData{ 0 },
+	//	coarseIndexLocal{ coarseIndex }
+	//{
+	//	fineCount = 1;
+	//	fineIndex[0] = firstFineIndex;
+	//	fineType0 = static_cast<uint32_t>(firstShape);
+	//	fineEnabled0 = 1;
+	//}
 	BoundingVolumeComponent(const BoundingVolumeComponent& other) {
 		rawData = other.rawData;
-		coarseIndex = other.coarseIndex;
+		coarseIndexLocal = other.coarseIndexLocal;
 		std::memcpy(fineIndex, other.fineIndex, 6 * sizeof(uint32_t));
 	}
 	BoundingVolumeComponent& operator=(const BoundingVolumeComponent& rhs) {
@@ -319,7 +485,7 @@ struct BoundingVolumeComponent
 			return *this;
 
 		rawData = rhs.rawData;
-		coarseIndex = rhs.coarseIndex;
+		coarseIndexLocal = rhs.coarseIndexLocal;
 		std::memcpy(fineIndex, rhs.fineIndex, 6 * sizeof(uint32_t));
 
 		return *this;
@@ -328,7 +494,7 @@ struct BoundingVolumeComponent
 		return
 			rawData == rhs.rawData &&
 			std::memcmp(fineIndex, rhs.fineIndex, 6 * sizeof(uint32_t)) == 0 &&
-			coarseIndex == rhs.coarseIndex;
+			coarseIndexLocal == rhs.coarseIndexLocal;
 	}
 
 	std::vector<BoundingShape> getFineShapes() const {
@@ -481,11 +647,8 @@ struct BoundingVolumeComponent
 	uint32_t fineIndex[4]{
 		UINT32_INVALID, UINT32_INVALID, UINT32_INVALID, UINT32_INVALID, //UINT32_INVALID, UINT32_INVALID,
 	};
-	uint32_t coarseIndex; // <- this is always a AABB
-	// The whole struct fits in 32bytes, and most of the time
-	// 'fineCount' can be 0 and therefore no more checks will
-	// be made, but the datatype allows for easy extension
-	// without introducing more buffers and vectors.
+	uint32_t coarseIndexLocal;
+	uint32_t coarseIndexWorld;
 };
 
 #endif

@@ -43,14 +43,20 @@ public:
 		
 		AABB* box = static_cast<AABB*>(valuePtr);
 
-		auto index = static_cast<uint32_t>(m_aabbLocals.size());
-		if (!box)
+		const auto indexLocal = static_cast<uint32_t>(m_aabbLocals.size());
+		const auto indexWorld = static_cast<uint32_t>(m_aabbs.size());
+		if (!box) {
 			m_aabbLocals.push_back({});
+			m_aabbs.push_back({});
+		}
 		else {
 			m_aabbLocals.push_back(*box);
+			m_aabbs.push_back(*box);
 		}
 
-		auto& comp = m_reg->emplace_or_replace<BoundingVolumeComponent>(entity, BoundingVolumeComponent{ index });
+		auto& comp = m_reg->emplace_or_replace<BoundingVolumeComponent>(
+			entity, BoundingVolumeComponent{ indexLocal, indexWorld });
+		m_reg->emplace_or_replace<EnabledTag>(entity);
 
 		if (valueOut) {
 			*static_cast<BoundingVolumeComponent*>(valueOut) = comp;

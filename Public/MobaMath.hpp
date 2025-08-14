@@ -1,12 +1,15 @@
 #ifndef MOBAMATH_HPP
 #define MOBAMATH_HPP
 
+#include <immintrin.h>
 #include <concepts>
 #include <glm/glm.hpp>
 #include <glm/gtx/quaternion.hpp>
 #include <span>
 #include "HlslTypes.h"
 #include "GlobalMacros.h"
+#include "Frustum.hpp"
+//#include "BasicTypes.hpp"
 
 namespace MMath
 {
@@ -41,6 +44,170 @@ namespace MMath
 
         return total / static_cast<float>(vertices.size());
     }
+
+
+    inline float hmin4(__m128 v) {
+        __m128 t = _mm_min_ps(v, _mm_movehl_ps(v, v));        // [min(2,0), min(3,1), *, *]
+        t = _mm_min_ps(t, _mm_shuffle_ps(t, t, _MM_SHUFFLE(1, 1, 1, 1)));
+        return _mm_cvtss_f32(t);
+    }
+    inline float hmax4(__m128 v) {
+        __m128 t = _mm_max_ps(v, _mm_movehl_ps(v, v));
+        t = _mm_max_ps(t, _mm_shuffle_ps(t, t, _MM_SHUFFLE(1, 1, 1, 1)));
+        return _mm_cvtss_f32(t);
+    }
+    inline void hminmax8(__m256 v, float& mn, float& mx) {
+        __m128 lo = _mm256_castps256_ps128(v);
+        __m128 hi = _mm256_extractf128_ps(v, 1);
+        mn = hmin4(_mm_min_ps(lo, hi));
+        mx = hmax4(_mm_max_ps(lo, hi));
+    }
+
+
+
+    INLINE Frustum getFrustum(const glm::mat4x4& viewProjection, bool normalize = true) {
+
+        Frustum f;
+        const auto m = viewProjection;
+
+        __m128 col0 = _mm_loadu_ps(&m[0][0]);
+        __m128 col1 = _mm_loadu_ps(&m[1][0]);
+        __m128 col2 = _mm_loadu_ps(&m[2][0]);
+        __m128 col3 = _mm_loadu_ps(&m[3][0]);
+
+        {
+            __m128 _Tmp3, _Tmp2, _Tmp1, _Tmp0;
+            _Tmp0 = _mm_shuffle_ps((col0), (col1), 0x44);
+            _Tmp2 = _mm_shuffle_ps((col0), (col1), 0xEE);
+            _Tmp1 = _mm_shuffle_ps((col2), (col3), 0x44);
+            _Tmp3 = _mm_shuffle_ps((col2), (col3), 0xEE);
+            (col0) = _mm_shuffle_ps(_Tmp0, _Tmp1, 0x88);
+            (col1) = _mm_shuffle_ps(_Tmp0, _Tmp1, 0xDD);
+            (col2) = _mm_shuffle_ps(_Tmp2, _Tmp3, 0x88);
+            (col3) = _mm_shuffle_ps(_Tmp2, _Tmp3, 0xDD);
+        };
+
+        __m128 _left = _mm_add_ps(col3, col0);
+        __m128 _right = _mm_sub_ps(col3, col0);
+        __m128 _bottom = _mm_add_ps(col3, col1);
+        __m128 _top = _mm_sub_ps(col3, col1);
+        __m128 _near = _mm_add_ps(col3, col2);
+        __m128 _far = _mm_sub_ps(col3, col2);
+
+        _mm_storeu_ps(f.planes[0].raw, _left);
+        _mm_storeu_ps(f.planes[1].raw, _right);
+        _mm_storeu_ps(f.planes[2].raw, _bottom);
+        _mm_storeu_ps(f.planes[3].raw, _top);
+        _mm_storeu_ps(f.planes[4].raw, _near);
+        _mm_storeu_ps(f.planes[5].raw, _far);
+
+        //printf("\n\nSIMD:\n");
+
+        //for (int i = 0; i < 6; ++i) {
+        //    printf("plane[%d]: %f %f %f %f\n", i, f.planes[i].raw[0], f.planes[i].raw[1], f.planes[i].raw[2], f.planes[i].raw[3]);
+        //}
+
+        if (normalize)
+            for (size_t i = 0; i < 6; ++i) {
+
+                float* plane = f.planes[i].raw; // contiguous!
+                __m128 v = _mm_loadu_ps(plane);
+                __m128 lenSq = _mm_dp_ps(v, v, 0x71); // result is [len2, 0, 0, 0]
+                __m128 len = _mm_sqrt_ps(lenSq);
+                // Broadcast length to all lanes
+                len = _mm_shuffle_ps(len, len, 0x00);
+                v = _mm_div_ps(v, len);
+                _mm_storeu_ps(plane, v);
+            }
+
+        return f;
+    }
+
+    INLINE static bool sphereVisible(const glm::vec3& center, const float radius, Frustum& frustum) {
+        for (int i = 0; i < 6; ++i) {
+            const auto& plane = frustum.planes[i];
+            float dist = glm::dot(plane.normal, center) + plane.d;
+            if (dist < -radius)
+                return false; // outside
+        }
+        return true; // potentially visible or intersecting
+    }
+
+    INLINE static bool sphereVisibleSIMD(const glm::vec3& center, const float radius, Frustum& frustum) {
+
+        for (size_t i = 0; i < 6; ++i) {
+            auto plane = &frustum.planes[i].x;
+            __m128 vplane = _mm_loadu_ps(plane);           // [nx, ny, nz, d]
+            __m128 vcenter = _mm_set_ps(1.0f, center.z, center.y, center.x); // [x, y, z, 1]
+            // Dot product for first 3 components, then add d (plane[3])
+            __m128 dp = _mm_dp_ps(vplane, vcenter, 0x71);   // Only x, y, z
+            float dist;
+            _mm_store_ss(&dist, dp);
+            dist += plane[3]; // add d
+
+            if (dist >= -radius)
+                return false;
+        }
+        return true;
+
+    }
+
+    INLINE static bool __aabbVisibleSIMDPlane_mul(const float* plane,
+                                                 const glm::vec3& mn,
+                                                 const glm::vec3& mx) {
+        const __m128 n_d = _mm_loadu_ps(plane);                 // [nx, ny, nz, d]
+        const __m128 vmin = _mm_set_ps(0.0f, mn.z, mn.y, mn.x);  // [x,y,z,0]
+        const __m128 vmax = _mm_set_ps(0.0f, mx.z, mx.y, mx.x);  // [x,y,z,0]
+
+        // choose max where n>=0, else min  (p-vertex)
+        const __m128 mask = _mm_cmpge_ps(n_d, _mm_setzero_ps());
+        const __m128 p = _mm_or_ps(_mm_and_ps(mask, vmax),
+                                   _mm_andnot_ps(mask, vmin));
+
+        // dot3 = sum(x,y,z) of (n * p)  -- SSE2 reduction
+        __m128 mul = _mm_mul_ps(n_d, p);                        // [nx*px, ny*py, nz*pz, 0]
+        __m128 shuf = _mm_shuffle_ps(mul, mul, _MM_SHUFFLE(2, 1, 0, 3)); // [nz*pz, ny*py, nx*px, 0]
+        __m128 sum = _mm_add_ps(mul, shuf);                     // [(x+z), (y+0), (z+x), 0]
+        shuf = _mm_shuffle_ps(sum, sum, _MM_SHUFFLE(1, 0, 3, 2)); // [(y+0), (x+z), ..., ...]
+        __m128 dpv = _mm_add_ss(sum, shuf);                     // [x+y+z, ...]
+        float dist = _mm_cvtss_f32(dpv) + plane[3];             // + d
+
+        return dist >= 0.0f;  // flip sign if your plane convention is opposite
+    }
+
+    INLINE static bool aabbVisible(const glm::vec3& min, const glm::vec3& max, const Frustum& frustum) {
+        //glm::vec3 mn{ box.frontTopLeft.x,   box.backBottomRight.y, box.backBottomRight.z };
+        //glm::vec3 mx{ box.backBottomRight.x, box.frontTopLeft.y,   box.frontTopLeft.z };
+        for (size_t i = 0; i < 6; ++i) {
+            if (!__aabbVisibleSIMDPlane_mul(frustum.planes[i].raw, min, max))
+                return false;
+        }
+        return true;
+    }
+
+    //INLINE static bool obbVisible(const OBB& obb, const Frustum& frustum) {
+    //    glm::vec3 center = (obb.frontTopLeft + obb.backBottomRight) * 0.5f;
+    //    glm::vec3 extents = glm::abs(obb.backBottomRight - obb.frontTopLeft) * 0.5f;
+
+    //    // Build orientation axes
+    //    glm::mat3 rot = glm::mat3_cast(obb.rotation);
+    //    glm::vec3 axes[3] = {
+    //        rot[0], rot[1], rot[2]
+    //    };
+    //    for (int i = 0; i < 6; ++i) {
+    //        const auto& plane = frustum.planes[i];
+    //        // Project the OBB's half-extents onto the plane normal
+    //        float r =
+    //            extents.x * std::abs(glm::dot(plane.normal, axes[0])) +
+    //            extents.y * std::abs(glm::dot(plane.normal, axes[1])) +
+    //            extents.z * std::abs(glm::dot(plane.normal, axes[2]));
+
+    //        float dist = glm::dot(plane.normal, center) + plane.d;
+    //        if (dist < -r)
+    //            return false; // OBB is fully outside
+    //    }
+    //    return true;
+    //}
 }
 
 

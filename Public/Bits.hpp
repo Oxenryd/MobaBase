@@ -38,93 +38,197 @@ struct BitMask
 };
 
 
+//template <typename T>
+//    requires std::is_integral_v<T>
+//class SizedBitField
+//{
+//public:
+//    SizedBitField()
+//        : m_field{ 0 } {}
+//    SizedBitField(T startField)
+//        : m_field{ startField } {}
+//    template <typename ENUM>
+//        requires requires(ENUM e) {
+//            { static_cast<uint32_t>(e) };
+//    }
+//    SizedBitField(ENUM startState) {
+//        m_field = 0;
+//        m_field |= (T(1) << ((uint32_t)startState));
+//    }
+//
+//    template <typename ENUM>
+//        requires requires(ENUM e) {
+//            { static_cast<uint32_t>(e) };
+//    }
+//    void setByEnum(ENUM index) {
+//        m_field |= (T(1) << ((uint32_t)index));
+//    }
+//    void set(uint32_t index) {
+//        m_field |= (T(1) << (index));
+//    }
+//    template <typename ENUM>
+//        requires requires(ENUM e) {
+//            { static_cast<uint32_t>(e) };
+//    }
+//    void clearByEnum(ENUM index) {
+//        m_field &= ~(T(1) << ((uint32_t)index));
+//    }
+//    void clear(uint32_t index) {
+//        m_field &= ~(T(1) << (index));
+//    }
+//
+//    void toggle(uint32_t index) {
+//        m_field ^= (T(1) << (index));
+//    }
+//
+//    template <typename ENUM>
+//        requires requires(ENUM e) {
+//            { static_cast<uint32_t>(e) };
+//    }
+//    bool hasFlag(ENUM flag) const {
+//        return (m_field & static_cast<T>(flag)) != 0;
+//    }
+//
+//    bool isSet(uint32_t index) const {
+//        return (m_field & (T(1) << (index))) != 0;
+//    }
+//
+//    void setByBool(uint32_t index, bool target) {
+//        if (target)
+//            set(index);
+//        else
+//            clear(index);
+//    }
+//
+//    void clearAll() {
+//        m_field = 0;
+//    }
+//
+//    void setAll() {
+//        m_field = static_cast<T>(-1);
+//    }
+//
+//    void copyField(T fieldValue) {
+//        m_field = fieldValue;
+//    }
+//
+//
+//
+//    T& getField() const { return const_cast<T&>(m_field); }
+//    T& getField() { return m_field; }
+//
+//    template <typename U>
+//    U asType() {
+//        return static_cast<U>(m_field);
+//    }
+//
+//private:
+//    T m_field;
+//};
+
 template <typename T>
-    requires std::is_integral_v<T>
+    requires (std::is_integral_v<T>&& std::is_unsigned_v<T>) // avoid UB on signed shifts
 class SizedBitField
 {
 public:
-    SizedBitField()
-        : m_field{ 0 } {}
-    SizedBitField(T startField)
-        : m_field{ startField } {}
+    // ----- types/limits -----
+    static constexpr uint32_t bit_count = std::numeric_limits<T>::digits;
+
+    // ----- ctors -----
+    constexpr SizedBitField() noexcept : m_field{ 0 } {}
+
+    constexpr explicit SizedBitField(T startField) noexcept : m_field{ startField } {}
+
+    // Treat ENUM as a *mask* (e.g., enum Flags { A = 1u<<0, B = 1u<<1, ... })
     template <typename ENUM>
-        requires requires(ENUM e) {
-            { static_cast<uint32_t>(e) };
+        requires std::is_enum_v<ENUM>
+    constexpr explicit SizedBitField(ENUM startMask) noexcept
+        : m_field{ static_cast<T>(startMask) } {}
+
+    // ----- set/clear by index (bit position) -----
+    constexpr void set(uint32_t index) noexcept {
+        assert(index < bit_count);
+        m_field |= (T(1) << index);
     }
-    SizedBitField(ENUM startState) {
-        m_field = 0;
-        m_field |= (T(1) << ((uint32_t)startState));
+
+    constexpr void clear(uint32_t index) noexcept {
+        assert(index < bit_count);
+        m_field &= ~(T(1) << index);
+    }
+
+    constexpr void toggle(uint32_t index) noexcept {
+        assert(index < bit_count);
+        m_field ^= (T(1) << index);
+    }
+
+    // ----- set/clear by enum mask -----
+    template <typename ENUM>
+        requires std::is_enum_v<ENUM>
+    constexpr void setByEnum(ENUM mask) noexcept {
+        // FIX: Treat ENUM as a mask, not an index
+        m_field |= static_cast<T>(mask);
     }
 
     template <typename ENUM>
-        requires requires(ENUM e) {
-            { static_cast<uint32_t>(e) };
-    }
-    void setByEnum(ENUM index) {
-        m_field |= (T(1) << ((uint32_t)index));
-    }
-    void set(uint32_t index) {
-        m_field |= (T(1) << (index));
-    }
-    template <typename ENUM>
-        requires requires(ENUM e) {
-            { static_cast<uint32_t>(e) };
-    }
-    void clearByEnum(ENUM index) {
-        m_field &= ~(T(1) << ((uint32_t)index));
-    }
-    void clear(uint32_t index) {
-        m_field &= ~(T(1) << (index));
-    }
-
-    void toggle(uint32_t index) {
-        m_field ^= (T(1) << (index));
+        requires std::is_enum_v<ENUM>
+    constexpr void clearByEnum(ENUM mask) noexcept {
+        // FIX: Treat ENUM as a mask, not an index
+        m_field &= ~static_cast<T>(mask);
     }
 
     template <typename ENUM>
-        requires requires(ENUM e) {
-            { static_cast<uint32_t>(e) };
-    }
-    bool hasFlag(ENUM flag) const {
-        return (m_field & static_cast<T>(flag)) != 0;
+        requires std::is_enum_v<ENUM>
+    constexpr void toggleByEnum(ENUM mask) noexcept {
+        m_field ^= static_cast<T>(mask);
     }
 
-    bool isSet(uint32_t index) const {
-        return (m_field & (T(1) << (index))) != 0;
+    // ----- queries -----
+    template <typename ENUM>
+        requires std::is_enum_v<ENUM>
+    [[nodiscard]] constexpr bool hasFlag(ENUM mask) const noexcept {
+        return (m_field & static_cast<T>(mask)) != 0;
     }
 
-    void setByBool(uint32_t index, bool target) {
-        if (target)
-            set(index);
-        else
-            clear(index);
+    [[nodiscard]] constexpr bool isSet(uint32_t index) const noexcept {
+        assert(index < bit_count);
+        return (m_field & (T(1) << index)) != 0;
     }
 
-    void clearAll() {
-        m_field = 0;
+    // ----- utilities -----
+    constexpr void setByBool(uint32_t index, bool target) noexcept {
+        target ? set(index) : clear(index);
     }
 
-    void setAll() {
-        m_field = static_cast<T>(-1);
+    template <typename ENUM>
+        requires std::is_enum_v<ENUM>
+    constexpr void setByBool(ENUM mask, bool target) noexcept {
+        target ? setByEnum(mask) : clearByEnum(mask);
     }
 
-    void copyField(T fieldValue) {
-        m_field = fieldValue;
-    }
+    constexpr void clearAll() noexcept { m_field = 0; }
 
+    constexpr void setAll() noexcept { m_field = ~T{ 0 }; }
 
+    constexpr void copyField(T fieldValue) noexcept { m_field = fieldValue; }
 
-    T& getField() const { return const_cast<T&>(m_field); }
-    T& getField() { return m_field; }
+    // Accessors (fixed const-correctness)
+    [[nodiscard]] constexpr T        value() const noexcept { return m_field; }
+    [[nodiscard]] constexpr const T& getField() const noexcept { return m_field; }
+    constexpr T& getField() noexcept { return m_field; } // mutable ref
 
     template <typename U>
-    U asType() {
+    [[nodiscard]] constexpr U asType() const noexcept {
         return static_cast<U>(m_field);
     }
+
+    // Optional: implicit conversion to T for convenience (explicit to avoid surprises)
+    explicit constexpr operator T() const noexcept { return m_field; }
 
 private:
     T m_field;
 };
+
+
 
 
 class BitField

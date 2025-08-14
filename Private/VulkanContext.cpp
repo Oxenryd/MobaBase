@@ -59,7 +59,7 @@ void VulkanContext::draw(void* rendCtx) {
 	camData.clustersX = VULKAN_LIGHT_CLUSTERS_X;
 	camData.clustersY = VULKAN_LIGHT_CLUSTERS_Y;
 	camData.clustersZ = VULKAN_LIGHT_CLUSTERS_Z;
-	Frustum f = mainCam->getFrustumSIMD();
+	Frustum f = mainCam->getFrustum();
 
 	// Update CameraData cBuffer
 	void* mappedData = nullptr;
@@ -197,10 +197,10 @@ void VulkanContext::draw(void* rendCtx) {
 		const auto [bound, transform] = scene
 			->registry().try_get<BoundingVolumeComponent, TransformComponent>(cmd.subMeshEntity);
 		if (transform) {
-			auto local = scene->boundingSystem().cachedLocals()[bound->coarseIndex];
+			auto world = scene->boundingSystem().aabbs()[bound->coarseIndexWorld];
 			
 			//coarse.center += transform->position;
-			if (!Camera::aabbVisibleSIMD(local, f))
+			if (!MMath::aabbVisible(world.min, world.max, f))
 				continue;
 		}
 
@@ -298,15 +298,15 @@ void VulkanContext::draw(void* rendCtx) {
 		auto view = scene->registry().view<BoundingVolumeComponent, TransformComponent>();
 		for (auto [entity, bound, transform] : view.each()) {
 
-			AABB local = scene->boundingSystem().cachedLocals()[bound.coarseIndex];
-			glm::vec3 mn{ local.frontTopLeft.x,  local.backBottomRight.y, local.backBottomRight.z };
-			glm::vec3 mx{ local.backBottomRight.x, local.frontTopLeft.y,  local.frontTopLeft.z };
+			AABB worldBox = scene->boundingSystem().aabbs()[bound.coarseIndexWorld];
+			//glm::vec3 mn{ local.frontTopLeft.x,  local.backBottomRight.y, local.backBottomRight.z };
+			//glm::vec3 mx{ local.backBottomRight.x, local.frontTopLeft.y,  local.frontTopLeft.z };
 
 			ShapePush shapePush{};
 			shapePush.modelToWorld = transform.trs();
 			shapePush.color = { 0.02f, 1.0f, 0.02f, 0.01f };
 			shapePush.rotation = glm::quat();
-			shapePush.aabb = { mn, mx };
+			shapePush.aabb = { worldBox.min, worldBox.max };
 			shapePush.drawNumber = shapeDraws++;
 
 			vkCmdPushConstants(frame.cmdBuffer, pipelineLayouts[shapeMat->pipelineLayoutId], VK_SHADER_STAGE_VERTEX_BIT,

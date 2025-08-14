@@ -105,15 +105,11 @@ ErrorCode SceneRenderSystem::createMeshFromModel(const std::string& path, Mesh* 
 			m_reg->emplace<SubMeshComponent>(subMesh.entity, SubMeshComponent{ static_cast<uint32_t>(i) });
 			
 			auto subVerts = std::span<BaseVSIn>(&m_vertices[subMesh.vertexOffset], subMesh.vertexCount);
-			//auto avgCenter = MMath::getAvgCenter(subVerts);
-			TransformComponent newTransform{};
-			//newTransform.position = avgCenter;
-			auto& transform = m_reg->emplace<TransformComponent>(subMesh.entity, newTransform);
+
+			Engine::getInstance()->getScene(m_sceneIndex)->transformSystem().registryEmplace(subMesh.entity);
 
 			AABB box{};
-			//transform.position = avgCenter;
 			box.encloseLocal(subVerts);
-			//box.encloseWorld_fromLocal(transform.trs());
 			BoundingVolumeComponent boundComp{};
 			Engine::getInstance()->getScene(m_sceneIndex)->boundingSystem().registryEmplace(subMesh.entity, &box, &boundComp);
 		}

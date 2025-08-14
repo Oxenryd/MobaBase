@@ -1,0 +1,32 @@
+#ifndef FRUSTUM_HPP
+#define FRUSTUM_HPP
+
+#include <glm/glm.hpp>
+
+struct FrustumPlane
+{
+	union
+	{
+		float raw[4]{};
+		struct
+		{
+			glm::vec3 normal;
+			float d;
+		};
+		struct
+		{
+			float x, y, z, d;
+		};
+		glm::vec4 vec;
+	};
+};
+
+struct Frustum
+{
+	FrustumPlane planes[6];
+	enum { Left, Right, Bottom, Top, Near, Far };
+};
+
+
+
+#endif

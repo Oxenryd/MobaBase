@@ -111,7 +111,6 @@ add_executable (MobaBase
 	"Public/Shader.h"
 	"Public/ArenaAllocator.hpp"
 	"Public/MemoryProviderConcept.h"
-	
 	"Public/RenderManager.h"
 	"Public/ErrorCodes.hpp"
 	"Public/FileSys.h"
@@ -155,6 +154,10 @@ add_executable (MobaBase
 	"Public/BoundingSystem.h"
 	"Public/LightSystem.hpp"
 	"Public/Light.hpp"
+	"Public/BVH.hpp"
+	"Public/BoundingVolume.hpp"
+	"Public/Frustum.hpp"
+	"Public/TransformComponent.hpp"
 
 
 	"Private/Engine.cpp"
@@ -177,7 +180,9 @@ add_executable (MobaBase
 	"Private/Texture.cpp"
 	"Private/LightSystem.cpp"
 	"Private/Mesh.cpp"
-	"Private/Light.cpp")
+	"Private/Light.cpp"
+	"Private/BoundingVolume.cpp"
+	"Private/BVH.cpp")
 
 
 

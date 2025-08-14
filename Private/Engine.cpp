@@ -357,7 +357,8 @@ inline void Engine::_updateEarly(double dt) {
 		if (m_scenes[index]->isFirstFrame())
 			m_scenes[index]->startDispatch();
 
-		m_scenes[index]->updateDispatch(dt);	
+		m_scenes[index]->updateDispatch(dt);
+		m_scenes[index]->bvhSystem().updateBVH(m_scenes[index]->m_reg, m_totalFrames);
 	}
 	onEarlyUpdateExit.notify(this);
 }

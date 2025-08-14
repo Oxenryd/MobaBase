@@ -6,6 +6,7 @@
 #include "Transform.hpp"
 #include "EnabledTag.hpp"
 #include "MobaMath.hpp"
+#include "BoundingSystem.h"
 
 
 
@@ -46,7 +47,7 @@ public:
 			.connect<&TransformSystem::_onDestroy>(this);
 	}
 
-	INLINE void run() override {
+	INLINE void run(BoundingSystem& boundSys)  {
 
 		auto view = m_reg->view<EnabledTag, TransformComponent>();
 
@@ -60,22 +61,29 @@ public:
 				continue;
 
 			// Build local matrix
-			glm::mat4 local = transform.trs();
+			glm::mat4 trs = transform.trs();
 
 			// Combine with parent
 			if (!(transform.state.hasFlag(ObjectState::IgnoreParentTransform))) {
 				entt::entity parent = m_parentOf.empty() ? entt::null : m_parentOf[id];
 				if (parent != entt::null && m_reg->valid(parent) && m_reg->all_of<TransformComponent>(parent)) {
 					const auto& parentTransform = m_reg->get<TransformComponent>(parent);
-					m_modelTransforms[transform.matrixIndex] = 
-						m_modelTransforms[parentTransform.matrixIndex] * local;
+					m_modelTransforms[transform.matrixIndex] = m_modelTransforms[parentTransform.matrixIndex] * trs;
+
 				} else {
-					m_modelTransforms[transform.matrixIndex] = local;
+					m_modelTransforms[transform.matrixIndex] = trs;
 				}
 			} else {
-				m_modelTransforms[transform.matrixIndex] = local;
+				m_modelTransforms[transform.matrixIndex] = trs;
 			}
 
+			// Move bounds if needed
+			auto bVolume = m_reg->try_get<BoundingVolumeComponent>(entity);
+			if (bVolume) {
+				auto& localAABB = boundSys.cachedLocals()[bVolume->coarseIndexLocal];
+				boundSys.aabbs()[bVolume->coarseIndexWorld] = localAABB.transformed_noPerspective(m_modelTransforms[transform.matrixIndex]);
+			}
+			
 			transform.state.clearByEnum(ObjectState::DirtyTransform);
 			transform.state.setByEnum(ObjectState::MovedThisFrame);
 		}
@@ -84,7 +92,7 @@ public:
 
 	}
 
-	INLINE void registryEmplace(entt::entity entity, void* valueInPtr, void* valueOutPtr) override {
+	INLINE void registryEmplace(entt::entity entity, void* valueInPtr = nullptr, void* valueOutPtr = nullptr) override {
 		auto& transComp = m_reg->emplace_or_replace<TransformComponent>(entity, TransformComponent{});
 		
 		auto matrixIndex = static_cast<uint32_t>(m_modelTransforms.size());
