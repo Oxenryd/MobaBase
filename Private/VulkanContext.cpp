@@ -1,7 +1,21 @@
-#include "VulkanContext.hpp"
 #include "Engine.h"
+#include "VulkanContext.hpp"
 #include <format>
 #include <chrono>
+
+INLINE MeshDrawCommand VulkanContext::subMeshEntity_to_drawCommand(SceneBase* scene, ArenaRegistry& reg, entt::entity entity) {
+	auto& subMeshComp = reg.get<SubMeshComponent>(entity);
+	SubMeshData& subMesh = scene->sceneRender().getSubMeshes()[subMeshComp.subMeshIndex];
+	MeshDrawCommand cmd{};
+	cmd.instanceIndex = subMesh.instanceIndex;
+	cmd.materialIndex = subMesh.materialIndex;
+	cmd.priority = 1.0f; //TODO
+	cmd.sceneIndex = scene->sceneIndex();
+	cmd.submeshOffset = subMeshComp.subMeshIndex;
+	cmd.subMeshEntity = subMesh.entity;
+
+	return cmd;
+}
 
 void VulkanContext::draw(const DrawContext& ctx) {
 
@@ -141,18 +155,7 @@ void VulkanContext::draw(const DrawContext& ctx) {
 
 		auto& reg = scene->registry();
 		for (auto& entity : scene->cullResults.visibleEntities) {
-
-			auto& subMeshComp = reg.get<SubMeshComponent>(entity);
-			SubMeshData& subMesh = scene->sceneRender().getSubMeshes()[subMeshComp.subMeshIndex];	
-			MeshDrawCommand cmd{};
-			cmd.instanceIndex = subMesh.instanceIndex;
-			cmd.materialIndex = subMesh.materialIndex;
-			cmd.priority = 1.0f; //TODO
-			cmd.sceneIndex = scene->sceneIndex();
-			cmd.submeshOffset = subMeshComp.subMeshIndex;
-			cmd.subMeshEntity = subMesh.entity;
-
-			drawCmds.push_back(cmd);
+			drawCmds.push_back(subMeshEntity_to_drawCommand(scene, reg, entity));
 		}
 	}
 	std::sort(drawCmds.begin(), drawCmds.end());
@@ -277,8 +280,10 @@ void VulkanContext::draw(const DrawContext& ctx) {
 	Material* shapeMat;
 	uint32_t shapeDraws = 0;
 	for (auto* scene : Engine::getInstance()->getActiveScenes()) {
-		if (!scene->sceneRender().drawAbbs())
+
+		if (!scene->sceneRender().drawCoarseAbbs()) 
 			continue;
+		
 
 		if (!anyAabbsDrawn) {
 
@@ -302,23 +307,42 @@ void VulkanContext::draw(const DrawContext& ctx) {
 			setCount++;
 			anyAabbsDrawn = true;
 		}
+		
+		if (scene->sceneRender().drawOccluders()) {
+			for (auto& entity : scene->cullResults.activeOccluders) {
+				auto [bound, transform] = scene->registry().get<BoundingVolumeComponent, TransformComponent>(entity);
+				AABB worldBox = scene->boundingSystem().aabbs()[bound.coarseIndexWorld];
+				ShapePush shapePush{};
+				shapePush.modelToWorld = transform.trs();
+				shapePush.color = { 1.0f, 0.01f, 0.02f, 0.01f };
+				shapePush.rotation = glm::quat();
+				shapePush.aabb = { worldBox.min, worldBox.max };
+				shapePush.drawNumber = shapeDraws++;
 
-		auto view = scene->registry().view<BoundingVolumeComponent, TransformComponent>();
-		for (auto [entity, bound, transform] : view.each()) {
+				vkCmdPushConstants(frame.cmdBuffer, pipelineLayouts[shapeMat->pipelineLayoutId], VK_SHADER_STAGE_VERTEX_BIT,
+								   0, sizeof(ShapePush), &shapePush);
 
-			AABB worldBox = scene->boundingSystem().aabbs()[bound.coarseIndexWorld];
-			ShapePush shapePush{};
-			shapePush.modelToWorld = transform.trs();
-			shapePush.color = { 0.02f, 1.0f, 0.02f, 0.01f };
-			shapePush.rotation = glm::quat();
-			shapePush.aabb = { worldBox.min, worldBox.max };
-			shapePush.drawNumber = shapeDraws++;
+				vkCmdDrawIndexed(frame.cmdBuffer, 36, 1, 0, 0, 0);
+				drawCount++;
+			}
+		} else {
+			auto view = scene->registry().view<BoundingVolumeComponent, TransformComponent>();
+			for (auto [entity, bound, transform] : view.each()) {
 
-			vkCmdPushConstants(frame.cmdBuffer, pipelineLayouts[shapeMat->pipelineLayoutId], VK_SHADER_STAGE_VERTEX_BIT,
-							   0, sizeof(ShapePush), &shapePush);
+				AABB worldBox = scene->boundingSystem().aabbs()[bound.coarseIndexWorld];
+				ShapePush shapePush{};
+				shapePush.modelToWorld = transform.trs();
+				shapePush.color = { 0.02f, 1.0f, 0.02f, 0.01f };
+				shapePush.rotation = glm::quat();
+				shapePush.aabb = { worldBox.min, worldBox.max };
+				shapePush.drawNumber = shapeDraws++;
 
-			vkCmdDrawIndexed(frame.cmdBuffer, 36, 1, 0, 0, 0);
-			drawCount++;
+				vkCmdPushConstants(frame.cmdBuffer, pipelineLayouts[shapeMat->pipelineLayoutId], VK_SHADER_STAGE_VERTEX_BIT,
+								   0, sizeof(ShapePush), &shapePush);
+
+				vkCmdDrawIndexed(frame.cmdBuffer, 36, 1, 0, 0, 0);
+				drawCount++;
+			}
 		}
 	}
 

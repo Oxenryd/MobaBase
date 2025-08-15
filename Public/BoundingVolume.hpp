@@ -45,6 +45,8 @@ public:
 		return m_reg == rhs.m_reg && m_entity == rhs.m_entity;
 	}
 
+	void setFlags(BoundingVolumeFlags flags);
+
 	AABB getCoarseAABB() const;
 	AABB getCoarseAABB_local() const;
 	

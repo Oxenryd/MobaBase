@@ -212,7 +212,7 @@ target_compile_definitions(MobaBase PRIVATE
 	BUILD_WIN
 	# $<$<CONFIG:Debug>:LOGGING>
 	LOGGING
-	IGPU_PRIO	
+	#IGPU_PRIO	
 	SHADER_HOTRELOAD
 
 	# VULKAN SPECIFICS

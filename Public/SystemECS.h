@@ -21,7 +21,7 @@ public:
 	virtual entt::entity createEntity() { 
 		return m_reg->create();
 	};
-	virtual void registryEmplace(entt::entity, void* valuePtr, void* valueOut) {
+	virtual void registryEmplace(entt::entity, void* valuePtr, void** valueOut) {
 		throw std::exception("SystemECS::registryEmplace() not implemented.");
 	}
 	virtual void registryRemove(entt::entity, void* valueOut) {

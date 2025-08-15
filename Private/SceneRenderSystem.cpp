@@ -83,26 +83,23 @@ ErrorCode SceneRenderSystem::createMeshFromModel(const std::string& path, Mesh* 
 	if (!EC_FAILED(ec)) {
 		Mesh newMesh{};
 		if (parent != entt::null) {
+			auto trans = m_reg->try_get<TransformComponent>(parent);
+			if (!trans)
+				throw std::exception("Meshes needs transforms!!");
 			meshComp = m_reg->emplace<MeshComponent>(parent, meshComp);
 			newMesh = Mesh{ m_reg, parent };
 			if (outMesh) {
 				*outMesh = newMesh;
 			}
 		} 
-		//else {
-		//	auto newEntity = m_reg->create();
-		//	meshComp = m_reg->emplace<MeshComponent>(newEntity, meshComp);
-		//	newMesh = Mesh{ m_reg, newEntity };
-		//	if (outMesh) {
-		//		*outMesh = newMesh;
-		//	}
-		//}
 
+		float maxVol = 0.0f;
+		entt::entity biggestSubEntity = entt::null;
 		for (size_t i = meshComp.subMeshOffset; i < meshComp.subMeshOffset + meshComp.subMeshCount; ++i) {
 			auto& subMesh = m_subMeshes[i];
 			subMesh.entity = m_reg->create();
-
-			m_reg->emplace<SubMeshComponent>(subMesh.entity, SubMeshComponent{ static_cast<uint32_t>(i) });
+			subMesh.parent = parent;
+			auto& newSubMeshComp = m_reg->emplace<SubMeshComponent>(subMesh.entity, SubMeshComponent{ static_cast<uint32_t>(i) });
 			
 			auto subVerts = std::span<BaseVSIn>(&m_vertices[subMesh.vertexOffset], subMesh.vertexCount);
 
@@ -110,10 +107,14 @@ ErrorCode SceneRenderSystem::createMeshFromModel(const std::string& path, Mesh* 
 
 			AABB box{};
 			box.encloseLocal(subVerts);
-			BoundingVolumeComponent boundComp{};
-			Engine::getInstance()->getScene(m_sceneIndex)->boundingSystem().registryEmplace(subMesh.entity, &box, &boundComp);
+			Engine::getInstance()->getScene(m_sceneIndex)->boundingSystem().registryEmplace(subMesh.entity, &box);
+			
+			if (parent != entt::null) {
+				auto newTransform = Transform{ m_reg, subMesh.entity };
+				newTransform.setParent(parent);
+			}
 		}
-		
+
 	} else
 		return ec;
 

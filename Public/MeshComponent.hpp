@@ -8,6 +8,7 @@
 #include "ArenaAllocator.hpp"
 #include "HlslTypes.h"
 #include "Transform.hpp"
+#include "BoundingVolume.hpp"
 
 //struct MeshDescription
 //{
@@ -22,7 +23,7 @@
 
 struct SubMeshComponent
 {
-	uint32_t subMeshIndex;
+	uint32_t subMeshIndex{ UINT32_INVALID };
 };
 
 struct MeshComponent
@@ -53,6 +54,7 @@ private:
 public:
 	glm::vec3 getAvgCenter();
 	std::span<BaseVSIn> getVertices();
+	BoundingVolume getBoundingVolume();
 };
 
 struct Mesh
@@ -99,7 +101,7 @@ public:
 	bool operator==(const Mesh& rhs) {
 		return m_reg == rhs.m_reg && m_entity == rhs.m_entity;
 	}
-
+	Transform getTransform();
 	MeshComponent& getMeshComponent();
 	glm::vec3 getAvgCenter();
 	std::span<BaseVSIn> getVertices();

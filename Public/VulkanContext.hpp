@@ -394,14 +394,14 @@ static inline VkPipelineMultisampleStateCreateInfo GetMultisamplingPreset(MultiS
 	}
 }
 
-
+class SceneBase;
 class VulkanContext
 {
 public:
 	//std::vector<DrawCommand> drawCommands;
 	struct DrawContext
 	{
-		float clearColor[4] = {0.0f, 0.12f, 0.55f, 1.0f};
+		float clearColor[4] = {0.01f, 0.01f, 0.12f, 1.0f};
 		float vPortPos[2] = {0,0};
 		float vPortSize[2] = {-1, -1};
 		float vPortMinDepth = 0.0f;
@@ -434,6 +434,8 @@ private:
 			return graphicsFamily.has_value() && presentFamily.has_value();
 		}
 	};
+
+	INLINE MeshDrawCommand subMeshEntity_to_drawCommand(SceneBase* scene, ArenaRegistry& reg, entt::entity entity);
 
 	QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device, VkSurfaceKHR surface) {
 		QueueFamilyIndices indices;
