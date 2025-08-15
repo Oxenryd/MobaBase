@@ -448,6 +448,13 @@ struct OBB
 	static constexpr BoundingShape shape() { return BoundingShape::OBB; }
 };
 
+enum class BoundingVolumeFlags : uint8_t
+{
+	None = 0x00,
+	Static = 0x01,
+	Occluder = 0x02,
+	ShadowCast = 0x04
+};
 
 struct BoundingVolumeComponent
 {
@@ -478,6 +485,7 @@ struct BoundingVolumeComponent
 	BoundingVolumeComponent(const BoundingVolumeComponent& other) {
 		rawData = other.rawData;
 		coarseIndexLocal = other.coarseIndexLocal;
+		coarseIndexWorld = other.coarseIndexWorld;
 		std::memcpy(fineIndex, other.fineIndex, 6 * sizeof(uint32_t));
 	}
 	BoundingVolumeComponent& operator=(const BoundingVolumeComponent& rhs) {
@@ -486,6 +494,7 @@ struct BoundingVolumeComponent
 
 		rawData = rhs.rawData;
 		coarseIndexLocal = rhs.coarseIndexLocal;
+		coarseIndexWorld = rhs.coarseIndexWorld;
 		std::memcpy(fineIndex, rhs.fineIndex, 6 * sizeof(uint32_t));
 
 		return *this;
@@ -494,7 +503,8 @@ struct BoundingVolumeComponent
 		return
 			rawData == rhs.rawData &&
 			std::memcmp(fineIndex, rhs.fineIndex, 6 * sizeof(uint32_t)) == 0 &&
-			coarseIndexLocal == rhs.coarseIndexLocal;
+			coarseIndexLocal == rhs.coarseIndexLocal &&
+			coarseIndexWorld == rhs.coarseIndexWorld;
 	}
 
 	std::vector<BoundingShape> getFineShapes() const {
@@ -640,7 +650,8 @@ struct BoundingVolumeComponent
 			uint32_t fineEnabled3	: 1;
 			//uint32_t fineEnabled4	: 1;
 			//uint32_t fineEnabled5	: 1;
-			uint32_t _pad0			: 16;
+			uint32_t _pad0			: 8;
+			uint32_t flags			: 8;
 			uint32_t layermask		: 32;
 		};
 	};

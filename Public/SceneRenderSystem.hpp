@@ -51,6 +51,7 @@ private:
 	//ArenaVector<Camera> m_cameras;
 
 	bool m_drawAabbs = false;
+	bool m_drawOccluders = false;
 
 public:
 	~SceneRenderSystem() {
@@ -162,7 +163,9 @@ public:
 	ErrorCode createMeshFromModel(const std::string& path, Mesh* outMesh, const entt::entity parent = entt::null);
 
 	void setDrawAABBs(bool state) { m_drawAabbs = state; }
-	bool drawAbbs() const { return m_drawAabbs; }
+	bool drawCoarseAbbs() const { return m_drawAabbs; }
+	void setDrawOccluders(bool state) { m_drawOccluders = state; }
+	bool drawOccluders() const { return m_drawOccluders; }
 
 };
 

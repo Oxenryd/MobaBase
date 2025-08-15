@@ -2,7 +2,7 @@
 //#include "Scene.h"
 #include "Engine.h"
 
-void GameObjectSystem::_emplaceBaseSystems(GameObject& gObject, std::string& name) {
+void GameObjectSystem::_emplaceBaseSystems(GameObject& gObject, const std::string& name) {
 	auto* scene = Engine::getInstance()->getScene(m_sceneIndex);
 	assert(scene != nullptr && "Engine::getInstance()->getScene() is NULL!");
 

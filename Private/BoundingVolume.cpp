@@ -1,6 +1,11 @@
 #include "Engine.h"
 #include "BoundingVolume.hpp"
 
+void BoundingVolume::setFlags(BoundingVolumeFlags flags) {
+	BoundingVolumeComponent boundComp = *this;
+	boundComp.flags = static_cast<uint32_t>(flags);
+}
+
 AABB BoundingVolume::getCoarseAABB() const {
 	BoundingVolumeComponent boundComp = *this;
 	auto& transComp = m_reg->get<TransformComponent>(m_entity);

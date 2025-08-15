@@ -31,6 +31,22 @@ private:
 		}
 	}
 
+	INLINE void _updateTransform(TransformComponent& transform, glm::mat4& trs, uint32_t entityIntegralId) {
+
+		// Combine with parent
+		if (!(transform.state.hasFlag(ObjectState::IgnoreParentTransform))) {
+			entt::entity parent = m_parentOf.empty() ? entt::null : m_parentOf[entityIntegralId];
+			if (parent != entt::null && m_reg->valid(parent) && m_reg->all_of<TransformComponent>(parent)) {
+				const auto& parentTransform = m_reg->get<TransformComponent>(parent);
+				m_modelTransforms[transform.matrixIndex] = m_modelTransforms[parentTransform.matrixIndex] * trs;
+
+			} else {
+				m_modelTransforms[transform.matrixIndex] = trs;
+			}
+		} else {
+			m_modelTransforms[transform.matrixIndex] = trs;
+		}
+	}
 
 public:
 	virtual ~TransformSystem() {
@@ -64,18 +80,19 @@ public:
 			glm::mat4 trs = transform.trs();
 
 			// Combine with parent
-			if (!(transform.state.hasFlag(ObjectState::IgnoreParentTransform))) {
-				entt::entity parent = m_parentOf.empty() ? entt::null : m_parentOf[id];
-				if (parent != entt::null && m_reg->valid(parent) && m_reg->all_of<TransformComponent>(parent)) {
-					const auto& parentTransform = m_reg->get<TransformComponent>(parent);
-					m_modelTransforms[transform.matrixIndex] = m_modelTransforms[parentTransform.matrixIndex] * trs;
+			_updateTransform(transform, trs, id);
+			//if (!(transform.state.hasFlag(ObjectState::IgnoreParentTransform))) {
+			//	entt::entity parent = m_parentOf.empty() ? entt::null : m_parentOf[id];
+			//	if (parent != entt::null && m_reg->valid(parent) && m_reg->all_of<TransformComponent>(parent)) {
+			//		const auto& parentTransform = m_reg->get<TransformComponent>(parent);
+			//		m_modelTransforms[transform.matrixIndex] = m_modelTransforms[parentTransform.matrixIndex] * trs;
 
-				} else {
-					m_modelTransforms[transform.matrixIndex] = trs;
-				}
-			} else {
-				m_modelTransforms[transform.matrixIndex] = trs;
-			}
+			//	} else {
+			//		m_modelTransforms[transform.matrixIndex] = trs;
+			//	}
+			//} else {
+			//	m_modelTransforms[transform.matrixIndex] = trs;
+			//}
 
 			// Move bounds if needed
 			auto bVolume = m_reg->try_get<BoundingVolumeComponent>(entity);
@@ -92,12 +109,17 @@ public:
 
 	}
 
-	INLINE void registryEmplace(entt::entity entity, void* valueInPtr = nullptr, void* valueOutPtr = nullptr) override {
+
+
+	INLINE void registryEmplace(entt::entity entity, void* valueInPtr = nullptr, void** valueOutPtr = nullptr) override {
 		auto& transComp = m_reg->emplace_or_replace<TransformComponent>(entity, TransformComponent{});
 		
 		auto matrixIndex = static_cast<uint32_t>(m_modelTransforms.size());
 		transComp.matrixIndex = matrixIndex;
 		transComp.sceneIndex = m_sceneIndex;
+		auto index = entt::to_integral(entity);
+		if (index >= m_parentOf.size())
+			m_parentOf.resize(index + 1, entt::null);
 		m_modelTransforms.push_back(transComp.trs());
 	}
 
@@ -124,6 +146,10 @@ public:
 
 		if (parent) {
 			entt::entity newParent = *parent;
+			if (newParent == entt::null) {
+				m_parentOf[id] = entt::null;
+				return;
+			}
 
 			auto newId = entt::to_integral(newParent);
 			if (newId >= m_childrenOf.size()) {
@@ -132,6 +158,12 @@ public:
 
 			m_parentOf[id] = newParent;
 			m_childrenOf[newId].push_back(entity);
+
+			auto& transform = m_reg->get<TransformComponent>(entity);
+			auto trs = transform.trs();
+			auto id = entt::to_integral(entity);
+			_updateTransform(transform, trs, id);
+
 		} else {
 			m_parentOf[id] = entt::null;
 		}

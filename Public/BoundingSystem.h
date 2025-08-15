@@ -39,7 +39,7 @@ public:
 
 
 
-	virtual void registryEmplace(entt::entity entity, void* valuePtr, void* valueOut) override {
+	virtual void registryEmplace(entt::entity entity, void* valuePtr = nullptr, void** valueOut = nullptr) override {
 		
 		AABB* box = static_cast<AABB*>(valuePtr);
 
@@ -59,7 +59,8 @@ public:
 		m_reg->emplace_or_replace<EnabledTag>(entity);
 
 		if (valueOut) {
-			*static_cast<BoundingVolumeComponent*>(valueOut) = comp;
+			*valueOut = static_cast<void*>(&comp);
+			//*static_cast<BoundingVolumeComponent*>(valueOut) = comp;
 		}
 	}
 	virtual void registryRemove(entt::entity, void* valueOut) override {

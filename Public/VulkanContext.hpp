@@ -394,7 +394,7 @@ static inline VkPipelineMultisampleStateCreateInfo GetMultisamplingPreset(MultiS
 	}
 }
 
-
+class SceneBase;
 class VulkanContext
 {
 public:
@@ -434,6 +434,8 @@ private:
 			return graphicsFamily.has_value() && presentFamily.has_value();
 		}
 	};
+
+	INLINE MeshDrawCommand subMeshEntity_to_drawCommand(SceneBase* scene, ArenaRegistry& reg, entt::entity entity);
 
 	QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device, VkSurfaceKHR surface) {
 		QueueFamilyIndices indices;

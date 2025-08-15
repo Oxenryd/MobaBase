@@ -378,8 +378,10 @@ inline void Engine::_updateLate(double dt) {
 			auto viewProj = mainCamera()->viewProjection();
 			auto& f = mainCamera()->getFrustum();
 
-			m_scenes[index]->cullResults = m_scenes[index]->
-				bvhSystem().performFrustumCulling(f);
+			m_scenes[index]->cullResults.clear();
+
+			m_scenes[index]->
+				bvhSystem().performFrustumCullingWithOcclusion(m_scenes[index]->cullResults, f, mainCamera()->getPosition());
 			//m_scenes[index]->cullResults = m_scenes[index]->
 			//	bvhSystem().performFrustumCullingWithOcclusion(f, mainCamera()->getPosition());
 		}

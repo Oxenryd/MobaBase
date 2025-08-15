@@ -63,6 +63,7 @@ private:
     std::vector<BVHNode> nodes;
     std::vector<BVHPrimitive> primitives;
     std::vector<uint32_t> primitiveIndices;  // Leaf nodes point into this
+    
 
     // Thread safety
     //mutable std::shared_mutex treeMutex;
@@ -91,11 +92,22 @@ public:
     struct TraversalResult
     {
         std::vector<entt::entity> visibleEntities;
+        std::vector<entt::entity> activeOccluders;
         std::vector<std::pair<entt::entity, entt::entity>> collisionPairs;
         uint32_t nodesVisited = 0;
         uint32_t primitivesVisited = 0;
         uint32_t nodesCulledByFrustum = 0;
         uint32_t nodesCulledByOcclusion = 0;
+
+        void clear() {
+            visibleEntities.clear();
+            activeOccluders.clear();
+            collisionPairs.clear();
+            nodesVisited = 0;
+            primitivesVisited = 0;
+            nodesCulledByFrustum = 0;
+            nodesCulledByOcclusion = 0;
+        }
     };
 
     // Occlusion data
@@ -103,24 +115,27 @@ public:
     {
         entt::entity entity;
         AABB bounds;
+        //float volume;
         float depth;  // Distance from camera
         bool isOccluder;  // Can this entity occlude others?
 
-        OccluderData(entt::entity e, const AABB& b, float d, bool occluder = false)
+        //OccluderData(entt::entity e, const AABB& b, float v, float d, bool occluder = false)
+        //    : entity(e), bounds(b), depth(d), isOccluder(occluder), volume( v ) {}
+        OccluderData(entt::entity e, const AABB& b,  float d, bool occluder = false)
             : entity(e), bounds(b), depth(d), isOccluder(occluder) {}
     };
 
     enum class OcclusionMethod
     {
         NONE,
-        SIMPLE_DEPTH,     // Simple front-to-back + depth test
-        HIERARCHICAL_Z,   // Hierarchical Z-buffer (more advanced)
-        PORTAL_ZONES      // For indoor scenes with portals
+            SIMPLE_DEPTH,     // Simple front-to-back + depth test
+            HIERARCHICAL_Z,   // Hierarchical Z-buffer (more advanced)
+            PORTAL_ZONES      // For indoor scenes with portals
     };
 
 
     BuildSettings settings{};
-
+    std::vector<uint32_t> occluderIndices;
 private:
     // Building methods
     uint32_t buildRecursive(std::vector<uint32_t>& primitiveIds, uint32_t depth, uint32_t parent);
@@ -210,6 +225,84 @@ private:
                           const Frustum& frustum,
                           std::vector<OccluderData>& occluders) const;
 
+    bool isOccludedRaycast(const AABB& bounds, const AABB& occluder,
+                                const glm::vec3& cameraPos) const {
+
+       auto verts = occluder.getVertices();
+       for (auto& vert : verts) {
+           auto dir = vert - cameraPos;
+           Ray r{ cameraPos, dir };
+           if (bounds.intersects(r))
+               return false;
+       }
+  
+        return true;
+    }
+
+        // Enhanced ray-AABB intersection that returns distance
+    bool rayAABBIntersectWithDistance(const glm::vec3& origin, const glm::vec3& direction,
+                                      const AABB& aabb, float& tNear, float& tFar) const {
+        glm::vec3 invDir = 1.0f / direction;
+        glm::vec3 t1 = (aabb.min - origin) * invDir;
+        glm::vec3 t2 = (aabb.max - origin) * invDir;
+
+        glm::vec3 tmin = glm::min(t1, t2);
+        glm::vec3 tmax = glm::max(t1, t2);
+
+        tNear = glm::max(glm::max(tmin.x, tmin.y), tmin.z);
+        tFar = glm::min(glm::min(tmax.x, tmax.y), tmax.z);
+
+        return tNear <= tFar && tFar >= 0.0f;
+    }
+
+    bool isOccludedRaycast(const AABB& bounds, const std::vector<AABB>& occluders,
+                    const glm::vec3& cameraPos, float objectDepth) const {
+
+        // Ray-based occlusion test - much more accurate!
+        auto objectCorners = bounds.getVertices();
+
+        // Test rays from camera to each corner of the object
+        int visibleCorners = 0;
+
+        for (int i = 0; i < 8; ++i) {
+            glm::vec3 rayDir = glm::normalize(objectCorners[i] - cameraPos);
+            float rayLength = glm::length2(objectCorners[i] - cameraPos);
+
+            bool rayBlocked = false;
+
+            // Test this ray against all occluders
+            for (const auto& occluder : occluders) {
+                glm::vec3 occluderCenter = occluder.center();
+                float occluderDepth = glm::length2(occluderCenter - cameraPos);
+
+                // Only test occluders that are closer than the object
+                if (occluderDepth >= objectDepth - 0.1f) continue;
+
+                // Ray-AABB intersection test
+                float tNear, tFar;
+                if (rayAABBIntersectWithDistance(cameraPos, rayDir, occluder, tNear, tFar)) {
+                    // Check if intersection is between camera and object corner
+                    if (tNear > 0.01f && tNear < rayLength - 0.01f) {
+                        rayBlocked = true;
+                        break;
+                    }
+                }
+            }
+
+            if (!rayBlocked) {
+                visibleCorners++;
+                // If any corner is visible, object is not fully occluded
+                // You can adjust this threshold - maybe require 2+ visible corners
+                if (visibleCorners >= 1) {
+                    return false;
+                }
+            }
+        }
+
+        // All corners are blocked - object is occluded
+        return true;
+    }
+
     bool isOccluded(const AABB& bounds, const std::vector<AABB>& occluders,
                     const glm::vec3& cameraPos, float objectDepth) const {
 
@@ -278,7 +371,7 @@ private:
         maxDepth = -FLT_MAX;
 
         for (int i = 0; i < 8; ++i) {
-            float depth = glm::length(corners[i] - cameraPos);
+            float depth = glm::length2(corners[i] - cameraPos);
             minDepth = std::min(minDepth, depth);
             maxDepth = std::max(maxDepth, depth);
         }
@@ -301,9 +394,9 @@ public:
 
 
     // Queries - these can run concurrently
-    TraversalResult frustumCull(const Frustum& f) const;
+    void frustumCull(DualBVH::TraversalResult& result, const Frustum& f) const;
 
-    TraversalResult frustumCullWithOcclusion(const Frustum& f,
+    void frustumCullWithOcclusion(DualBVH::TraversalResult& result, const Frustum& f,
                                              const glm::vec3& cameraPos,
                                              OcclusionMethod method) const;
 
@@ -490,15 +583,16 @@ public:
     }
 
     // Called from render thread
-    auto performFrustumCulling(const Frustum& f) const {
-        return bvh.frustumCull(f);
+    auto performFrustumCulling(DualBVH::TraversalResult& result, const Frustum& f) const {
+        return bvh.frustumCull(result, f);
     }
 
     // Called from render thread with occlusion culling
-    auto performFrustumCullingWithOcclusion(const Frustum& f,
+    auto performFrustumCullingWithOcclusion(DualBVH::TraversalResult& result,
+                                            const Frustum& f,
                                             const glm::vec3& cameraPos,
                                             DualBVH::OcclusionMethod method = DualBVH::OcclusionMethod::SIMPLE_DEPTH) const {
-        return bvh.frustumCullWithOcclusion(f, cameraPos, method);
+        return bvh.frustumCullWithOcclusion(result, f, cameraPos, method);
     }
 
     // Called from physics thread (can be concurrent with frustum culling)

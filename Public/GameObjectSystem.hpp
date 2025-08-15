@@ -101,7 +101,7 @@ private:
 		return *static_cast<std::vector<T>*>(m_typeVectors[typeId].ptr);
 	}
 
-	void _emplaceBaseSystems(GameObject& gObject, std::string& name);
+	void _emplaceBaseSystems(GameObject& gObject, const std::string& name);
 
 public:
 	using iterator = GameObjectSystemIterator;
@@ -119,7 +119,7 @@ public:
 	iterator end() { return iterator(&m_ranges, m_ranges.size(), 0); }
 
 	template<typename T, typename... Args>
-	T& createGameObject(std::string& name, Args&&... args) {
+	T& createGameObject(const std::string& name, Args&&... args) {
 		auto& vec = _getVectorForType<T>();
 		vec.emplace_back(std::forward<Args>(args)...);
 		T& obj = vec.back();

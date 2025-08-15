@@ -152,7 +152,16 @@ void DualBVH::collectOccluders(const glm::vec3& cameraPos, const Frustum& frustu
                 uint32_t primIndex = primitiveIndices[node.firstPrimitive + i];
                 const BVHPrimitive& prim = primitives[primIndex];
 
-                float depth = glm::length(prim.worldBounds.center() - cameraPos);
+                auto verts = prim.worldBounds.getVertices();
+                auto closest = FLT_MAX;
+                for (auto& vert : verts) {
+                    auto sqrLen = glm::length2(vert - cameraPos);
+                    if (sqrLen < closest)
+                        closest = sqrLen;
+                }
+
+                auto center = prim.worldBounds.center();
+                float depth = closest;//glm::length(center - cameraPos);
                 glm::vec3 size = prim.worldBounds.size();
 
                 // Heuristic: large objects close to camera are potential occluders
@@ -174,6 +183,7 @@ void DualBVH::build(ArenaRegistry& registry) {
     primitives.clear();
     primitiveIndices.clear();
     entityToPrimitive.clear();
+    occluderIndices.clear();
 
     // Collect all entities with Transform and AABB components
     auto view = registry.view<BoundingVolumeComponent>();
@@ -185,11 +195,15 @@ void DualBVH::build(ArenaRegistry& registry) {
         //const auto& transformComp = view.get<TransformComponent>(entity);
         //const auto& boundComp = view.get<BoundingVolumeComponent>(entity);
 
+
         BoundingVolume bounds = BoundingVolume{ &registry, entity };
         AABB box = bounds.getCoarseAABB();
         primitives.emplace_back(entity, box);
         primitives.back().worldBounds = box;
         primitives.back().frameUpdated = currentFrame;
+
+        if (boundComp.flags & static_cast<uint32_t>(BoundingVolumeFlags::Occluder))
+            occluderIndices.push_back(primIndex);
 
         entityToPrimitive[entity] = primIndex++;
     }
@@ -253,9 +267,9 @@ void DualBVH::incrementalUpdate(ArenaRegistry& registry) {
 
 
 
-DualBVH::TraversalResult DualBVH::frustumCull(const Frustum& f) const {
-    TraversalResult result;
-    if (isEmpty()) return result;
+void DualBVH::frustumCull(DualBVH::TraversalResult& result, const Frustum& f) const {
+    //TraversalResult result;
+        if (isEmpty()) return; //result;
 
     std::vector<uint32_t> nodeStack;
     nodeStack.reserve(64);
@@ -287,33 +301,56 @@ DualBVH::TraversalResult DualBVH::frustumCull(const Frustum& f) const {
         }
     }
 
-    return result;
+    return; //result;
 }
 
-DualBVH::TraversalResult DualBVH::frustumCullWithOcclusion(
-    //const glm::mat4& viewProjection,
+void DualBVH::frustumCullWithOcclusion(
+    DualBVH::TraversalResult& result,
     const Frustum& frustum,
     const glm::vec3& cameraPos,
     OcclusionMethod method) const {
 
-    TraversalResult result;
-    if (isEmpty()) return result;
+    //TraversalResult result;
+    if (isEmpty()) return; //result;
 
     // Collect potential occluders first (front-to-back)
     std::vector<OccluderData> potentialOccluders;
-    collectOccluders(cameraPos, frustum, potentialOccluders);
+    for (auto& index : occluderIndices) {
+
+        auto& prim = primitives[index];
+
+        if (!MMath::aabbVisible(prim.worldBounds.min, prim.worldBounds.max, frustum)) {
+            continue;
+        }
+
+        auto verts = prim.worldBounds.getVertices();
+        auto closest = FLT_MAX;
+        for (auto& vert : verts) {
+            auto sqrLen = glm::length2(vert - cameraPos);
+            if (sqrLen < closest)
+                closest = sqrLen;
+        }
+
+        potentialOccluders.push_back({prim.entity, prim.worldBounds, closest, true});
+    }
+    //collectOccluders(cameraPos, frustum, potentialOccluders);
+    //for (const auto& occluder : potentialOccluders) {
+    //    result.activeOccluders.push_back(occluder.entity);
+    //}
 
     // Sort occluders front-to-back
-    std::sort(potentialOccluders.begin(), potentialOccluders.end(),
-              [](const OccluderData& a, const OccluderData& b) {
-                  return a.depth < b.depth;
-              });
+    //std::sort(potentialOccluders.begin(), potentialOccluders.end(),
+    //          [](const OccluderData& a, const OccluderData& b) {
+    //              return a.depth < b.depth;
+    //              //return a.volume > b.volume;
+    //          });
 
     // Build active occluder set (simplified - you'd want more sophisticated occlusion volumes)
     std::vector<AABB> activeOccluders;
     for (const auto& occluder : potentialOccluders) {
         if (occluder.isOccluder) {                              //////////////////// TODO TODO TODO TODO!!!
             activeOccluders.push_back(occluder.bounds);
+            result.activeOccluders.push_back(occluder.entity);
             // Limit number of active occluders for performance
             if (activeOccluders.size() >= 8) break;
         }
@@ -349,11 +386,19 @@ DualBVH::TraversalResult DualBVH::frustumCullWithOcclusion(
 
         // Occlusion test
         if (method != OcclusionMethod::NONE && !activeOccluders.empty()) {
-            if ( !node.bounds.contains(cameraPos) && 
-                 isOccluded(node.bounds, activeOccluders, cameraPos, current.minDepth) )
-            {
-                result.nodesCulledByOcclusion++;
-                continue;
+            if (!node.bounds.contains(cameraPos)) {
+
+                //if (isOccludedRaycast(node.bounds, activeOccluders, cameraPos, current.minDepth)) {
+                //    result.nodesCulledByOcclusion++;
+                //    continue;
+                //}
+
+                for (const auto& occluder : activeOccluders) {
+                    if (isOccludedRaycast(node.bounds, occluder, cameraPos) ) {
+                        result.nodesCulledByOcclusion++;
+                        continue;
+                    }
+                }
             }
         }
 
@@ -391,7 +436,7 @@ DualBVH::TraversalResult DualBVH::frustumCullWithOcclusion(
         }
     }
 
-    return result;
+    return; //result;
 }
 
 DualBVH::TraversalResult DualBVH::broadPhaseCollision() const {
