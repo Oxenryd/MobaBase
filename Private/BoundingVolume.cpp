@@ -2,12 +2,12 @@
 #include "BoundingVolume.hpp"
 
 void BoundingVolume::setFlags(BoundingVolumeFlags flags) {
-	BoundingVolumeComponent boundComp = *this;
+	BoundingVolumeComponent& boundComp = *this;
 	boundComp.flags = static_cast<uint32_t>(flags);
 }
 
 AABB BoundingVolume::getCoarseAABB() const {
-	BoundingVolumeComponent boundComp = *this;
+	const BoundingVolumeComponent& boundComp = *this;
 	auto& transComp = m_reg->get<TransformComponent>(m_entity);
 
 	return Engine::getInstance()->getScene(transComp.sceneIndex)->boundingSystem().aabbs()[boundComp.coarseIndexWorld];
@@ -15,7 +15,7 @@ AABB BoundingVolume::getCoarseAABB() const {
 }
 
 AABB BoundingVolume::getCoarseAABB_local() const {
-	BoundingVolumeComponent boundComp = *this;
+	const BoundingVolumeComponent& boundComp = *this;
 	auto& transComp = m_reg->get<TransformComponent>(m_entity);
 
 	return Engine::getInstance()->getScene(transComp.sceneIndex)->boundingSystem().cachedLocals()[boundComp.coarseIndexLocal];

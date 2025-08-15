@@ -140,7 +140,7 @@ ErrorCode Engine::_initBaseShaders() {
 	// Create Base Materials          
 	auto* baseVs = getRenderManager()->getShader(SHADER_BASE_VS);
 	auto* basePs = getRenderManager()->getShader(SHADER_BASE_PS);
-	auto& baseMat = Material::createMaterial("BaseMaterialUnlit", *baseVs, *basePs);//Material{ "BaseMaterialUnlit", *baseVs, *basePs };
+	auto& baseMat = Material::createMaterial("BaseMaterialUnlit", *baseVs, *basePs);
 	baseMat.createInstance();
 	m_vkCtx->createPipelineFromMaterial(m_renderMan, baseMat);
 	std::cout << "\n";
@@ -155,29 +155,8 @@ ErrorCode Engine::_initBaseShaders() {
 	std::cout << "\n";
 	shapeMat.debugPrintMaterialInfo();
 
-
-	//auto* spriteVs = getRenderManager()->getShader("SpriteBatchVS");
-	//auto* spritePs = getRenderManager()->getShader("SpriteBatchPS");
-	//auto& spriteMat = Material::createMaterial( "SpriteMaterialUnlit", *spriteVs, *spritePs );
-	//spriteMat.createInstance();
-	//m_vkCtx->createPipelineFromMaterial(m_renderMan, spriteMat);
-	//std::cout << "\n";
-	//spriteMat.debugPrintMaterialInfo();
-
-
-	// DEBUG! ////////////////////////////////////////////////////////////////////////////
-	//auto& matInstance = spriteMat.createInstance();
-	//glm::vec2 size = { 12.2f, 13.5f };
-	//matInstance.setParameter("spriteInstances", "size", &size);
-	//auto checkedSize = matInstance.getParameter<glm::vec2>("spriteInstances", "size");
-
-
 	std::cout << "\n";
-	//////////////////////////////////////////////////////////////////////////////////////
 	
-
-	
-
 	return ErrorCode::OK;
 }
 
@@ -321,7 +300,8 @@ Camera* Engine::mainCamera() {
 	if (m_mainCamIndex.invalid())
 		return nullptr;
 
-	return &getScene(m_mainCamIndex.sceneIndex)->gameObjectSystem().getAllOfType<Camera>()[m_mainCamIndex.camIndex];
+	return &getScene(m_mainCamIndex.sceneIndex)->
+		gameObjectSystem().getAllOfType<Camera>()[m_mainCamIndex.camIndex];
 }
 
 void Engine::setMainCamera(uint16_t sceneIndex, uint32_t camIndex) {
@@ -381,9 +361,8 @@ inline void Engine::_updateLate(double dt) {
 			m_scenes[index]->cullResults.clear();
 
 			m_scenes[index]->
-				bvhSystem().performFrustumCullingWithOcclusion(m_scenes[index]->cullResults, f, mainCamera()->getPosition());
-			//m_scenes[index]->cullResults = m_scenes[index]->
-			//	bvhSystem().performFrustumCullingWithOcclusion(f, mainCamera()->getPosition());
+				bvhSystem().performFrustumCullingWithOcclusion(
+					m_scenes[index]->cullResults, f, mainCamera()->getPosition(), &m_scenes[index]->registry());
 		}
 	}
 	for (auto& index : removeIndices) {

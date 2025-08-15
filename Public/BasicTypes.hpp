@@ -153,6 +153,10 @@ struct Ray
 	glm::vec3 origin;
 	glm::vec3 direction;
 	glm::vec3 invDirection;
+	
+	bool operator==(const Ray& rhs) {
+		return origin == rhs.origin && direction == rhs.direction;
+	}
 };
 
 
@@ -430,6 +434,10 @@ public:
 
 	INLINE void* data() {
 		return raw;
+	}
+
+	bool operator==(const AABB& rhs) {
+		return min == rhs.min && max == rhs.max;
 	}
 };
 

@@ -37,13 +37,22 @@ public:
         m_go2 = gameObjectSystem().createGameObject<GameObject>("Object2");
 
         //"Cube/cube.obj" //"crytek-sponza-hd/sponza.obj" //"SmallRoom/smallRoom_mirror_window.obj"    //"Sphere/sphere.obj"
-        const std::string path1 = std::format("{}{}", ASSETS_DIR, "Cube/cube.obj");
+        const std::string path1 = std::format("{}{}", ASSETS_DIR, "crytek-sponza-hd/sponza.obj");
         Mesh modelMesh1{};
         sceneRender().createMeshFromModel(path1, &modelMesh1, m_go1.entity());
+        float volume = 0.0f;
+        entt::entity largestSubEntity = entt::null;
         for (auto& subMesh : modelMesh1.getSubmeshes()) {
             BoundingVolume bVol{&registry(), subMesh.entity};
-            bVol.setFlags(BoundingVolumeFlags::Occluder);
+            auto aabb = bVol.getCoarseAABB();
+            if (aabb.volume() > volume) {
+                volume = aabb.volume();
+                largestSubEntity = subMesh.entity;
+            }
+            //bVol.setFlags(BoundingVolumeFlags::Occluder);
         }
+        if (largestSubEntity != entt::null)
+            registry().get<BoundingVolumeComponent>(largestSubEntity).flags = static_cast<uint32_t>(BoundingVolumeFlags::Occluder);
 
         const std::string path2 = std::format("{}{}", ASSETS_DIR, "Sphere/sphere.obj");
         Mesh modelMesh2{};
@@ -53,8 +62,9 @@ public:
             bVol.setFlags(BoundingVolumeFlags::Occluder);
         }
 
-        modelMesh2.getTransform().modifyPosition() = {0, 0, -5};
+        modelMesh2.getTransform().modifyPosition() = {0, 0, 5};
 
+        auto& reg = registry();
 
         m_camIndex = sceneRender().addCamera();
         Engine::getInstance()->setMainCamera(m_sceneIndex, m_camIndex);

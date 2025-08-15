@@ -62,6 +62,16 @@ namespace MMath
         mn = hmin4(_mm_min_ps(lo, hi));
         mx = hmax4(_mm_max_ps(lo, hi));
     }
+    inline void hmin8(__m256 v, float& mn) {
+        __m128 lo = _mm256_castps256_ps128(v);
+        __m128 hi = _mm256_extractf128_ps(v, 1);
+        mn = hmin4(_mm_min_ps(lo, hi));
+    }
+    inline void hmax8(__m256 v, float& mx) {
+        __m128 lo = _mm256_castps256_ps128(v);
+        __m128 hi = _mm256_extractf128_ps(v, 1);
+        mx = hmax4(_mm_max_ps(lo, hi));
+    }
 
 
 

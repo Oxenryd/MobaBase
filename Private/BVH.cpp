@@ -128,53 +128,53 @@ uint32_t DualBVH::findBestSplit(const std::vector<uint32_t>& primitiveIds, int& 
 
 void DualBVH::collectOccluders(const glm::vec3& cameraPos, const Frustum& frustum, std::vector<OccluderData>& occluders) const {
 
-    std::vector<uint32_t> nodeStack;
-    nodeStack.reserve(64);
-    nodeStack.push_back(rootIndex);
+    //std::vector<uint32_t> nodeStack;
+    //nodeStack.reserve(64);
+    //nodeStack.push_back(rootIndex);
 
-    while (!nodeStack.empty()) {
-        uint32_t nodeIndex = nodeStack.back();
-        nodeStack.pop_back();
+    //while (!nodeStack.empty()) {
+    //    uint32_t nodeIndex = nodeStack.back();
+    //    nodeStack.pop_back();
 
-        const BVHNode& node = nodes[nodeIndex];
+    //    const BVHNode& node = nodes[nodeIndex];
 
-        if (!MMath::aabbVisible(node.bounds.min, node.bounds.max, frustum)) {
-            continue;
-        }
+    //    if (!MMath::aabbVisible(node.bounds.min, node.bounds.max, frustum)) {
+    //        continue;
+    //    }
 
-        if (node.isLeaf()) {
-            for (uint32_t i = 0; i < node.primitiveCount; ++i) {
+    //    if (node.isLeaf()) {
+    //        for (uint32_t i = 0; i < node.primitiveCount; ++i) {
 
-                // ignore if cam is inside
-                if (node.bounds.contains(cameraPos))
-                    continue;
+    //            // ignore if cam is inside
+    //            if (node.bounds.contains(cameraPos))
+    //                continue;
 
-                uint32_t primIndex = primitiveIndices[node.firstPrimitive + i];
-                const BVHPrimitive& prim = primitives[primIndex];
+    //            uint32_t primIndex = primitiveIndices[node.firstPrimitive + i];
+    //            const BVHPrimitive& prim = primitives[primIndex];
 
-                auto verts = prim.worldBounds.getVertices();
-                auto closest = FLT_MAX;
-                for (auto& vert : verts) {
-                    auto sqrLen = glm::length2(vert - cameraPos);
-                    if (sqrLen < closest)
-                        closest = sqrLen;
-                }
+    //            auto verts = prim.worldBounds.getVertices();
+    //            auto closest = FLT_MAX;
+    //            for (auto& vert : verts) {
+    //                auto sqrLen = glm::length2(vert - cameraPos);
+    //                if (sqrLen < closest)
+    //                    closest = sqrLen;
+    //            }
 
-                auto center = prim.worldBounds.center();
-                float depth = closest;//glm::length(center - cameraPos);
-                glm::vec3 size = prim.worldBounds.size();
+    //            auto center = prim.worldBounds.center();
+    //            float depth = closest;//glm::length(center - cameraPos);
+    //            glm::vec3 size = prim.worldBounds.size();
 
-                // Heuristic: large objects close to camera are potential occluders
-                float volume = size.x * size.y * size.z;
-                bool isOccluder = (volume > 1.0f && depth < 50.0f) || volume > 10.0f;
+    //            // Heuristic: large objects close to camera are potential occluders
+    //            float volume = size.x * size.y * size.z;
+    //            bool isOccluder = (volume > 1.0f && depth < 50.0f) || volume > 10.0f;
 
-                occluders.emplace_back(prim.entity, prim.worldBounds, depth, isOccluder);
-            }
-        } else {
-            if (node.leftChild != 0) nodeStack.push_back(node.leftChild);
-            if (node.rightChild != 0) nodeStack.push_back(node.rightChild);
-        }
-    }
+    //            occluders.emplace_back(prim.entity, prim.worldBounds, depth, isOccluder);
+    //        }
+    //    } else {
+    //        if (node.leftChild != 0) nodeStack.push_back(node.leftChild);
+    //        if (node.rightChild != 0) nodeStack.push_back(node.rightChild);
+    //    }
+    //}
 }
 
 void DualBVH::build(ArenaRegistry& registry) {
@@ -184,6 +184,7 @@ void DualBVH::build(ArenaRegistry& registry) {
     primitiveIndices.clear();
     entityToPrimitive.clear();
     occluderIndices.clear();
+    occluderCorners.clear();
 
     // Collect all entities with Transform and AABB components
     auto view = registry.view<BoundingVolumeComponent>();
@@ -202,8 +203,12 @@ void DualBVH::build(ArenaRegistry& registry) {
         primitives.back().worldBounds = box;
         primitives.back().frameUpdated = currentFrame;
 
-        if (boundComp.flags & static_cast<uint32_t>(BoundingVolumeFlags::Occluder))
-            occluderIndices.push_back(primIndex);
+        if (boundComp.flags & static_cast<uint32_t>(BoundingVolumeFlags::Occluder)) {
+            auto cornerIndex = occluderCorners.size();
+            auto verts = bounds.getCoarseAABB().getVertices();
+            occluderCorners.insert(occluderCorners.end(), verts.begin(), verts.end());
+            occluderIndices.push_back({ primIndex, cornerIndex, 0.0f });
+        }
 
         entityToPrimitive[entity] = primIndex++;
     }
@@ -308,6 +313,7 @@ void DualBVH::frustumCullWithOcclusion(
     DualBVH::TraversalResult& result,
     const Frustum& frustum,
     const glm::vec3& cameraPos,
+    ArenaRegistry* const registry,
     OcclusionMethod method) const {
 
     //TraversalResult result;
@@ -315,23 +321,35 @@ void DualBVH::frustumCullWithOcclusion(
 
     // Collect potential occluders first (front-to-back)
     std::vector<OccluderData> potentialOccluders;
-    for (auto& index : occluderIndices) {
+    for (auto& [index, offset, depth] : occluderIndices) {
 
         auto& prim = primitives[index];
 
         if (!MMath::aabbVisible(prim.worldBounds.min, prim.worldBounds.max, frustum)) {
             continue;
         }
+        float d[8] = {
+             glm::length2(occluderCorners[offset + 0] - cameraPos),
+             glm::length2(occluderCorners[offset + 1] - cameraPos),
+             glm::length2(occluderCorners[offset + 2] - cameraPos),
+             glm::length2(occluderCorners[offset + 3] - cameraPos),
+             glm::length2(occluderCorners[offset + 4] - cameraPos),
+             glm::length2(occluderCorners[offset + 5] - cameraPos),
+             glm::length2(occluderCorners[offset + 6] - cameraPos),
+             glm::length2(occluderCorners[offset + 7] - cameraPos),
+        };
+        __m256 v = _mm256_loadu_ps(d);
+        float mn;
+        MMath::hmin8(v, mn);
+        float closest = mn;
+        //auto closest = FLT_MAX;
+        //for (auto& vert : verts) {
+        //    auto sqrLen = glm::length2(vert - cameraPos);
+        //    if (sqrLen < closest)
+        //        closest = sqrLen;
+        //}
 
-        auto verts = prim.worldBounds.getVertices();
-        auto closest = FLT_MAX;
-        for (auto& vert : verts) {
-            auto sqrLen = glm::length2(vert - cameraPos);
-            if (sqrLen < closest)
-                closest = sqrLen;
-        }
-
-        potentialOccluders.push_back({prim.entity, prim.worldBounds, closest, true});
+        potentialOccluders.push_back({prim.entity, prim.worldBounds, closest, offset, index});
     }
     //collectOccluders(cameraPos, frustum, potentialOccluders);
     //for (const auto& occluder : potentialOccluders) {
@@ -339,24 +357,23 @@ void DualBVH::frustumCullWithOcclusion(
     //}
 
     // Sort occluders front-to-back
-    //std::sort(potentialOccluders.begin(), potentialOccluders.end(),
-    //          [](const OccluderData& a, const OccluderData& b) {
-    //              return a.depth < b.depth;
-    //              //return a.volume > b.volume;
-    //          });
+    std::sort(potentialOccluders.begin(), potentialOccluders.end(),
+              [](const OccluderData& a, const OccluderData& b) {
+                  return a.depth < b.depth;
+                  //return a.volume > b.volume;
+              });
 
     // Build active occluder set (simplified - you'd want more sophisticated occlusion volumes)
-    std::vector<AABB> activeOccluders;
-    for (const auto& occluder : potentialOccluders) {
-        if (occluder.isOccluder) {                              //////////////////// TODO TODO TODO TODO!!!
-            activeOccluders.push_back(occluder.bounds);
+    std::vector<OccIndexCornerIndexDepthTuple> activeOccluders;
+    for (const auto& occluder : potentialOccluders) {                           //////////////////// TODO TODO TODO TODO!!!
+            activeOccluders.push_back({ occluder.primIndex, occluder.cornersOffset, occluder.depth });
             result.activeOccluders.push_back(occluder.entity);
             // Limit number of active occluders for performance
-            if (activeOccluders.size() >= 8) break;
-        }
+            if (result.activeOccluders.size() >= 8) break;
+        
     }
 
-    // Traverse with occlusion testing
+    // Traverse with occlusion
     struct TraversalNode
     {
         uint32_t nodeIndex;
@@ -384,23 +401,30 @@ void DualBVH::frustumCullWithOcclusion(
             continue;
         }
 
-        // Occlusion test
-        if (method != OcclusionMethod::NONE && !activeOccluders.empty()) {
-            if (!node.bounds.contains(cameraPos)) {
-
-                //if (isOccludedRaycast(node.bounds, activeOccluders, cameraPos, current.minDepth)) {
-                //    result.nodesCulledByOcclusion++;
-                //    continue;
-                //}
-
-                for (const auto& occluder : activeOccluders) {
-                    if (isOccludedRaycast(node.bounds, occluder, cameraPos) ) {
-                        result.nodesCulledByOcclusion++;
-                        continue;
-                    }
-                }
-            }
-        }
+        //// Occlusion test
+        //if (method != OcclusionMethod::NONE && !activeOccluders.empty()) {
+        //    if (!node.bounds.contains(cameraPos)) {
+        //        auto corners = node.bounds.getVertices();
+        //        float d[8] = {
+        //            glm::length2(corners[0] - cameraPos),
+        //            glm::length2(corners[1] - cameraPos),
+        //            glm::length2(corners[2] - cameraPos),
+        //            glm::length2(corners[3] - cameraPos),
+        //            glm::length2(corners[4] - cameraPos),
+        //            glm::length2(corners[5] - cameraPos),
+        //            glm::length2(corners[6] - cameraPos),
+        //            glm::length2(corners[7] - cameraPos),
+        //        };
+        //        __m256 v = _mm256_loadu_ps(d);
+        //        float mn;
+        //        MMath::hmin8(v, mn);
+        //        if (isOccludedRaycast(node.bounds, activeOccluders, cameraPos, mn)) {
+        //            result.nodesCulledByOcclusion++;
+        //            continue;
+        //        }
+        //        
+        //    }
+        //}
 
         if (node.isLeaf()) {
             // Process leaf primitives
@@ -411,8 +435,24 @@ void DualBVH::frustumCullWithOcclusion(
                 // Fine-grained occlusion test for individual primitives
                 bool occluded = false;
                 if (method != OcclusionMethod::NONE && !activeOccluders.empty()) {
-                    float primDepth = glm::length(prim.worldBounds.center() - cameraPos);
-                    occluded = isOccluded(prim.worldBounds, activeOccluders, cameraPos, primDepth) &&
+                    float closest = 0.0f;
+                    BoundingVolume primBounds{ registry, prim.entity };
+                    auto primVerts = primBounds.getCoarseAABB().getVertices();
+                    float d[8] = {
+                        glm::length2(primVerts[0] - cameraPos),
+                        glm::length2(primVerts[1] - cameraPos),
+                        glm::length2(primVerts[2] - cameraPos),
+                        glm::length2(primVerts[3] - cameraPos),
+                        glm::length2(primVerts[4] - cameraPos),
+                        glm::length2(primVerts[5] - cameraPos),
+                        glm::length2(primVerts[6] - cameraPos),
+                        glm::length2(primVerts[7] - cameraPos),
+                    };
+                    __m256 v = _mm256_loadu_ps(d);
+                    float mn;
+                    MMath::hmin8(v, mn);
+
+                    occluded = isOccludedRaycast(prim.worldBounds, activeOccluders, cameraPos, mn) &&
                         !prim.worldBounds.contains(cameraPos);
                 }
 
