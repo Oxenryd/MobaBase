@@ -71,7 +71,7 @@ public:
 			if (transform->state.hasFlag(ObjectState::LocalEnableOverride))
 				return;
 
-			std::span<entt::entity> children = Transform::getChildren(m_reg, m_entity);
+			std::span<entt::entity> children = Transform::getChildrenEntities(m_reg, m_entity);
 			for (auto& entity : children) {
 				Enabled childEnabled{ m_reg, entity };
 				childEnabled.set(enabledValue);

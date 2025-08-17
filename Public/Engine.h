@@ -99,10 +99,15 @@ private:
 	double m_fixedAccu;
 	uint32_t m_framesSinceLastFpsRead;
 	EngineStatus m_status = EngineStatus::Stopped;
-	double m_lastReadFps;
 	bool m_sceneTransitionRequested = false;
-	size_t m_requestedSceneIndex = SIZE_INVALID;
 	SceneTransitionMode m_sceneTransitMode = SceneTransitionMode::WaitForDone;
+	double m_lastReadFps;
+	float m_baseCosF;
+	float m_baseSinF;
+	double m_baseCosD;
+	double m_baseSinD;
+	size_t m_requestedSceneIndex = SIZE_INVALID;
+	
 	size_t m_totalFrames = 0;
 	double m_totalTime = 0.0;
 	std::chrono::steady_clock::time_point m_lastUpdateTime;
@@ -187,6 +192,10 @@ public:
 	INLINE double totalTime() const { return m_totalTime; }
 	INLINE size_t totalFrames() const { return m_totalFrames; }
 	INLINE void setTargetUpdateDeltaTime(const double targetDt) { m_targetUpdateDeltaTime = targetDt; }
+	INLINE static double sin() { return s_instance->m_baseSinD; }
+	INLINE static double cos() { return s_instance->m_baseCosD; }
+	INLINE static float sinF() { return s_instance->m_baseSinF; }
+	INLINE static float cosF() { return s_instance->m_baseCosF; }
 	INLINE RenderManager* getRenderManager() { return m_renderMan; }
 	void start();
 	void stop();

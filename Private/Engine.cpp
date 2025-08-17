@@ -217,6 +217,10 @@ inline void Engine::_run() {
 		auto dt = _tickDt();
 		m_fixedAccu += dt;
 		m_totalTime += dt;
+		m_baseCosD = std::cos(m_totalTime);
+		m_baseSinD = std::sin(m_totalTime);
+		m_baseCosF = static_cast<float>(m_baseCosD);
+		m_baseCosF = static_cast<float>(m_baseSinD);
 		while (m_fixedAccu >= m_targetFixedDeltaTime) {
 			_updateFixed();
 			m_fixedAccu -= m_targetFixedDeltaTime;

@@ -57,9 +57,13 @@ private:
 		
 		auto parent = m_parentOf[id];
 		if (parent == entt::null) {
-			auto index = m_roots.size();
-			m_roots.push_back(e);
-			m_entityRootIndexMap.insert({e, index});
+			auto it = m_entityRootIndexMap.find(e);
+			if (it == m_entityRootIndexMap.end()) {
+				auto index = m_roots.size();
+				m_roots.push_back(e);
+				m_entityRootIndexMap.insert({ e, index });
+			}
+
 		} else {
 			auto it = m_entityRootIndexMap.find(e);
 			if (it != m_entityRootIndexMap.end()) {
@@ -150,6 +154,7 @@ public:
 				continue;
 
 			auto& t = m_reg->get<TransformComponent>(e);
+			t.state.clearByEnum(ObjectState::MovedThisFrame);
 			const bool selfDirtyLocal = t.state.hasFlag(ObjectState::DirtyTransform);
 			const bool worldDirty = parentDirty || selfDirtyLocal;
 
@@ -179,16 +184,21 @@ public:
 
 				// Flags
 				t.state.clearByEnum(ObjectState::DirtyTransform);
-				t.state.setByEnum(ObjectState::MovedThisFrame);
-			}
+				if (selfDirtyLocal) t.state.setByEnum(ObjectState::MovedThisFrame);
+				if (parentDirty) t.state.setByEnum(ObjectState::ParentMovedThisFrame);
 
-			// Only traverse into children if something up this path was dirty.
-			if (worldDirty) {
+
+				// Children
 				const auto& kids = m_childrenOf[entt::to_integral(e)];
 				for (auto child : kids) {
 					stack.push_back({ child, worldDirty });
 				}
 			}
+
+			//// Only traverse into children if something up this path was dirty.
+			//if (worldDirty) {
+
+			//}
 		}
 	}
 

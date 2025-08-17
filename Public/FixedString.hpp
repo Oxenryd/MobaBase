@@ -10,7 +10,7 @@
 #include <algorithm>
 
 #ifndef FIXED_STRINGS_MAX_LENGTH
-	#define FIXED_STRINGS_MAX_LENGTH 63
+	#define FIXED_STRINGS_MAX_LENGTH 62
 #endif
 
 #if FIXED_STRINGS_MAX_LENGTH <= 0xfe
@@ -37,9 +37,10 @@ class FixedStringBase
 private:
 	union
 	{
-		char _raw[T + sizeof(size_type)];
+		char _raw[T + 2 * sizeof(size_type)];
 		struct
 		{
+			size_type m_capacity;
 			size_type m_size;
 			char m_data[T];
 		};
@@ -53,19 +54,26 @@ private:
 public:
 	~FixedStringBase() = default;
 	constexpr FixedStringBase() :
-		m_size{ 0 } {}
+		m_size{ 0 }, m_capacity{ T }
+	{}
 	constexpr explicit FixedStringBase(const std::string& string) :
-		m_size{ static_cast<size_type>(std::min(static_cast<size_t>(T), string.size())) } {
+		m_capacity{ T },
+		m_size{ static_cast<size_type>(std::min(static_cast<size_t>(m_capacity), string.size())) }
+	{
 		std::memcpy(m_data, string.data(), m_size);
 	}
-	constexpr explicit FixedStringBase(const char* ptr) {
-		m_size = static_cast<size_type>(std::min(static_cast<size_t>(T), std::strlen(ptr)));
-		std::memcpy(m_data, ptr, m_size);
+	constexpr explicit FixedStringBase(const char* ptr) : 
+		m_capacity{T}
+	{
+		m_size = static_cast<size_type>(std::min(static_cast<size_t>(m_capacity), std::strlen(ptr)));
+		std::memcpy(m_data, ptr, m_size);	
 	}
 	template <auto U>
 		requires UIntMax254MultipleOf4<U>
-	constexpr explicit FixedStringBase(const FixedStringBase<U>& other) {
-		m_size = static_cast<size_type>(std::min(static_cast<size_t>(T), static_cast<size_t>(T)));
+	constexpr explicit FixedStringBase(const FixedStringBase<U>& other) : 
+		m_capacity{ T }
+	{
+		m_size = static_cast<size_type>(std::min(static_cast<size_t>(m_capacity), other.size()));
 		std::memcpy(m_data, other.m_data, m_size);
 	}
 
@@ -74,26 +82,29 @@ public:
 	FixedStringBase& operator=(const FixedStringBase<U>& rhs) {
 		if (this == &rhs)
 			return *this;
-
-		m_size = static_cast<size_type>(std::min(static_cast<size_t>(T), static_cast<size_t>(T)));
+		m_capacity = T;
+		m_size = static_cast<size_type>(std::min(static_cast<size_t>(m_capacity), rhs.size()));
 		std::memcpy(m_data, rhs.m_data, m_size);
+		
 		return *this;
 	}
 	FixedStringBase& operator=(const std::string& rhs) {
-		m_size = static_cast<size_type>(std::min(static_cast<size_t>(T), rhs.size()));
+		m_capacity = T;
+		m_size = static_cast<size_type>(std::min(static_cast<size_t>(m_capacity), rhs.size()));
 		std::memcpy(m_data, rhs.data(), m_size);
+		
 		return *this;
 	}
 
 	FixedStringBase& operator=(const char* ptr) {
-		m_size = static_cast<size_type>(std::min(static_cast<size_t>(T), std::strlen(ptr)));
-		std::memcpy(m_data, ptr, m_size);
-
+		m_capacity = T;
+		m_size = static_cast<size_type>(static_cast<size_t>(m_capacity), std::strlen(ptr));
+		std::memcpy(m_data, ptr, m_size);		
 		return *this;
 	}
 
-	constexpr size_t capacity() const { return T; }
-	constexpr size_t size() const { return m_size; }
+	constexpr size_t capacity() const { return m_capacity; }
+	size_t size() const { return m_size; }
 	bool empty() const { return m_size == 0; }
 	void clear() { m_size = 0; }
 	std::string_view to_stringView() const { return std::string_view{ m_data, m_size }; }

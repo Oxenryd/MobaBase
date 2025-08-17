@@ -216,10 +216,10 @@ public:
 		return normalMatrix() * localNormal;
 	}
 
+	std::string_view getTag() const;
 
-
-	std::span<entt::entity> getChildren();
-	std::optional<Transform> getParent();
+	std::span<entt::entity> getChildrenEntities() const;
+	std::optional<Transform> getParentTransform() const;
 
 	void setParent(const Transform* parent);
 	void setParent(const entt::entity& parent);
@@ -239,8 +239,8 @@ public:
 		return registry->get<TransformComponent>(entity).state;
 	}
 
-	static std::span<entt::entity> getChildren(ArenaRegistry* registry, entt::entity ofEntity);
-	static std::optional<Transform> getParent(ArenaRegistry* registry, entt::entity ofEntity);
+	static std::span<entt::entity> getChildrenEntities(ArenaRegistry* registry, entt::entity ofEntity);
+	static std::optional<Transform> getParentTransform(ArenaRegistry* registry, entt::entity ofEntity);
 };
 
 #endif

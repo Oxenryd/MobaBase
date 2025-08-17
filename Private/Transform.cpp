@@ -16,12 +16,20 @@ const glm::mat4x4 Transform::worldToLocal() const {
 	); // MIGHT CACHE THIS IN THE FUTURE TOO INSIDE THE SYSTEM LIKE LOCALTOWORLD
 }
 
-std::span<entt::entity> Transform::getChildren() {
+std::string_view Transform::getTag() const {
+	auto tagPtr = Engine::getInstance()->getGlobalSystem().registry().try_get<TagComponent>(m_entity);
+	if (tagPtr) {
+		return std::string_view({tagPtr->tag.to_stringView()});
+	}
+	return std::string_view();
+}
+
+std::span<entt::entity> Transform::getChildrenEntities() const {
 	auto& comp = m_reg->get<TransformComponent>(m_entity);
 	return Engine::getInstance()->getScene(comp.sceneIndex)->transformSystem().getChildren(m_entity);
 }
 
-std::optional<Transform> Transform::getParent() {
+std::optional<Transform> Transform::getParentTransform() const {
 	auto& comp = m_reg->get<TransformComponent>(m_entity);
 	auto result = Engine::getInstance()->getScene(comp.sceneIndex)->transformSystem().getParent(m_entity);
 	return result != entt::null ? std::optional<Transform>{Transform{m_reg, result}} : std::nullopt;
@@ -44,7 +52,7 @@ void Transform::clearChildren() {
 	Engine::getInstance()->getScene(comp.sceneIndex)->transformSystem().clearChildren(m_entity);
 }
 
-std::span<entt::entity> Transform::getChildren(ArenaRegistry* registry, entt::entity ofEntity) {
+std::span<entt::entity> Transform::getChildrenEntities(ArenaRegistry* registry, entt::entity ofEntity) {
 	auto comp = registry->try_get<TransformComponent>(ofEntity);
 	if (!comp)
 		return std::span<entt::entity>();
@@ -52,7 +60,7 @@ std::span<entt::entity> Transform::getChildren(ArenaRegistry* registry, entt::en
 	return Engine::getInstance()->getScene(comp->sceneIndex)->transformSystem().getChildren(ofEntity);
 }
 
-std::optional<Transform> Transform::getParent(ArenaRegistry* registry, entt::entity ofEntity) {
+std::optional<Transform> Transform::getParentTransform(ArenaRegistry* registry, entt::entity ofEntity) {
 	auto comp = registry->try_get<TransformComponent>(ofEntity);
 	if (!comp)
 		return std::nullopt;
