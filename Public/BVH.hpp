@@ -131,9 +131,9 @@ public:
     enum class OcclusionMethod
     {
         NONE,
-            SIMPLE_DEPTH,     // Simple front-to-back + depth test
-            HIERARCHICAL_Z,   // Hierarchical Z-buffer (more advanced)
-            PORTAL_ZONES      // For indoor scenes with portals
+        SIMPLE_DEPTH,     // Simple front-to-back + depth test
+        HIERARCHICAL_Z,   // Hierarchical Z-buffer (more advanced)
+        PORTAL_ZONES      // For indoor scenes with portals
     };
 
 

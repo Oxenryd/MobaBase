@@ -103,16 +103,19 @@ ErrorCode SceneRenderSystem::createMeshFromModel(const std::string& path, Mesh* 
 			
 			auto subVerts = std::span<BaseVSIn>(&m_vertices[subMesh.vertexOffset], subMesh.vertexCount);
 
-			Engine::getInstance()->getScene(m_sceneIndex)->transformSystem().registryEmplace(subMesh.entity);
+			Engine::getInstance()->getScene(m_sceneIndex)->transformSystem().registryEmplace(
+				subMesh.entity,
+				parent == entt::null ? nullptr : static_cast<void*>(&subMesh.parent)
+			);
 
 			AABB box{};
 			box.encloseLocal(subVerts);
 			Engine::getInstance()->getScene(m_sceneIndex)->boundingSystem().registryEmplace(subMesh.entity, &box);
 			
-			if (parent != entt::null) {
-				auto newTransform = Transform{ m_reg, subMesh.entity };
-				newTransform.setParent(parent);
-			}
+			//if (parent != entt::null) {
+			//	auto newTransform = Transform{ m_reg, subMesh.entity };
+			//	newTransform.setParent(parent);
+			//}
 		}
 
 	} else

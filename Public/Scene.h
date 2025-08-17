@@ -22,7 +22,7 @@ enum class SceneTransitionStatus
 	Done
 };
 
-enum class SceneTransitionMode
+enum class SceneTransitionMode : uint8_t
 {
 	DontRunTransitioning = 0,
 	RunOnce = 1,

@@ -156,6 +156,18 @@ void VulkanContext::draw(const DrawContext& ctx) {
 		auto& reg = scene->registry();
 		for (auto& entity : scene->cullResults.visibleEntities) {
 			drawCmds.push_back(subMeshEntity_to_drawCommand(scene, reg, entity));
+
+			//debug
+			auto transform = Transform{ &reg, entity };
+			auto tag = transform.getTag();
+			if (!tag.empty()) {
+				auto parent = transform.getParentTransform();
+				if (parent.has_value()) {
+					auto parentTag = parent.value().getTag();
+					auto test2 = parentTag;
+				}
+			} else
+				auto test = tag;
 		}
 	}
 	std::sort(drawCmds.begin(), drawCmds.end());
