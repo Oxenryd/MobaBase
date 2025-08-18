@@ -15,6 +15,7 @@ private:
     entt::entity m_skyLight;
     uint32_t m_camIndex{};
     float m_camSpeed = 12.5f;
+    std::vector<GameObject> m_goList;
 
 
 public:
@@ -31,10 +32,22 @@ public:
         m_skyLight = m_reg.create();
         auto& lightRef = lightSystem().registerLight(dirLight, m_skyLight);
 
+        
+        size_t numOfObjects = 4;
+        m_goList.reserve(numOfObjects);
+        auto step = MMath::fTAU / numOfObjects;
+        const std::string pathObject = std::format("{}{}", ASSETS_DIR, "Sphere/sphere.obj");
+        for (size_t i = 0; i < numOfObjects; ++i) {
+            m_goList.emplace_back(gameObjectSystem().createGameObject<GameObject>(std::format("Object_{}", i)));
+            Mesh objectMesh{};
+            sceneRender().createMeshFromModel(pathObject, &objectMesh, m_goList[i].entity());
+            auto trans = objectMesh.getTransform();
+            trans.modifyPosition() = glm::vec3{std::cos(step * i) * 12, std::sin(step * i) * 12, 0};
+        }
 
         m_go1 = gameObjectSystem().createGameObject<GameObject>("Room");
-        m_go2 = gameObjectSystem().createGameObject<GameObject>("Ball");
-        m_go3 = gameObjectSystem().createGameObject<GameObject>("Box");
+        m_go2 = gameObjectSystem().createGameObject<GameObject>("Box");
+        //m_go3 = gameObjectSystem().createGameObject<GameObject>("Box");
 
         //"Cube/cube.obj" //"crytek-sponza-hd/sponza.obj" //"SmallRoom/smallRoom_mirror_window.obj"    //"Sphere/sphere.obj"
         const std::string path1 = std::format("{}{}", ASSETS_DIR, "SmallRoom/smallRoom_mirror_window.obj");
@@ -54,7 +67,7 @@ public:
             registry().get<BoundingVolumeComponent>(largestSubEntity).flags = static_cast<uint32_t>(BoundingVolumeFlags::Occluder);
 
 
-        const std::string path2 = std::format("{}{}", ASSETS_DIR, "Sphere/sphere.obj");
+        const std::string path2 = std::format("{}{}", ASSETS_DIR, "Cube/cube.obj");
         Mesh modelMesh2{};
         sceneRender().createMeshFromModel(path2, &modelMesh2, m_go2.entity());
         //for (auto& subMesh : modelMesh2.getSubmeshes()) {
@@ -62,12 +75,12 @@ public:
         //    bVol.setFlags(BoundingVolumeFlags::Occluder);
         //}
 
-        const std::string path3 = std::format("{}{}", ASSETS_DIR, "Cube/cube.obj");
-        Mesh modelMesh3{};
-        sceneRender().createMeshFromModel(path3, &modelMesh3, m_go3.entity());
+        //const std::string path3 = std::format("{}{}", ASSETS_DIR, "Cube/cube.obj");
+        //Mesh modelMesh3{};
+        //sceneRender().createMeshFromModel(path3, &modelMesh3, m_go3.entity());
 
-        modelMesh3.getTransform().modifyPosition() = { -12, 0, 0 };
-        modelMesh2.getTransform().modifyPosition() = { 12, 0, 0 };
+        //modelMesh3.getTransform().modifyPosition() = { -12, 0, 0 };
+        modelMesh2.getTransform().modifyPosition() = { -12, 0, 0 };
 
         auto& reg = registry();
 
@@ -104,27 +117,28 @@ public:
                                           case KeyCode::ArrowLeft:
                                           {
                                               auto sTrans = Transform{&registry(), m_go2};
-                                              auto& pos = sTrans.modifyPosition() -= glm::vec3{ 1,0,0 };
+                                              auto& pos = sTrans.modifyScale() -= glm::vec3{ 1,0,0 };
                                              
                                           } break;
                                           case KeyCode::ArrowRight:
                                           {
                                               auto sTrans = Transform{ &registry(), m_go2 };
-                                              auto& pos = sTrans.modifyPosition() += glm::vec3{ 1,0,0 };
+                                              auto& pos = sTrans.modifyScale() += glm::vec3{ 1,0,0 };
                                     
                                           } break;
                                           case KeyCode::ArrowUp:
                                           {
                                               auto sTrans = Transform{ &registry(), m_go2 };
-                                              auto& pos = sTrans.modifyScale() += glm::vec3{ 1,1,1 };
+                                              auto& pos = sTrans.modifyScale() += glm::vec3{ 0,1,0 };
 
                                           } break;
                                           case KeyCode::ArrowDown:
                                           {
                                               auto sTrans = Transform{ &registry(), m_go2 };
-                                              auto& pos = sTrans.modifyScale() -= glm::vec3{ 1,1,1 };
+                                              auto& pos = sTrans.modifyScale() -= glm::vec3{ 0,1,0 };
 
                                           } break;
+
                                       }
                                   });
 
@@ -155,13 +169,24 @@ public:
 
         m_time += Timing::deltaTimeF();
         auto ballTransform = m_go2.transform();
-        ballTransform.setFromEuler({ m_time * 3, m_time * 25, 0});
+        //ballTransform.setFromEuler({ m_time * 3, m_time * 25, 0});
         //ballTransform.modifyPosition() = { 12, 0, 0 };
 
         //auto boxTransform = m_go3.transform();
         //boxTransform.modifyPosition() = { Engine::sinF() * 10, Engine::cosF() * 10, 0};
         //boxTransform.modifyScale() = { (Engine::sinF() + 1) * 10, (Engine::cosF() + 1) * 10, 0 };
         //boxTransform.setFromEuler({ Engine::sinF() * 2, Engine::cosF() * 2, 0});
+
+        
+
+        for (size_t i = 0; i < m_goList.size(); ++i) {
+            GameObject& go = m_goList[i];
+            auto transform = Transform{ &m_reg, go.entity() };
+            auto& pos = transform.modifyPosition();
+
+            
+            //pos += glm::vec3{Engine::cosF(), Engine::sinF(), 0};
+        }
     }
 
     void lateUpdate(float dt) {

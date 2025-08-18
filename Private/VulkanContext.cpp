@@ -12,7 +12,7 @@ INLINE MeshDrawCommand VulkanContext::subMeshEntity_to_drawCommand(SceneBase* sc
 	cmd.priority = 1.0f; //TODO
 	cmd.sceneIndex = scene->sceneIndex();
 	cmd.submeshOffset = subMeshComp.subMeshIndex;
-	cmd.subMeshEntity = subMesh.entity;
+	cmd.subMeshEntity = entity;
 
 	return cmd;
 }

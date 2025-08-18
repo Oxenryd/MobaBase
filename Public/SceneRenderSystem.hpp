@@ -50,6 +50,8 @@ private:
 	ArenaVector<uint32_t> m_indices;
 	//ArenaVector<Camera> m_cameras;
 
+	ArenaUMap<std::string, MeshComponent> m_pathMeshMap;
+
 	bool m_drawAabbs = false;
 	bool m_drawOccluders = false;
 
@@ -73,6 +75,7 @@ public:
 		m_pendingDrawCommands{ ArenaAllocator<DrawCommand>{arena} },
 		m_persistentDrawCommands{ ArenaAllocator<DrawCommand>{arena} },
 		m_persistentDcmdHashIndexMap{ ArenaAllocator<std::pair<const uint64_t, size_t>>(arena) },
+		m_pathMeshMap{ArenaAllocator<std::pair<std::string, MeshComponent>>{arena}},
 		//m_cameras { ArenaAllocator<Camera>{arena} },
 		//s_pendingDrawCommands{ SCENE_MAX_SCENES, ArenaVector<DrawCommand>{RENDER_SCENE_MAX_THREADS, ArenaAllocator<DrawCommand>{arena} } },
 		s_threadPresistentDrawBuffers{ SCENE_MAX_SCENES, ArenaVector<MeshDrawCommand>{ArenaAllocator<MeshDrawCommand>{arena} } },

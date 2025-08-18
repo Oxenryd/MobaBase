@@ -37,7 +37,7 @@ uint32_t DualBVH::buildRecursive(std::vector<uint32_t>& primitiveIds, uint32_t d
      // Partition primitives
      auto partition = std::partition(primitiveIds.begin(), primitiveIds.end(),
                                      [&](uint32_t primId) {
-                                         return primitives[primId].worldBounds.center()[bestAxis] < bestPos;
+                                         return primitives[primId].bounds.getCoarseAABB().center()[bestAxis] < bestPos;
                                      });
 
      std::vector<uint32_t> leftPrims(primitiveIds.begin(), partition);
@@ -48,8 +48,8 @@ uint32_t DualBVH::buildRecursive(std::vector<uint32_t>& primitiveIds, uint32_t d
          // Fallback to median split
          std::sort(primitiveIds.begin(), primitiveIds.end(),
                    [&](uint32_t a, uint32_t b) {
-                       return primitives[a].worldBounds.center()[bestAxis] <
-                           primitives[b].worldBounds.center()[bestAxis];
+                       return primitives[a].bounds.getCoarseAABB().center()[bestAxis] <
+                           primitives[b].bounds.getCoarseAABB().center()[bestAxis];
                    });
 
          size_t mid = primitiveIds.size() / 2;
@@ -93,8 +93,8 @@ uint32_t DualBVH::findBestSplit(const std::vector<uint32_t>& primitiveIds, int& 
         std::vector<uint32_t> sorted = primitiveIds;
         std::sort(sorted.begin(), sorted.end(),
                   [&](uint32_t a, uint32_t b) {
-                      return primitives[a].worldBounds.center()[axis] <
-                          primitives[b].worldBounds.center()[axis];
+                      return primitives[a].bounds.getCoarseAABB().center()[axis] <
+                          primitives[b].bounds.getCoarseAABB().center()[axis];
                   });
 
         // Try different split positions
@@ -117,8 +117,8 @@ uint32_t DualBVH::findBestSplit(const std::vector<uint32_t>& primitiveIds, int& 
             if (cost < bestCost) {
                 bestCost = cost;
                 bestAxis = axis;
-                bestPos = (primitives[sorted[i - 1]].worldBounds.center()[axis] +
-                           primitives[sorted[i]].worldBounds.center()[axis]) * 0.5f;
+                bestPos = (primitives[sorted[i - 1]].bounds.getCoarseAABB().center()[axis] +
+                           primitives[sorted[i]].bounds.getCoarseAABB().center()[axis]) * 0.5f;
             }
         }
     }
@@ -198,9 +198,9 @@ void DualBVH::build(ArenaRegistry& registry) {
 
 
         BoundingVolume bounds = BoundingVolume{ &registry, entity };
-        AABB box = bounds.getCoarseAABB();
-        primitives.emplace_back(entity, box);
-        primitives.back().worldBounds = box;
+        //AABB box = bounds.getCoarseAABB();
+        primitives.emplace_back(entity, bounds);
+        //primitives.back().worldBounds = box;
         primitives.back().frameUpdated = currentFrame;
 
         if (boundComp.flags & static_cast<uint32_t>(BoundingVolumeFlags::Occluder)) {
@@ -252,15 +252,15 @@ void DualBVH::incrementalUpdate(ArenaRegistry& registry) {
             return;
         }
 
-        uint32_t primIndex = it->second;
-        if (primitives[primIndex].frameUpdated < currentFrame) {
-            TransformComponent& transComp = registry.get<TransformComponent>(entity);
-            if (!transComp.state.hasFlag(ObjectState::MovedThisFrame))
-                continue;
-            Transform transform = Transform{ &registry, entity };
-            updatePrimitive(primIndex, transform.localToWorld());
-            updatedCount++;
-        }
+        //uint32_t primIndex = it->second;
+        //if (primitives[primIndex].frameUpdated < currentFrame) {
+        //    TransformComponent& transComp = registry.get<TransformComponent>(entity);
+        //    if (!transComp.state.hasFlag(ObjectState::MovedThisFrame))
+        //        continue;
+        //    Transform transform = Transform{ &registry, entity };
+        //    updatePrimitive(primIndex, transform.localToWorld());
+        //    updatedCount++;
+        //}
     }
 
     // Check if rebuild is needed
@@ -324,8 +324,8 @@ void DualBVH::frustumCullWithOcclusion(
     for (auto& [index, offset, depth] : occluderIndices) {
 
         auto& prim = primitives[index];
-
-        if (!MMath::aabbVisible(prim.worldBounds.min, prim.worldBounds.max, frustum)) {
+        AABB worldBounds = prim.bounds.getCoarseAABB();
+        if (!MMath::aabbVisible(worldBounds.min, worldBounds.max, frustum)) {
             continue;
         }
         float d[8] = {
@@ -349,7 +349,7 @@ void DualBVH::frustumCullWithOcclusion(
         //        closest = sqrLen;
         //}
 
-        potentialOccluders.push_back({prim.entity, prim.worldBounds, closest, offset, index});
+        potentialOccluders.push_back({prim.entity, closest, offset, index});
     }
     //collectOccluders(cameraPos, frustum, potentialOccluders);
     //for (const auto& occluder : potentialOccluders) {
@@ -434,8 +434,8 @@ void DualBVH::frustumCullWithOcclusion(
 
                 // Fine-grained occlusion test for individual primitives
                 bool occluded = false;
-
-                if (!MMath::aabbVisible(prim.worldBounds.min, prim.worldBounds.max, frustum)) {
+                AABB primWorldBounds = prim.bounds.getCoarseAABB();
+                if (!MMath::aabbVisible(primWorldBounds.min, primWorldBounds.max, frustum)) {
                     result.nodesCulledByFrustum++;
                     continue;
                 }
@@ -458,8 +458,8 @@ void DualBVH::frustumCullWithOcclusion(
                     float mn;
                     MMath::hmin8(v, mn);
 
-                    occluded = isOccludedRaycast(prim.worldBounds, activeOccluders, cameraPos, mn) &&
-                        !prim.worldBounds.contains(cameraPos);
+                    occluded = isOccludedRaycast(primWorldBounds, activeOccluders, cameraPos, mn) &&
+                        !primWorldBounds.contains(cameraPos);
                 }
 
                 if (!occluded) {
@@ -506,7 +506,9 @@ DualBVH::TraversalResult DualBVH::broadPhaseCollision() const {
                     uint32_t primA = primitiveIndices[a.firstPrimitive + i];
                     uint32_t primB = primitiveIndices[b.firstPrimitive + j];
 
-                    if (primitives[primA].worldBounds.intersects(primitives[primB].worldBounds)) {
+
+
+                    if (primitives[primA].bounds.getCoarseAABB().intersects(primitives[primB].bounds.getCoarseAABB())) {
                         result.collisionPairs.emplace_back(
                             primitives[primA].entity,
                             primitives[primB].entity

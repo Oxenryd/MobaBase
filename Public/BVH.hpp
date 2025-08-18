@@ -10,6 +10,7 @@
 
 #include "BasicTypes.hpp"
 #include "ArenaAllocator.hpp"
+#include "BoundingVolume.hpp"
 
 // BVH Node - designed for cache efficiency
 struct alignas(64) BVHNode
@@ -46,12 +47,52 @@ struct alignas(64) BVHNode
 struct BVHPrimitive
 {
     entt::entity entity;
-    AABB localBounds;
-    AABB worldBounds;       // Cached transformed bounds
     uint32_t frameUpdated;  // Last frame this was updated
+    BoundingVolume bounds;
+    //uint32_t local_BIndex;
+    //uint32_t world_BIndex;
+    //AABB localBounds;
+    //AABB worldBounds;       // Cached transformed bounds
+    
+    BVHPrimitive() : 
+        entity{entt::null},
+        frameUpdated{UINT32_INVALID},
+        bounds{}
+    {}
+    BVHPrimitive(const BVHPrimitive& other) :
+        entity{other.entity},
+        frameUpdated{other.frameUpdated},
+        bounds{other.bounds}
+    {}
+    BVHPrimitive& operator=(const BVHPrimitive& rhs) {
+        if (this == &rhs) return *this;
 
-    BVHPrimitive(entt::entity e, const AABB& bounds)
-        : entity(e), localBounds(bounds), worldBounds(bounds), frameUpdated(0) {}
+        entity = rhs.entity;
+        frameUpdated = rhs.frameUpdated;
+        bounds = rhs.bounds;
+
+        return *this;
+    }
+
+    BVHPrimitive& operator=(BVHPrimitive&& rhs) noexcept {
+        if (this == &rhs) return *this;
+
+        entity = rhs.entity;
+        frameUpdated = rhs.frameUpdated;
+        bounds = rhs.bounds;
+
+        rhs.entity = entt::null;
+        rhs.frameUpdated = UINT32_INVALID;
+        rhs.bounds = BoundingVolume{};
+
+        return *this;
+    }
+
+    BVHPrimitive(entt::entity e, const BoundingVolume& boundVol) :
+        entity{ e }, bounds{ boundVol }, frameUpdated{ UINT32_INVALID } {}
+
+    //BVHPrimitive(entt::entity e, const AABB& bounds)
+    //    : entity(e), localBounds(bounds), worldBounds(bounds), frameUpdated(0) {}
 };
 
 struct Frustum;
@@ -84,7 +125,7 @@ public:
     struct BuildSettings
     {
         uint32_t maxLeafPrimitives = MAX_LEAF_PRIMITIVES;
-        bool useMedianSplit = false;  // false = SAH, true = median
+        bool useMedianSplit = true;  // false = SAH, true = median
         float rebuildThreshold = REBUILD_THRESHOLD;
     };
 
@@ -113,7 +154,7 @@ public:
     struct OccluderData
     {
         entt::entity entity;
-        AABB bounds;
+        //AABB bounds;
         uint32_t primIndex;
         //float volume;
         float depth;  // Distance from camera
@@ -124,8 +165,10 @@ public:
         OccluderData& operator=(const OccluderData& rhs) = default;
         //OccluderData(entt::entity e, const AABB& b, float v, float d, bool occluder = false)
         //    : entity(e), bounds(b), depth(d), isOccluder(occluder), volume( v ) {}
-        OccluderData(entt::entity e, const AABB& b, float d, uint32_t cornerOffset, uint32_t primitiveIndex)
-            : entity(e), bounds(b), depth(d), cornersOffset(cornerOffset), primIndex(primitiveIndex) {} //isOccluder(occluder) {}
+        //OccluderData(entt::entity e, const AABB& b, float d, uint32_t cornerOffset, uint32_t primitiveIndex)
+        //    : entity(e), bounds(b), depth(d), cornersOffset(cornerOffset), primIndex(primitiveIndex) {} //isOccluder(occluder) {}
+        OccluderData(entt::entity e, float d, uint32_t cornerOffset, uint32_t primitiveIndex)
+            : entity(e), depth(d), cornersOffset(cornerOffset), primIndex(primitiveIndex) {} //isOccluder(occluder) {}
     };
 
     enum class OcclusionMethod
@@ -151,9 +194,9 @@ private:
             return AABB();
         }
 
-        AABB bounds = primitives[primitiveIds[0]].worldBounds;
+        AABB bounds = primitives[primitiveIds[0]].bounds.getCoarseAABB();
         for (size_t i = 1; i < primitiveIds.size(); ++i) {
-            bounds = bounds.merge(primitives[primitiveIds[i]].worldBounds);
+            bounds = bounds.merge(primitives[primitiveIds[i]].bounds.getCoarseAABB());
         }
 
         return bounds;
@@ -162,15 +205,16 @@ private:
     // Update methods
     void updatePrimitive(uint32_t primIndex, const glm::mat4x4& transform) {
         BVHPrimitive& prim = primitives[primIndex];
-        AABB newWorldBounds = prim.localBounds.transformed_noPerspective(transform);
+        AABB primWorldBounds = prim.bounds.getCoarseAABB();
+        AABB newWorldBounds = prim.bounds.getCoarseAABB_local().transformed_noPerspective(transform);
 
-        // Check if bounds actually changed significantly
-        if (!boundsChanged(prim.worldBounds, newWorldBounds)) {
-            prim.frameUpdated = currentFrame;
-            return;
-        }
+        //// Check if bounds actually changed significantly
+        //if (!boundsChanged(primWorldBounds, newWorldBounds)) {
+        //    prim.frameUpdated = currentFrame;
+        //    return;
+        //}
 
-        prim.worldBounds = newWorldBounds;
+        prim.bounds.setCoarseAABB(newWorldBounds);
         prim.frameUpdated = currentFrame;
 
         // Mark nodes as dirty up the hierarchy
@@ -286,7 +330,7 @@ private:
 
                 // Ray-AABB intersection test
                 float tNear, tFar;
-                const AABB& box = primitives[std::get<0>(occluder)].worldBounds;
+                const AABB& box = primitives[std::get<0>(occluder)].bounds.getCoarseAABB();
                 if (rayAABBIntersectWithDistance(cameraPos, rayDir, box, tNear, tFar)) {
                     // Check if intersection is between camera and object corner
                     if (tNear > 0.01f && tNear < rayLength - 0.01f) {
@@ -434,7 +478,7 @@ public:
             if (node.isLeaf()) {
                 for (uint32_t i = 0; i < node.primitiveCount; ++i) {
                     uint32_t primIndex = primitiveIndices[node.firstPrimitive + i];
-                    if (primitives[primIndex].worldBounds.intersects(r)) {
+                    if (primitives[primIndex].bounds.getCoarseAABB().intersects(r)) {
                         hits.push_back(primitives[primIndex].entity);
                     }
                 }
@@ -453,21 +497,21 @@ public:
 
 
     // Management
-    void addPrimitive(entt::entity entity, const AABB& bounds) {
-        if (entityToPrimitive.find(entity) != entityToPrimitive.end()) {
-            return; // Already exists
-        }
+    //void addPrimitive(entt::entity entity, const AABB& bounds) {
+    //    if (entityToPrimitive.find(entity) != entityToPrimitive.end()) {
+    //        return; // Already exists
+    //    }
 
-        uint32_t primIndex = primitives.size();
-        primitives.emplace_back(entity, bounds);
-        primitives.back().worldBounds = bounds;  // Will be updated with transform
-        primitives.back().frameUpdated = currentFrame;
+    //    uint32_t primIndex = primitives.size();
+    //    primitives.emplace_back(entity, bounds);
+    //    //primitives.back().worldBounds = bounds;  // Will be updated with transform
+    //    primitives.back().frameUpdated = currentFrame;
 
-        entityToPrimitive[entity] = primIndex;
+    //    entityToPrimitive[entity] = primIndex;
 
-        // Mark for rebuild (simple approach - could be optimized with insertion)
-        dirtyCount = primitives.size();
-    }
+    //    // Mark for rebuild (simple approach - could be optimized with insertion)
+    //    dirtyCount = primitives.size();
+    //}
     void removePrimitive(entt::entity entity) {
         auto it = entityToPrimitive.find(entity);
         if (it == entityToPrimitive.end()) return;
@@ -612,9 +656,9 @@ public:
     }
 
     // Add/remove entities
-    void addEntity(entt::entity entity, const AABB& bounds) {
-        bvh.addPrimitive(entity, bounds);
-    }
+    //void addEntity(entt::entity entity, const AABB& bounds) {
+    //    bvh.addPrimitive(entity, bounds);
+    //}
 
     void removeEntity(entt::entity entity) {
         bvh.removePrimitive(entity);

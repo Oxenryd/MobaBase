@@ -16,10 +16,6 @@
 //	uint32_t subMeshCount;
 //};
 
-//struct MeshComponent
-//{
-//	uint32_t meshIndex;
-//};
 
 struct SubMeshComponent
 {
@@ -35,7 +31,7 @@ struct MeshComponent
 struct SubMeshData
 {
 	entt::entity parent{ entt::null };
-	entt::entity entity{ entt::null };
+	//entt::entity entity{ entt::null };
 	uint32_t vertexOffset{ UINT32_INVALID };
 	uint32_t vertexCount{ UINT32_INVALID };
 	uint32_t indexOffset{ UINT32_INVALID };

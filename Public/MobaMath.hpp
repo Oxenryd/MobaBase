@@ -11,8 +11,15 @@
 #include "Frustum.hpp"
 //#include "BasicTypes.hpp"
 
+
+
 namespace MMath
 {
+    constexpr const float fPI = 3.14159265359f;
+    constexpr const float fTAU = 2 * 3.14159265359f;
+    constexpr const double dPI = 3.14159265359;
+    constexpr const double dTAU = 2 * 3.14159265359;
+
 	INLINE static glm::mat4x4 composeTRS(const glm::vec3& position, const glm::quat& rotation, const glm::vec3& scale) {
 
         glm::mat4 rot = glm::mat4_cast(rotation);

@@ -10,43 +10,50 @@
 
 
 ErrorCode SceneRenderSystem::loadModel(const std::string& filename, MeshComponent* outMeshInfo) {
-	
+	ErrorCode ec{};
 	uint32_t startTexIndex = RenderManager::getInstance()->textures().size();
-
 	MeshComponent mInfo{};
-	auto ec = AssetLoader::loadModel(filename,
-									 m_vertices, m_subMeshes, m_indices,
-									 *RenderManager::getInstance(), &mInfo);
+	auto it = m_pathMeshMap.find(filename);
+	if (it != m_pathMeshMap.end()) {
+		mInfo = it->second;
 
-	uint32_t endTexIndex = RenderManager::getInstance()->textures().size();
+	} else {
+		ec = AssetLoader::loadModel(filename,
+										 m_vertices, m_subMeshes, m_indices,
+										 *RenderManager::getInstance(), &mInfo);
 
-	if (!EC_FAILED(ec)) {
-		
-		for (size_t i = 0; i < mInfo.subMeshCount; ++i) {
+		uint32_t endTexIndex = RenderManager::getInstance()->textures().size();
 
-			auto& subMesh = m_subMeshes[mInfo.subMeshOffset + i];
+		if (!EC_FAILED(ec)) {
 
-			auto vOffset = subMesh.vertexOffset;
-			auto vCount = subMesh.vertexCount;
-			auto iOffset = subMesh.indexOffset;
-			auto iCount = subMesh.indexCount;
+			for (size_t i = 0; i < mInfo.subMeshCount; ++i) {
 
-			RenderManager::getInstance()->vkContext()->registerMesh(
-				&m_vertices[vOffset], vCount,
-				&m_indices[iOffset], iCount);
+				auto& subMesh = m_subMeshes[mInfo.subMeshOffset + i];
 
+				auto vOffset = subMesh.vertexOffset;
+				auto vCount = subMesh.vertexCount;
+				auto iOffset = subMesh.indexOffset;
+				auto iCount = subMesh.indexCount;
+
+				RenderManager::getInstance()->vkContext()->registerMesh(
+					&m_vertices[vOffset], vCount,
+					&m_indices[iOffset], iCount);
+
+			}
+			RenderManager::getInstance()->vkContext()->reallocateVertexIndexBuffers();
+
+			for (size_t i = startTexIndex; i < endTexIndex; ++i) {
+				auto& tex = RenderManager::getInstance()->textures()[i];
+				tex.tryAllocate();
+			}
+			RenderManager::getInstance()->vkContext()->loadBaseMatData();
+
+			m_pathMeshMap.insert({filename, mInfo});
 		}
-		RenderManager::getInstance()->vkContext()->reallocateVertexIndexBuffers();
+	}
 
-		for (size_t i = startTexIndex; i < endTexIndex; ++i) {
-			auto& tex = RenderManager::getInstance()->textures()[i];
-			tex.tryAllocate();
-		}
-		RenderManager::getInstance()->vkContext()->loadBaseMatData();
-
-		if (outMeshInfo) {
-			*outMeshInfo = mInfo;
-		}
+	if (outMeshInfo) {
+		*outMeshInfo = mInfo;
 	}
 
 	return ec;

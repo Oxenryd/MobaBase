@@ -1,6 +1,11 @@
 ﻿#ifndef TRANSFORM_SYSTEM_HPP
 #define TRANSFORM_SYSTEM_HPP
 
+#include <thread>
+#include <barrier>
+#include <array>
+#include <atomic>
+
 #include "SystemECS.h"
 #include "ErrorCodes.hpp"
 #include "Transform.hpp"
@@ -13,6 +18,7 @@
 class TransformSystem : public SystemECS_ModelTransformsProvider
 {
 	struct StackItem { entt::entity e; bool parentDirty; };
+	using RangePair = std::pair<uint32_t, uint32_t>;
 private:
 	ArenaVector<StackItem> stack;
 	ArenaUMap<entt::entity, size_t> m_entityRootIndexMap;
@@ -20,6 +26,18 @@ private:
 	ArenaVector<ModelTransform> m_modelTransforms;
 	ArenaVector<entt::entity> m_parentOf;
 	ArenaVector<std::vector<entt::entity>> m_childrenOf;
+
+	std::array<std::thread, 8> m_workers;
+	std::array<RangePair, 8> m_workerRanges;
+	std::barrier<> m_barrier;
+	uint8_t m_curNumWorkers = 0;
+	std::atomic_bool m_signalThreadStart{ false };
+	std::atomic_bool m_signalThreadFinish{ false };
+	std::atomic_bool m_threadsContinue{ true };
+
+	INLINE void _workerThread() {
+
+	}
 
 	INLINE void _onDestroy(ArenaRegistry& reg, entt::entity entity) {
 		auto id = entt::to_integral(entity);
@@ -85,7 +103,8 @@ public:
 		m_childrenOf{ ArenaAllocator<entt::entity>(arena) },
 		stack{ ArenaAllocator<StackItem>(arena) },
 		m_roots{ ArenaAllocator<entt::entity>(arena) },
-		m_entityRootIndexMap{ ArenaAllocator<std::pair<entt::entity, size_t>>{arena}}
+		m_entityRootIndexMap{ ArenaAllocator<std::pair<entt::entity, size_t>>{arena}},
+		m_barrier{9}
 	{
 		registry->on_destroy<TransformComponent>()
 			.connect<&TransformSystem::_onDestroy>(this);

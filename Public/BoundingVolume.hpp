@@ -13,7 +13,11 @@ private:
 
 public:
 	~BoundingVolume() = default;
-	BoundingVolume() = delete;
+	BoundingVolume() : 
+		m_reg{nullptr},
+		m_entity{entt::null}
+	{}
+
 	BoundingVolume(ArenaRegistry* registry, entt::entity entity)
 		: m_reg{ registry }, m_entity{ entity } {}
 	BoundingVolume(const BoundingVolume& other) {
@@ -47,6 +51,8 @@ public:
 
 	void setFlags(BoundingVolumeFlags flags);
 
+	void setCoarseAABB(const AABB& aabb);
+	void setCoarseAABB_local(const AABB& aabb);
 	AABB getCoarseAABB() const;
 	AABB getCoarseAABB_local() const;
 	
