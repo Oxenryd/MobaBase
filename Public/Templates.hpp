@@ -33,7 +33,7 @@ public:
         auto& lightRef = lightSystem().registerLight(dirLight, m_skyLight);
 
         
-        size_t numOfObjects = 4;
+        size_t numOfObjects = 1000;
         m_goList.reserve(numOfObjects);
         auto step = MMath::fTAU / numOfObjects;
         const std::string pathObject = std::format("{}{}", ASSETS_DIR, "Sphere/sphere.obj");
