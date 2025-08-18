@@ -434,6 +434,12 @@ void DualBVH::frustumCullWithOcclusion(
 
                 // Fine-grained occlusion test for individual primitives
                 bool occluded = false;
+
+                if (!MMath::aabbVisible(prim.worldBounds.min, prim.worldBounds.max, frustum)) {
+                    result.nodesCulledByFrustum++;
+                    continue;
+                }
+
                 if (method != OcclusionMethod::NONE && !activeOccluders.empty()) {
                     float closest = 0.0f;
                     BoundingVolume primBounds{ registry, prim.entity };

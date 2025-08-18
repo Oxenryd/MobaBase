@@ -17,10 +17,12 @@ const glm::mat4x4 Transform::worldToLocal() const {
 }
 
 std::string_view Transform::getTag() const {
-	auto tagPtr = Engine::getInstance()->getGlobalSystem().registry().try_get<TagComponent>(m_entity);
-	if (tagPtr) {
-		return std::string_view({tagPtr->tag.to_stringView()});
-	}
+	TransformComponent transform = *this;
+	return Engine::getInstance()->getGlobalSystem().getTag({m_entity, transform.sceneIndex});
+	//auto tagPtr = Engine::getInstance()->getGlobalSystem().registry().try_get<TagComponent>(m_entity);
+	//if (tagPtr) {
+	//	return std::string_view({tagPtr->tag.to_stringView()});
+	//}
 	return std::string_view();
 }
 

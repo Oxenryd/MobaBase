@@ -101,6 +101,30 @@ public:
                                       switch (code) {
                                           case KeyCode::B: sceneRender().setDrawAABBs(!sceneRender().drawCoarseAbbs()); break;
                                           case KeyCode::O: sceneRender().setDrawOccluders(!sceneRender().drawOccluders()); break;
+                                          case KeyCode::ArrowLeft:
+                                          {
+                                              auto sTrans = Transform{&registry(), m_go2};
+                                              auto& pos = sTrans.modifyPosition() -= glm::vec3{ 1,0,0 };
+                                             
+                                          } break;
+                                          case KeyCode::ArrowRight:
+                                          {
+                                              auto sTrans = Transform{ &registry(), m_go2 };
+                                              auto& pos = sTrans.modifyPosition() += glm::vec3{ 1,0,0 };
+                                    
+                                          } break;
+                                          case KeyCode::ArrowUp:
+                                          {
+                                              auto sTrans = Transform{ &registry(), m_go2 };
+                                              auto& pos = sTrans.modifyScale() += glm::vec3{ 1,1,1 };
+
+                                          } break;
+                                          case KeyCode::ArrowDown:
+                                          {
+                                              auto sTrans = Transform{ &registry(), m_go2 };
+                                              auto& pos = sTrans.modifyScale() -= glm::vec3{ 1,1,1 };
+
+                                          } break;
                                       }
                                   });
 
@@ -122,14 +146,17 @@ public:
             cam->rotateLocal({ -(float)state.lastPositionDelta.x * dt, -(float)state.lastPositionDelta.y * dt, 0.0f });
                                        });
 
+
+        Engine::getInstance()->getGlobalSystem().printAllTags();
+        transformSystem().printHierarchy();
     }
 
     void update(float dt) {
 
         m_time += Timing::deltaTimeF();
-        //auto ballTransform = m_go2.transform();
-        //ballTransform.setFromEuler({ m_time * 3, m_time * 25, 0});
-        //ballTransform.modifyPosition() = { m_time * 2, 0, 0 };
+        auto ballTransform = m_go2.transform();
+        ballTransform.setFromEuler({ m_time * 3, m_time * 25, 0});
+        //ballTransform.modifyPosition() = { 12, 0, 0 };
 
         //auto boxTransform = m_go3.transform();
         //boxTransform.modifyPosition() = { Engine::sinF() * 10, Engine::cosF() * 10, 0};

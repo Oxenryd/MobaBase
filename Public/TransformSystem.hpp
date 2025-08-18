@@ -1,4 +1,4 @@
-#ifndef TRANSFORM_SYSTEM_HPP
+﻿#ifndef TRANSFORM_SYSTEM_HPP
 #define TRANSFORM_SYSTEM_HPP
 
 #include "SystemECS.h"
@@ -266,11 +266,7 @@ public:
 			m_parentOf[id] = newParent;
 			m_childrenOf[newId].push_back(entity);
 			_checkEntityIsRoot(newParent);
-			//auto it = m_entityRootIndexMap.find(entity);
-			//if (it != m_entityRootIndexMap.end()) {
-			//	m_roots[it->second] = m_roots.back();
-			//	m_roots.pop_back();
-			//}
+
 		} else {
 			m_parentOf[id] = entt::null;
 			auto it = m_entityRootIndexMap.find(entity);
@@ -305,6 +301,35 @@ public:
 			m_parentOf[entt::to_integral(child)] = entt::null;
 		}
 		m_childrenOf[parentId].clear();
+	}
+
+
+	INLINE void printHierarchy() {
+		Log::logLine(LogType::Info, LogMod::Engine,
+					 std::format("\nTransform Hierarchy for Scene index {} - *\n", m_sceneIndex) );
+		
+		uint32_t depth = 0;
+		for (auto root : m_roots) {			
+			logTransformTag(root, 0);
+		}
+		Log::logLine(LogType::Success, LogMod::Engine, "Done.");
+	}
+
+	INLINE void logTransformTag(entt::entity entity, uint32_t depth) {
+		Transform transform{ m_reg, entity };
+		auto tag = transform.getTag();
+		std::string tagStr = tag.empty() ? "untagged" : std::string{ tag };
+		std::string tab = "\t";
+		for (size_t i = 0; i < depth; ++i) {
+			if (i == depth - 1)
+				tab.append("  L ");
+			else
+				tab.append("\t");
+		}
+		std::cout << tab << static_cast<uint32_t>(entity) << ", " << tagStr << "\n";
+		//LOGLINE_IND(LogType::Info, LogMod::Engine, tagStr, depth);
+		for (auto child : m_childrenOf[entt::to_integral(entity)])
+			logTransformTag(child, depth + 1);
 	}
 };
 

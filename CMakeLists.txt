@@ -21,7 +21,6 @@ if(MSVC)
     set(CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} /LTCG")
     set(CMAKE_STATIC_LINKER_FLAGS_RELEASE "${CMAKE_STATIC_LINKER_FLAGS_RELEASE} /LTCG")
     set(CMAKE_SHARED_LINKER_FLAGS_RELEASE "${CMAKE_SHARED_LINKER_FLAGS_RELEASE} /LTCG")
-
 endif()
 
 # FETCHES -----------------------------------------------------------------------------
@@ -84,6 +83,44 @@ set(ASSIMP_BUILD_ZLIB ON CACHE BOOL "" FORCE)
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE) # global fallback
 
 FetchContent_MakeAvailable(assimp)
+
+# GLFW
+set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(GLFW_BUILD_TESTS    OFF CACHE BOOL "" FORCE)
+set(GLFW_BUILD_DOCS     OFF CACHE BOOL "" FORCE)
+set(GLFW_INSTALL        OFF CACHE BOOL "" FORCE)
+FetchContent_Declare(
+  glfw
+  GIT_REPOSITORY https://github.com/glfw/glfw.git
+  GIT_TAG 3.4
+)
+FetchContent_MakeAvailable(glfw)
+
+
+
+# IMGUI
+include(FetchContent)
+FetchContent_Declare(
+  imgui
+  GIT_REPOSITORY https://github.com/ocornut/imgui.git
+  GIT_TAG docking                # pin to a commit for stability if you prefer
+)
+FetchContent_MakeAvailable(imgui)
+
+set(IMGUI_PLATFORM_BACKEND imgui_impl_glfw.cpp)
+add_library(imgui STATIC
+  ${imgui_SOURCE_DIR}/imgui.cpp
+  ${imgui_SOURCE_DIR}/imgui_demo.cpp
+  ${imgui_SOURCE_DIR}/imgui_draw.cpp
+  ${imgui_SOURCE_DIR}/imgui_tables.cpp
+  ${imgui_SOURCE_DIR}/imgui_widgets.cpp
+  ${imgui_SOURCE_DIR}/backends/imgui_impl_vulkan.cpp
+  ${imgui_SOURCE_DIR}/backends/${IMGUI_PLATFORM_BACKEND}
+)
+target_include_directories(imgui PUBLIC
+  ${imgui_SOURCE_DIR}
+  ${imgui_SOURCE_DIR}/backends
+)
 
 get_property(all_targets DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY BUILDSYSTEM_TARGETS)
 message(STATUS "Available targets: ${all_targets}")
@@ -158,6 +195,7 @@ add_executable (MobaBase
 	"Public/BoundingVolume.hpp"
 	"Public/Frustum.hpp"
 	"Public/TransformComponent.hpp"
+	"Public/GlfwSurface.h"
 
 
 	"Private/Engine.cpp"
@@ -189,6 +227,9 @@ add_executable (MobaBase
 # LINK -------------------------------------------------------------------------------
 find_package(Vulkan REQUIRED)
 
+target_link_libraries(imgui PUBLIC Vulkan::Vulkan)
+target_link_libraries(imgui PUBLIC glfw)
+
 target_link_libraries(MobaBase PRIVATE
     glm::glm
 	Vulkan::Vulkan
@@ -196,6 +237,7 @@ target_link_libraries(MobaBase PRIVATE
 	spirv-reflect-static
 	nlohmann_json
 	assimp::assimp
+	glfw
 )
 
 target_include_directories(MobaBase PRIVATE 
@@ -203,13 +245,13 @@ target_include_directories(MobaBase PRIVATE
 	${boost_sort_SOURCE_DIR}/include
 )
 
-
-
 # DEFINES ----------------------------------------------------------------------------
 target_compile_definitions(MobaBase PRIVATE 
+	GLFW_INCLUDE_VULKAN
+	BUILD_WIN
+	BUILD_GLFW
 	GLM_FORCE_SSE2
 	DEBUGGING
-	BUILD_WIN
 	# $<$<CONFIG:Debug>:LOGGING>
 	LOGGING
 	#IGPU_PRIO	

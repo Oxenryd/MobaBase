@@ -144,7 +144,6 @@ void VulkanContext::draw(const DrawContext& ctx) {
 	//		   uploadedLights[j].flags);
 	//}
 
-	
 
 
 
@@ -156,18 +155,6 @@ void VulkanContext::draw(const DrawContext& ctx) {
 		auto& reg = scene->registry();
 		for (auto& entity : scene->cullResults.visibleEntities) {
 			drawCmds.push_back(subMeshEntity_to_drawCommand(scene, reg, entity));
-
-			//debug
-			auto transform = Transform{ &reg, entity };
-			auto tag = transform.getTag();
-			if (!tag.empty()) {
-				auto parent = transform.getParentTransform();
-				if (parent.has_value()) {
-					auto parentTag = parent.value().getTag();
-					auto test2 = parentTag;
-				}
-			} else
-				auto test = tag;
 		}
 	}
 	std::sort(drawCmds.begin(), drawCmds.end());
@@ -211,22 +198,8 @@ void VulkanContext::draw(const DrawContext& ctx) {
 	uint32_t drawCount = 0;
 	uint32_t pipelinesCount = 0;
 	for (const auto& cmd : drawCmds) {
-
-		
+	
 		auto* scene = Engine::getInstance()->getScene(cmd.sceneIndex);
-
-		//// Frustum culling
-		//const auto [bound, transform] = scene
-		//	->registry().try_get<BoundingVolumeComponent, TransformComponent>(cmd.subMeshEntity);
-		//if (transform) {
-		//	auto world = scene->boundingSystem().aabbs()[bound->coarseIndexWorld];
-		//	
-		//	//coarse.center += transform->position;
-		//	if (!MMath::aabbVisible(world.min, world.max, mainCam->getFrustum()))
-		//		continue;
-		//}
-
-
 
 		Material* matBase = RenderManager::getInstance()->getMaterial(cmd.materialIndex);
 

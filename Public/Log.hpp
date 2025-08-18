@@ -96,8 +96,8 @@ class LoggerType
 {
 public:
 	virtual ~LoggerType() {};
-	virtual void logImpl(const LogType& type, const std::string& msg) = 0;
-	virtual void logLineImpl(const LogType& type, const LogMod& module, const std::string& msg, const int8_t ind) = 0;
+	virtual void logImpl(const LogType& type, const std::string_view& msg) = 0;
+	virtual void logLineImpl(const LogType& type, const LogMod& module, const std::string_view& msg, const int8_t ind) = 0;
 };
 
 class DefaultTerminalLogger : public LoggerType
@@ -109,7 +109,7 @@ private:
 	}
 public:
 	virtual ~DefaultTerminalLogger() {}
-	inline void logLineImpl(const LogType& type, const LogMod& module, const std::string& msg, const int8_t indent) override {
+	inline void logLineImpl(const LogType& type, const LogMod& module, const std::string_view& msg, const int8_t indent) override {
 		
 		if (indent < 0) {
 			m_indent--;
@@ -146,7 +146,7 @@ public:
 				m_indent = 0xf0;
 		}
 	}
-	inline void logImpl(const LogType& type, const std::string& msg) override {
+	inline void logImpl(const LogType& type, const std::string_view& msg) override {
 		std::string colStr;
 		switch (type) {
 			case LogType::Error:
@@ -186,15 +186,15 @@ public:
 		
 		logLine(LogType::Info, LogMod::Log, "Initialized.");
 	}
-	inline static void logLine(const LogType& type, const LogMod& module, const std::string& msg) {
+	inline static void logLine(const LogType& type, const LogMod& module, const std::string_view& msg) {
 		for (auto* logger : s_loggers)
 			logger->logLineImpl(type, module, msg, 0);
 	}
-	inline static void logLine(const LogType& type, const LogMod& module, const std::string& msg, int8_t ind) {
+	inline static void logLine(const LogType& type, const LogMod& module, const std::string_view& msg, int8_t ind) {
 		for (auto* logger : s_loggers)
 			logger->logLineImpl(type, module, msg, ind);
 	}
-	inline static void log(const LogType& type, const std::string& msg) {
+	inline static void log(const LogType& type, const std::string_view& msg) {
 		for (auto* logger : s_loggers)
 			logger->logImpl(type, msg);
 	}

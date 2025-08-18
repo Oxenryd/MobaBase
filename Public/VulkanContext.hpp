@@ -18,6 +18,9 @@
 	#endif
 #endif
 
+#ifdef BUILD_GLFW
+#include <GLFW/glfw3.h>
+#endif
 
 #include <vulkan/vulkan_core.h>
 #include <vulkan/vulkan_win32.h>
@@ -1023,6 +1026,7 @@ public:
 	~VulkanContext() {
 		if (!isClean)
 			cleanUp();
+		glfwTerminate();
 	}
 	VulkanContext() = delete;
 	inline VulkanContext(WindowSurface* const wndSurface) :
@@ -1041,7 +1045,9 @@ public:
 		surfaceFormat{},
 		presentMode{},
 		renderPassIndex{},
-		camData{}
+		camData{},
+		lightCluster_pipeline{nullptr},
+		lightCluster_pipelineLayout{nullptr}
 	{
 		pendingLightUpdates.reserve(256);
 		rendPasses.reserve(2048);
@@ -1278,6 +1284,7 @@ public:
 		}
 		presentMode = mode;
 		renderPassIndex = 0;
+		//Vk_CHECK(vk, createInstanceGlfw());
 		Vk_CHECK(vk, createInstance());
 		Vk_CHECK(vk, createSurface());
 		Vk_CHECK(vk, pickPhysDevice(prioIGpu));
@@ -1815,6 +1822,33 @@ public:
 		descriptorPoolsDynamic.push_back(dynamicPool);
 
 		LOG(LogType::Success, "Done.");
+		return VK_SUCCESS;
+	}
+
+	INLINE VkResult createInstanceGlfw() {
+		VkResult vkResult;
+		LOGLINE_IND(LogType::Info, LogMod::Vulkan, "Creating VkInstance with GLFW... ", 1);
+
+		glfwInitHint(GLFW_ANGLE_PLATFORM_TYPE, GLFW_ANGLE_PLATFORM_TYPE_VULKAN);
+		glfwInitHint(GLFW_WAYLAND_LIBDECOR, GLFW_WAYLAND_PREFER_LIBDECOR);
+		glfwInitHint(GLFW_X11_XCB_VULKAN_SURFACE, GLFW_TRUE);
+#ifndef BUILD_WIN
+		glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_X11);
+		glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_WAYLAND);
+#endif
+
+		if (!glfwInit()) {
+			return (VkResult)ErrorCode::GLFW_UNKNOWN_INIT_ERROR;
+		}
+
+		PFN_vkCreateInstance pfnCreateInstance = (PFN_vkCreateInstance)
+			glfwGetInstanceProcAddress(NULL, "vkCreateInstance");
+
+		PFN_vkCreateDevice pfnCreateDevice = (PFN_vkCreateDevice)
+			glfwGetInstanceProcAddress(m_vkInstance, "vkCreateDevice");
+
+		GLFWwindow* window = glfwCreateWindow(640, 480, "My Title", NULL, NULL);
+
 		return VK_SUCCESS;
 	}
 
