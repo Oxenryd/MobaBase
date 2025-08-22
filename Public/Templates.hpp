@@ -45,31 +45,31 @@ public:
             trans.modifyPosition() = glm::vec3{std::cos(step * i) * 12, std::sin(step * i) * 12, 0};
         }
 
-        m_go1 = gameObjectSystem().createGameObject<GameObject>("Room");
-        m_go2 = gameObjectSystem().createGameObject<GameObject>("Box");
+        //m_go1 = gameObjectSystem().createGameObject<GameObject>("Room");
+        //m_go2 = gameObjectSystem().createGameObject<GameObject>("Box");
         //m_go3 = gameObjectSystem().createGameObject<GameObject>("Box");
 
         //"Cube/cube.obj" //"crytek-sponza-hd/sponza.obj" //"SmallRoom/smallRoom_mirror_window.obj"    //"Sphere/sphere.obj"
-        const std::string path1 = std::format("{}{}", ASSETS_DIR, "SmallRoom/smallRoom_mirror_window.obj");
-        Mesh modelMesh1{};
-        sceneRender().createMeshFromModel(path1, &modelMesh1, m_go1.entity());
-        float volume = 0.0f;
-        entt::entity largestSubEntity = entt::null;
-        for (auto& subMesh : modelMesh1.getSubmeshes()) {
-            BoundingVolume bVol{&registry(), subMesh.entity};
-            auto aabb = bVol.getCoarseAABB();
-            if (aabb.volume() > volume) {
-                volume = aabb.volume();
-                largestSubEntity = subMesh.entity;
-            }
-        }
-        if (largestSubEntity != entt::null)
-            registry().get<BoundingVolumeComponent>(largestSubEntity).flags = static_cast<uint32_t>(BoundingVolumeFlags::Occluder);
-
-
-        const std::string path2 = std::format("{}{}", ASSETS_DIR, "Cube/cube.obj");
-        Mesh modelMesh2{};
-        sceneRender().createMeshFromModel(path2, &modelMesh2, m_go2.entity());
+        //const std::string path1 = std::format("{}{}", ASSETS_DIR, "SmallRoom/smallRoom_mirror_window.obj");
+        //Mesh modelMesh1{};
+        //sceneRender().createMeshFromModel(path1, &modelMesh1, m_go1.entity());
+        //float volume = 0.0f;
+        //entt::entity largestSubEntity = entt::null;
+        //for (auto& subMesh : modelMesh1.getSubmeshes()) {
+        //    BoundingVolume bVol{&registry(), subMesh.entity};
+        //    auto aabb = bVol.getCoarseAABB();
+        //    if (aabb.volume() > volume) {
+        //        volume = aabb.volume();
+        //        largestSubEntity = subMesh.entity;
+        //    }
+        //}
+        //if (largestSubEntity != entt::null)
+        //    registry().get<BoundingVolumeComponent>(largestSubEntity).flags = static_cast<uint32_t>(BoundingVolumeFlags::Occluder);
+        //
+        //
+        //const std::string path2 = std::format("{}{}", ASSETS_DIR, "Cube/cube.obj");
+        //Mesh modelMesh2{};
+        //sceneRender().createMeshFromModel(path2, &modelMesh2, m_go2.entity());
         //for (auto& subMesh : modelMesh2.getSubmeshes()) {
         //    BoundingVolume bVol{ &registry(), subMesh.entity };
         //    bVol.setFlags(BoundingVolumeFlags::Occluder);
@@ -80,7 +80,7 @@ public:
         //sceneRender().createMeshFromModel(path3, &modelMesh3, m_go3.entity());
 
         //modelMesh3.getTransform().modifyPosition() = { -12, 0, 0 };
-        modelMesh2.getTransform().modifyPosition() = { -12, 0, 0 };
+        //modelMesh2.getTransform().modifyPosition() = { -12, 0, 0 };
 
         auto& reg = registry();
 
@@ -168,22 +168,15 @@ public:
     void update(float dt) {
 
         m_time += Timing::deltaTimeF();
-        auto ballTransform = m_go2.transform();
-        //ballTransform.setFromEuler({ m_time * 3, m_time * 25, 0});
-        //ballTransform.modifyPosition() = { 12, 0, 0 };
 
-        //auto boxTransform = m_go3.transform();
-        //boxTransform.modifyPosition() = { Engine::sinF() * 10, Engine::cosF() * 10, 0};
-        //boxTransform.modifyScale() = { (Engine::sinF() + 1) * 10, (Engine::cosF() + 1) * 10, 0 };
-        //boxTransform.setFromEuler({ Engine::sinF() * 2, Engine::cosF() * 2, 0});
-
-        
+        auto addPos = glm::vec3{0.0025f, 0, 0};//glm::vec3{std::cos(m_time), std::sin(m_time), 0};
 
         for (size_t i = 0; i < m_goList.size(); ++i) {
             GameObject& go = m_goList[i];
             auto transform = Transform{ &m_reg, go.entity() };
             auto& pos = transform.modifyPosition();
 
+            pos += addPos;
             
             //pos += glm::vec3{Engine::cosF(), Engine::sinF(), 0};
         }

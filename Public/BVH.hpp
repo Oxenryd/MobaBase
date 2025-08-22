@@ -179,12 +179,21 @@ public:
         PORTAL_ZONES      // For indoor scenes with portals
     };
 
+    struct TraversalNode
+    {
+        uint32_t nodeIndex;
+        float minDepth;
+        float maxDepth;
+    };
 
     BuildSettings settings{};
     using OccIndexCornerIndexDepthTuple = std::tuple<uint32_t, uint32_t, float>;
     std::vector<OccIndexCornerIndexDepthTuple> occluderIndices;
     std::vector<glm::vec3> occluderCorners;
 private:
+    std::vector<TraversalNode> nodeStack;
+    std::thread rebuildThread;
+
     // Building methods
     uint32_t buildRecursive(std::vector<uint32_t>& primitiveIds, uint32_t depth, uint32_t parent);
 
@@ -435,6 +444,7 @@ public:
         primitiveIndices.reserve(512);
         occluderIndices.reserve(256);
         occluderCorners.reserve(1024);
+        nodeStack.reserve(64);
     }
 
     // Construction
@@ -452,7 +462,7 @@ public:
     void frustumCullWithOcclusion(DualBVH::TraversalResult& result, const Frustum& f,
                                              const glm::vec3& cameraPos,
                                              ArenaRegistry* const registry,
-                                             OcclusionMethod method) const;
+                                             OcclusionMethod method);
 
     TraversalResult broadPhaseCollision() const;
 
@@ -646,7 +656,7 @@ public:
                                             const Frustum& f,
                                             const glm::vec3& cameraPos,
                                             ArenaRegistry* const registry,
-                                            DualBVH::OcclusionMethod method = DualBVH::OcclusionMethod::SIMPLE_DEPTH) const {
+                                            DualBVH::OcclusionMethod method = DualBVH::OcclusionMethod::SIMPLE_DEPTH) {
         return bvh.frustumCullWithOcclusion(result, f, cameraPos, registry, method);
     }
 

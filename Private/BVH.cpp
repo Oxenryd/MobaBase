@@ -235,6 +235,11 @@ void DualBVH::build(ArenaRegistry& registry) {
 }
 
 void DualBVH::incrementalUpdate(ArenaRegistry& registry) {
+
+    // DEBUG
+    build(registry);
+    return;
+
     if (primitives.empty()) {
         build(registry);
         return;
@@ -314,7 +319,7 @@ void DualBVH::frustumCullWithOcclusion(
     const Frustum& frustum,
     const glm::vec3& cameraPos,
     ArenaRegistry* const registry,
-    OcclusionMethod method) const {
+    OcclusionMethod method) {
 
     //TraversalResult result;
     if (isEmpty()) return; //result;
@@ -374,15 +379,9 @@ void DualBVH::frustumCullWithOcclusion(
     }
 
     // Traverse with occlusion
-    struct TraversalNode
-    {
-        uint32_t nodeIndex;
-        float minDepth;
-        float maxDepth;
-    };
-
-    std::vector<TraversalNode> nodeStack;
-    nodeStack.reserve(64);
+    //std::vector<TraversalNode> nodeStack;
+    //nodeStack.reserve(64);
+    nodeStack.clear();
 
     float rootMinDepth, rootMaxDepth;
     computeNodeDepthRange(rootIndex, cameraPos, rootMinDepth, rootMaxDepth);
