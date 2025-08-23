@@ -184,7 +184,7 @@ public:
 				// Compose with parent (parent world is guaranteed up-to-date now)
 				if (!t.state.hasFlag(ObjectState::IgnoreParentTransform)) {
 					const entt::entity p = m_parentOf.empty() ? entt::null : m_parentOf[entt::to_integral(e)];
-					if (p != entt::null && m_reg->valid(p) && m_reg->all_of<TransformComponent>(p)) {
+					if (p != entt::null /* && m_reg->valid(p) */ && m_reg->all_of<TransformComponent>(p)) {
 						const auto& pt = m_reg->get<TransformComponent>(p);
 						m_modelTransforms[t.matrixIndex] = m_modelTransforms[pt.matrixIndex] * local;
 					} else {

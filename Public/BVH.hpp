@@ -7,6 +7,7 @@
 #include <numeric>
 #include <glm/glm.hpp>
 #include <entt/entt.hpp>
+#include <semaphore>
 
 #include "BasicTypes.hpp"
 #include "ArenaAllocator.hpp"
@@ -101,9 +102,9 @@ struct Frustum;
 class DualBVH
 {
 private:
-    std::vector<BVHNode> nodes;
-    std::vector<BVHPrimitive> primitives;
-    std::vector<uint32_t> primitiveIndices;  // Leaf nodes point into this
+    std::array<std::vector<BVHNode>, 2> nodes;
+    std::array<std::vector<BVHPrimitive>, 2> primitives;
+    std::array<std::vector<uint32_t>, 2> primitiveIndices;  // Leaf nodes point into this
 
     // Thread safety
     //mutable std::shared_mutex treeMutex;
@@ -112,15 +113,15 @@ private:
     std::atomic<uint32_t> dirtyCount{ 0 };
 
     // Entity to primitive mapping for fast lookups
-    std::unordered_map<entt::entity, uint32_t> entityToPrimitive;
+    std::array<std::unordered_map<entt::entity, uint32_t>, 2> entityToPrimitive;
 
     // Configuration
     static constexpr uint32_t MAX_LEAF_PRIMITIVES = 4;
     static constexpr float REBUILD_THRESHOLD = 0.3f; // 30% of objects moved
 
-    uint32_t rootIndex = 0;
-    uint32_t nodeCount = 0;
-
+    std::array<uint32_t, 2> rootIndex;
+    std::array<uint32_t, 2> nodeCount;
+                                     
 public:
     struct BuildSettings
     {
@@ -186,34 +187,57 @@ public:
         float maxDepth;
     };
 
+    void setPendingUpdate() {
+        if (_pendingWork.load(std::memory_order_acquire))
+            return;
+
+        _pendingWork.store(true, std::memory_order_release);
+        _pendingWork.notify_one();
+    }
+    bool hasValidHierarchy() const {
+        return _threadIndexToUse.load() != UINT8_INVALID && curFrameIndex != UINT8_INVALID;
+    }
+
     BuildSettings settings{};
     using OccIndexCornerIndexDepthTuple = std::tuple<uint32_t, uint32_t, float>;
-    std::vector<OccIndexCornerIndexDepthTuple> occluderIndices;
-    std::vector<glm::vec3> occluderCorners;
+    std::array<std::vector<OccIndexCornerIndexDepthTuple>, 2> occluderIndices;
+    std::array<std::vector<glm::vec3>, 2> occluderCorners;
+
+    bool threadRunning() const { return _threadRunning; }
 private:
-    std::vector<TraversalNode> nodeStack;
-    std::thread rebuildThread;
+    uint8_t curFrameIndex = UINT8_INVALID;
+    std::array<std::vector<TraversalNode>, 2> nodeStack;
+    std::thread* rebuildThread;
+    std::atomic<uint8_t> _threadIndexToUse = UINT8_INVALID;
+    std::atomic<bool> _pendingWork = false;
+    std::atomic<bool> _threadDone = false;
+    std::atomic<uint8_t> _threadLastSuccesful = UINT8_INVALID;
+    std::binary_semaphore _threadLock{ 1 };
+    std::atomic<bool> _threadRunning = false;
 
     // Building methods
-    uint32_t buildRecursive(std::vector<uint32_t>& primitiveIds, uint32_t depth, uint32_t parent);
+    uint8_t _getIndexToUseThisFrame(uint8_t lastFrameIndex);
+    static void _buildThreadMethod(DualBVH* _this, ArenaRegistry& registry);
+    void rebuildPrimitives(ArenaRegistry& registry, uint8_t index);
+    uint32_t buildRecursive(std::vector<uint32_t>& primitiveIds, uint32_t depth, uint32_t parent, uint8_t index);
 
-    uint32_t findBestSplit(const std::vector<uint32_t>& primitiveIds, int& bestAxis, float& bestPos);
-    AABB computeBounds(const std::vector<uint32_t>& primitiveIds) {
+    uint32_t findBestSplit(const std::vector<uint32_t>& primitiveIds, int& bestAxis, float& bestPos, uint8_t index);
+    AABB computeBounds(const std::vector<uint32_t>& primitiveIds, uint8_t index) {
         if (primitiveIds.empty()) {
             return AABB();
         }
 
-        AABB bounds = primitives[primitiveIds[0]].bounds.getCoarseAABB();
+        AABB bounds = primitives[index][primitiveIds[0]].bounds.getCoarseAABB();
         for (size_t i = 1; i < primitiveIds.size(); ++i) {
-            bounds = bounds.merge(primitives[primitiveIds[i]].bounds.getCoarseAABB());
+            bounds = bounds.merge(primitives[index][primitiveIds[i]].bounds.getCoarseAABB());
         }
 
         return bounds;
     }
 
     // Update methods
-    void updatePrimitive(uint32_t primIndex, const glm::mat4x4& transform) {
-        BVHPrimitive& prim = primitives[primIndex];
+    void updatePrimitive(uint32_t primIndex, const glm::mat4x4& transform, uint8_t index) {
+        BVHPrimitive& prim = primitives[index][primIndex];
         AABB primWorldBounds = prim.bounds.getCoarseAABB();
         AABB newWorldBounds = prim.bounds.getCoarseAABB_local().transformed_noPerspective(transform);
 
@@ -231,26 +255,26 @@ private:
         // leaf each primitive belongs to for faster updates
         dirtyCount++;
     }
-    void refitBottomUp(uint32_t nodeIndex) {
+    void refitBottomUp(uint32_t nodeIndex, uint8_t index) {
         if (nodeIndex == 0) return;
 
-        BVHNode& node = nodes[nodeIndex];
+        BVHNode& node = nodes[index][nodeIndex];
 
         if (node.isLeaf()) {
             // Recompute bounds from primitives
             std::vector<uint32_t> primitiveIds;
             for (uint32_t i = 0; i < node.primitiveCount; ++i) {
-                primitiveIds.push_back(primitiveIndices[node.firstPrimitive + i]);
+                primitiveIds.push_back(primitiveIndices[index][node.firstPrimitive + i]);
             }
-            node.bounds = computeBounds(primitiveIds);
+            node.bounds = computeBounds(primitiveIds, index);
         } else {
             // Recompute from children
             AABB newBounds;
             if (node.leftChild != 0) {
-                newBounds = newBounds.merge(nodes[node.leftChild].bounds);
+                newBounds = newBounds.merge(nodes[index][node.leftChild].bounds);
             }
             if (node.rightChild != 0) {
-                newBounds = newBounds.merge(nodes[node.rightChild].bounds);
+                newBounds = newBounds.merge(nodes[index][node.rightChild].bounds);
             }
             node.bounds = newBounds;
         }
@@ -259,7 +283,7 @@ private:
 
         // Continue up the tree
         if (node.parentIndex != 0) {
-            refitBottomUp(node.parentIndex);
+            refitBottomUp(node.parentIndex, index);
         }
     }
 
@@ -314,7 +338,7 @@ private:
     }
 
     bool isOccludedRaycast(const AABB& bounds, const std::vector<OccIndexCornerIndexDepthTuple>& occluders,
-                    const glm::vec3& cameraPos, float objectDepth) const {
+                    const glm::vec3& cameraPos, float objectDepth, uint8_t index) const {
 
         // Ray-based occlusion test - much more accurate!
         auto objectCorners = bounds.getVertices();
@@ -339,7 +363,7 @@ private:
 
                 // Ray-AABB intersection test
                 float tNear, tFar;
-                const AABB& box = primitives[std::get<0>(occluder)].bounds.getCoarseAABB();
+                const AABB& box = primitives[index][std::get<0>(occluder)].bounds.getCoarseAABB();
                 if (rayAABBIntersectWithDistance(cameraPos, rayDir, box, tNear, tFar)) {
                     // Check if intersection is between camera and object corner
                     if (tNear > 0.01f && tNear < rayLength - 0.01f) {
@@ -415,13 +439,13 @@ private:
     }
 
     void computeNodeDepthRange(uint32_t nodeIndex, const glm::vec3& cameraPos,
-                               float& minDepth, float& maxDepth) const {
+                               float& minDepth, float& maxDepth, uint8_t index) const {
         if (nodeIndex == 0) {
             minDepth = maxDepth = 0.0f;
             return;
         }
 
-        const BVHNode& node = nodes[nodeIndex];
+        const BVHNode& node = nodes[index][nodeIndex];
         const AABB& bounds = node.bounds;
 
         // Compute distance to all 8 corners of the AABB
@@ -438,72 +462,90 @@ private:
     }
 
 public:
-    explicit DualBVH(const BuildSettings& settings = {}) : settings(settings) {
-        nodes.reserve(1024);  // Pre-allocate for better performance
-        primitives.reserve(512);
-        primitiveIndices.reserve(512);
-        occluderIndices.reserve(256);
-        occluderCorners.reserve(1024);
-        nodeStack.reserve(64);
+    ~DualBVH() {
+        _threadRunning.store(false);
+        _pendingWork.store(true);
+        rebuildThread->join();
+        delete rebuildThread;
+    }
+    explicit DualBVH(ArenaRegistry& registry, const BuildSettings& settings = {}) : settings(settings) {
+        for (size_t i = 0; i < 2; ++i) {
+            nodes[i].reserve(1024);  // Pre-allocate for better performance
+            primitives[i].reserve(512);
+            primitiveIndices[i].reserve(512);
+            occluderIndices[i].reserve(256);
+            occluderCorners[i].reserve(1024);
+            nodeStack[i].reserve(64);
+            rootIndex[i] = 0;
+            nodeCount[i] = 0;
+        }
+
+        _threadRunning.store(true);
+        _threadLastSuccesful.store(true);
+        rebuildThread = new std::thread{
+            DualBVH::_buildThreadMethod,
+            this,
+            std::ref(registry) };
+
     }
 
     // Construction
-    void build(ArenaRegistry& registry);
-    void rebuild(ArenaRegistry& registry) {
-        rebuildCounter++;
-        build(registry);
-    }
-    void incrementalUpdate(ArenaRegistry& registry);
+    void buildNodes(ArenaRegistry& registry, uint8_t index);
+    //void rebuild(ArenaRegistry& registry) {
+    //    rebuildCounter++;
+    //    build(registry);
+    //}
+    void incrementalUpdate(ArenaRegistry& registry, uint8_t index);
 
 
     // Queries - these can run concurrently
-    void frustumCull(DualBVH::TraversalResult& result, const Frustum& f) const;
+    //void frustumCull(DualBVH::TraversalResult& result, const Frustum& f) const;
 
     void frustumCullWithOcclusion(DualBVH::TraversalResult& result, const Frustum& f,
                                              const glm::vec3& cameraPos,
                                              ArenaRegistry* const registry,
                                              OcclusionMethod method);
 
-    TraversalResult broadPhaseCollision() const;
+    TraversalResult broadPhaseCollision(uint8_t index) const;
 
-    std::vector<entt::entity> raycast(const Ray& r) const {
-        std::vector<entt::entity> hits;
-        if (isEmpty()) return hits;
+    //std::vector<entt::entity> raycast(const Ray& r) const {
+    //    std::vector<entt::entity> hits;
+    //    if (isEmpty()) return hits;
 
-        std::vector<uint32_t> nodeStack;
-        nodeStack.reserve(64);
-        nodeStack.push_back(rootIndex);
+    //    std::vector<uint32_t> nodeStack;
+    //    nodeStack.reserve(64);
+    //    nodeStack.push_back(rootIndex);
 
-        while (!nodeStack.empty()) {
-            uint32_t nodeIndex = nodeStack.back();
-            nodeStack.pop_back();
+    //    while (!nodeStack.empty()) {
+    //        uint32_t nodeIndex = nodeStack.back();
+    //        nodeStack.pop_back();
 
-            const BVHNode& node = nodes[nodeIndex];
+    //        const BVHNode& node = nodes[currentFrame][nodeIndex];
 
-            // Ray-AABB intersection test
-            if (!node.bounds.intersects(r)) {
-                continue;
-            }
+    //        // Ray-AABB intersection test
+    //        if (!node.bounds.intersects(r)) {
+    //            continue;
+    //        }
 
-            if (node.isLeaf()) {
-                for (uint32_t i = 0; i < node.primitiveCount; ++i) {
-                    uint32_t primIndex = primitiveIndices[node.firstPrimitive + i];
-                    if (primitives[primIndex].bounds.getCoarseAABB().intersects(r)) {
-                        hits.push_back(primitives[primIndex].entity);
-                    }
-                }
-            } else {
-                if (node.leftChild != 0) nodeStack.push_back(node.leftChild);
-                if (node.rightChild != 0) nodeStack.push_back(node.rightChild);
-            }
-        }
+    //        if (node.isLeaf()) {
+    //            for (uint32_t i = 0; i < node.primitiveCount; ++i) {
+    //                uint32_t primIndex = primitiveIndices[currentFrame][node.firstPrimitive + i];
+    //                if (primitives[currentFrame][primIndex].bounds.getCoarseAABB().intersects(r)) {
+    //                    hits.push_back(primitives[currentFrame][primIndex].entity);
+    //                }
+    //            }
+    //        } else {
+    //            if (node.leftChild != 0) nodeStack.push_back(node.leftChild);
+    //            if (node.rightChild != 0) nodeStack.push_back(node.rightChild);
+    //        }
+    //    }
 
-        return hits;
-    }
-    std::vector<entt::entity> raycast(const glm::vec3& origin,
-                                      const glm::vec3& direction) const {
-        return raycast(Ray{ origin, direction });
-    }
+    //    return hits;
+    //}
+    //std::vector<entt::entity> raycast(const glm::vec3& origin,
+    //                                  const glm::vec3& direction) const {
+    //    return raycast(Ray{ origin, direction });
+    //}
 
 
     // Management
@@ -522,83 +564,84 @@ public:
     //    // Mark for rebuild (simple approach - could be optimized with insertion)
     //    dirtyCount = primitives.size();
     //}
-    void removePrimitive(entt::entity entity) {
-        auto it = entityToPrimitive.find(entity);
-        if (it == entityToPrimitive.end()) return;
+    //void removePrimitive(entt::entity entity, uint8_t index) {
+    //    auto it = entityToPrimitive[index].find(entity);
+    //    if (it == entityToPrimitive[index].end()) return;
 
-        uint32_t primIndex = it->second;
+    //    uint32_t primIndex = it->second;
 
-        // Swap with last element
-        if (primIndex != primitives.size() - 1) {
-            primitives[primIndex] = primitives.back();
-            entityToPrimitive[primitives[primIndex].entity] = primIndex;
-        }
+    //    // Swap with last element
+    //    if (primIndex != primitives.size() - 1) {
+    //        primitives[primIndex] = primitives.back();
+    //        entityToPrimitive[index][primitives[index][primIndex].entity] = primIndex;
+    //    }
 
-        primitives.pop_back();
-        entityToPrimitive.erase(it);
+    //    primitives[index].pop_back();
+    //    entityToPrimitive[index].erase(it);
 
-        // Mark for rebuild
-        dirtyCount = primitives.size();
-    }
-    void markDirty(entt::entity entity) {
-        auto it = entityToPrimitive.find(entity);
-        if (it != entityToPrimitive.end()) {
-            uint32_t primIndex = it->second;
-            if (primitives[primIndex].frameUpdated < currentFrame) {
-                primitives[primIndex].frameUpdated = currentFrame - 1; // Force update
-                dirtyCount++;
-            }
-        }
-    }
+    //    // Mark for rebuild
+    //    dirtyCount = primitives.size();
+    //}
+    //void markDirty(entt::entity entity, uint8_t index) {
+    //    auto it = entityToPrimitive[index].find(entity);
+    //    if (it != entityToPrimitive[index].end()) {
+    //        uint32_t primIndex = it->second;
+    //        if (primitives[index][primIndex].frameUpdated < currentFrame) {
+    //            primitives[index][primIndex].frameUpdated = currentFrame - 1; // Force update
+    //            dirtyCount++;
+    //        }
+    //    }
+    //}
     void nextFrame() {
         currentFrame++;
         dirtyCount = 0;
     }
 
     // Thread-safe accessors
-    uint32_t getNodeCount() const { return nodeCount; }
+    uint32_t getNodeCount(uint8_t index) const { return nodeCount[index]; }
     uint32_t getPrimitiveCount() const { return primitives.size(); }
     bool isEmpty() const { return primitives.empty(); }
 
     // Debug/profiling methods
-    void printStats() const {
-        if (isEmpty()) {
-            std::cout << "BVH is empty\n";
-            return;
-        }
+    //void printStats(uint8_t index) const {
+    //    if (isEmpty()) {
+    //        std::cout << "BVH is empty\n";
+    //        return;
+    //    }
 
-        std::cout << "BVH Stats:\n";
-        std::cout << "  Nodes: " << nodeCount << "\n";
-        std::cout << "  Primitives: " << primitives.size() << "\n";
-        std::cout << "  Rebuild count: " << rebuildCounter.load() << "\n";
-        std::cout << "  Current frame: " << currentFrame.load() << "\n";
+    //    std::cout << "BVH Stats:\n";
+    //    std::cout << "  Nodes: " << nodeCount << "\n";
+    //    std::cout << "  Primitives: " << primitives[index].size() << "\n";
+    //    std::cout << "  Rebuild count: " << rebuildCounter[index].load() << "\n";
+    //    std::cout << "  Current frame: " << currentFrame[index].load() << "\n";
 
-        // Calculate tree depth
-        uint32_t maxDepth = 0;
-        std::function<void(uint32_t, uint32_t)> calculateDepth =
-            [&](uint32_t nodeIndex, uint32_t depth) {
-            if (nodeIndex == 0) return;
-            maxDepth = std::max(maxDepth, depth);
+    //    // Calculate tree depth
+    //    uint32_t maxDepth = 0;
+    //    std::function<void(uint32_t, uint32_t)> calculateDepth =
+    //        [&](uint32_t nodeIndex, uint32_t depth) {
+    //        if (nodeIndex == 0) return;
+    //        maxDepth = std::max(maxDepth, depth);
 
-            const BVHNode& node = nodes[nodeIndex];
-            if (!node.isLeaf()) {
-                calculateDepth(node.leftChild, depth + 1);
-                calculateDepth(node.rightChild, depth + 1);
-            }
-            };
+    //        const BVHNode& node = nodes[index][nodeIndex];
+    //        if (!node.isLeaf()) {
+    //            calculateDepth(node.leftChild, depth + 1);
+    //            calculateDepth(node.rightChild, depth + 1);
+    //        }
+    //        };
 
-        calculateDepth(rootIndex, 0);
-        std::cout << "  Max depth: " << maxDepth << "\n";
-    }
+    //    calculateDepth(rootIndex, 0);
+    //    std::cout << "  Max depth: " << maxDepth << "\n";
+    //}
 
     // Validate tree structure (debug)
-    bool validateTree() const {
+    bool validateTree(uint8_t index) const {
         if (isEmpty()) return true;
 
-        std::function<bool(uint32_t)> validate = [&](uint32_t nodeIndex) -> bool {
-            if (nodeIndex == 0 || nodeIndex > nodeCount) return false;
 
-            const BVHNode& node = nodes[nodeIndex];
+        std::function<bool(uint32_t, uint8_t)> validate = [&](uint32_t nodeIndex, uint8_t index) -> bool {
+            if (nodeIndex == 0 || nodeIndex > nodeCount[index]) return false;
+
+            const BVHNode& node = nodes[currentFrame][nodeIndex];
 
             if (node.isLeaf()) {
                 // Validate leaf node
@@ -607,7 +650,7 @@ public:
 
                 // Check bounds contain all primitives
                 for (uint32_t i = 0; i < node.primitiveCount; ++i) {
-                    uint32_t primIndex = primitiveIndices[node.firstPrimitive + i];
+                    uint32_t primIndex = primitiveIndices[currentFrame][node.firstPrimitive + i];
                     if (primIndex >= primitives.size()) return false;
 
                     // Note: This is a simplified check - in practice you'd want 
@@ -617,14 +660,20 @@ public:
                 // Validate internal node
                 if (node.leftChild == 0 && node.rightChild == 0) return false;
 
-                if (node.leftChild != 0 && !validate(node.leftChild)) return false;
-                if (node.rightChild != 0 && !validate(node.rightChild)) return false;
+                if (node.leftChild != 0 && !validate(node.leftChild, index)) return false;
+                if (node.rightChild != 0 && !validate(node.rightChild, index)) return false;
             }
 
             return true;
             };
 
-        return validate(rootIndex);
+        for (size_t i = 0; i < 2; ++i) {
+            auto result = validate(rootIndex[i], index);
+            if (!result)
+                return false;
+        }
+
+        return true;
     }
 
 };
@@ -635,34 +684,42 @@ class BVHSystem
 private:
     DualBVH bvh;
     uint32_t lastUpdateFrame = UINT32_INVALID;
+    float counter = 0;
 
 public:
+    BVHSystem(ArenaRegistry& registry) :
+        bvh{registry} {}
     // Called once per frame in main thread
-    void updateBVH(ArenaRegistry& registry, uint32_t currentFrame) {
-        if (currentFrame != lastUpdateFrame) {
-            bvh.incrementalUpdate(registry);
-            bvh.nextFrame();
-            lastUpdateFrame = currentFrame;
+    void updateBVH(ArenaRegistry& registry, uint32_t currentFrame, float dt, float time) {
+            //bvh.incrementalUpdate(registry);
+            
+        counter += dt;
+        if (counter >= time) {
+            counter = 0;
+            //bvh.setPendingUpdate();
         }
+        bvh.nextFrame();
+        lastUpdateFrame = currentFrame;
+        
     }
 
     // Called from render thread
-    auto performFrustumCulling(DualBVH::TraversalResult& result, const Frustum& f, ArenaRegistry* const registry) const {
-        return bvh.frustumCull(result, f);
-    }
+    //auto performFrustumCulling(DualBVH::TraversalResult& result, const Frustum& f, ArenaRegistry* const registry) const {
+    //    return bvh.frustumCull(result, f);
+    //}
 
     // Called from render thread with occlusion culling
     auto performFrustumCullingWithOcclusion(DualBVH::TraversalResult& result,
                                             const Frustum& f,
                                             const glm::vec3& cameraPos,
                                             ArenaRegistry* const registry,
-                                            DualBVH::OcclusionMethod method = DualBVH::OcclusionMethod::SIMPLE_DEPTH) {
+                                            DualBVH::OcclusionMethod method = DualBVH::OcclusionMethod::SIMPLE_DEPTH) { 
         return bvh.frustumCullWithOcclusion(result, f, cameraPos, registry, method);
     }
 
     // Called from physics thread (can be concurrent with frustum culling)
     auto performBroadPhase() const {
-        return bvh.broadPhaseCollision();
+        return bvh.broadPhaseCollision(0);
     }
 
     // Add/remove entities
@@ -670,27 +727,27 @@ public:
     //    bvh.addPrimitive(entity, bounds);
     //}
 
-    void removeEntity(entt::entity entity) {
-        bvh.removePrimitive(entity);
-    }
+    //void removeEntity(entt::entity entity) {
+    //    bvh.removePrimitive(entity);
+    //}
 
-    void markEntityDirty(entt::entity entity) {
-        bvh.markDirty(entity);
-    }
+    //void markEntityDirty(entt::entity entity) {
+    //    bvh.markDirty(entity);
+    //}
 
-    // Query methods
-    std::vector<entt::entity> raycast(const glm::vec3& origin, const glm::vec3& direction) const {
-        return bvh.raycast(origin, direction);
-    }
+    //// Query methods
+    //std::vector<entt::entity> raycast(const glm::vec3& origin, const glm::vec3& direction) const {
+    //    return bvh.raycast(origin, direction);
+    //}
 
-    // Debug/profiling
-    void printStats() const { bvh.printStats(); }
-    bool validate() const { return bvh.validateTree(); }
+    //// Debug/profiling
+    ////void printStats() const { bvh.printStats(); }
+    //bool validate() const { return bvh.validateTree(); }
 
-    // Force rebuild (useful for debugging or after major scene changes)
-    void forceRebuild(ArenaRegistry& registry) {
-        bvh.rebuild(registry);
-    }
+    //// Force rebuild (useful for debugging or after major scene changes)
+    //void forceRebuild(ArenaRegistry& registry) {
+    //    bvh.rebuild(registry);
+    //}
 };
 
 #endif

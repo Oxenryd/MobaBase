@@ -76,7 +76,8 @@ public:
         m_gameObjectSys{ sceneIndex, &m_reg},
         m_renderSys{ &m_reg, &m_arena, sceneIndex },  
         m_sceneIndex{sceneIndex},
-        m_lightSys{&m_reg, sceneIndex}
+        m_lightSys{&m_reg, sceneIndex},
+        m_bvhSys{m_reg}
     {
         m_reg.storage<TransformComponent>().reserve(ECS_BASE_COMPONENTS_RESERVATION_COUNT);
         m_reg.storage<EnabledTag>().reserve(ECS_BASE_COMPONENTS_RESERVATION_COUNT);

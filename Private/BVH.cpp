@@ -3,28 +3,114 @@
 #include "Transform.hpp"
 #include "Frustum.hpp"
 
-uint32_t DualBVH::buildRecursive(std::vector<uint32_t>& primitiveIds, uint32_t depth, uint32_t parent) {
+uint8_t DualBVH::_getIndexToUseThisFrame(uint8_t lastFrameIndex) {
+
+    //uint8_t result;
+    //while (result = _threadIndexToUse.load(std::memory_order_acquire) == UINT8_INVALID) {}
+    //
+    //return result;
+
+    //if (_threadLastSuccesful.load())
+    //    return lastFrameIndex;
+
+    return _threadIndexToUse.load(std::memory_order_acquire);
+}
+
+void DualBVH::_buildThreadMethod(DualBVH* _this, ArenaRegistry& registry) {
+
+    while (true) {
+
+
+        while (!_this->_pendingWork.load(std::memory_order_acquire)) {
+            _this->_pendingWork.wait(false);
+        }
+        if (!_this->_threadRunning.load(std::memory_order_acquire)) {
+            return;
+        }
+        //_this->_threadRunning.store(true, std::memory_order_release);
+        uint8_t index;
+        uint8_t readIndex = _this->_threadIndexToUse.load(std::memory_order_acquire);
+        if (readIndex == UINT8_INVALID)
+            index = 0;
+        else {
+            index = (readIndex + 1) % 2;
+        }
+
+        auto view = registry.view<BoundingVolumeComponent>();
+        for (auto entity : view) {
+            auto it = _this->entityToPrimitive[index].find(entity);
+            if (it == _this->entityToPrimitive[index].end()) {
+
+                _this->rebuildPrimitives(registry, index);
+                break;
+            }
+        }
+        _this->buildNodes(registry, index);
+
+        _this->_threadIndexToUse.store(index);
+        _this->_pendingWork.store(false, std::memory_order_release);
+        //_this->_threadRunning.store(false, std::memory_order_release);
+    }
+}
+
+void DualBVH::rebuildPrimitives(ArenaRegistry& registry, uint8_t index) {
+    // Clear existing data
+    primitives[index].clear();
+    primitiveIndices[index].clear();
+    entityToPrimitive[index].clear();
+
+    // Collect all entities with Transform and AABB components
+    auto view = registry.view<BoundingVolumeComponent>();
+    uint32_t primIndex = 0;
+    for (auto [entity, boundComp] : view.each()) {
+
+        BoundingVolume bounds = BoundingVolume{ &registry, entity };
+        primitives[index].emplace_back(entity, bounds);
+        primitives[index].back().frameUpdated = currentFrame;
+
+        if (boundComp.flags & static_cast<uint32_t>(BoundingVolumeFlags::Occluder)) {
+            auto cornerIndex = occluderCorners.size();
+            auto verts = bounds.getCoarseAABB().getVertices();
+            occluderCorners[index].insert(occluderCorners[index].end(), verts.begin(), verts.end());
+            occluderIndices[index].push_back({ primIndex, cornerIndex, 0.0f });
+        }
+
+        entityToPrimitive[index][entity] = primIndex++;
+    }
+
+    if (primitives.empty()) {
+        nodeCount[index] = 0;
+        rootIndex[index] = 0;
+        return;
+    }
+
+    // Build primitive indices array
+    primitiveIndices[index].resize(primitives.size());
+    std::iota(primitiveIndices[index].begin(), primitiveIndices[index].end(), 0);
+}
+
+uint32_t DualBVH::buildRecursive(std::vector<uint32_t>& primitiveIds, uint32_t depth, uint32_t parent, uint8_t index) {
      if (primitiveIds.empty()) return 0;
 
-     uint32_t nodeIndex = ++nodeCount;
-     if (nodeIndex >= nodes.size()) {
-         nodes.resize(nodeIndex + 1);
+     uint32_t nodeIndex = ++nodeCount[index];
+     if (nodeIndex >= nodes[index].size()) {
+         nodes[index].resize(nodeIndex + 1);
      }
 
-     BVHNode& node = nodes[nodeIndex];
+     BVHNode& node = nodes[index][nodeIndex];
      node.parentIndex = parent;
-     node.bounds = computeBounds(primitiveIds);
+     node.bounds = computeBounds(primitiveIds, index);
      node.setDirty(false);
 
      // Leaf node condition
      if (primitiveIds.size() <= settings.maxLeafPrimitives || depth > 32) {
          node.setLeaf(true);
-         node.firstPrimitive = primitiveIndices.size();
+         node.firstPrimitive = primitiveIndices[index].size();
          node.primitiveCount = primitiveIds.size();
 
          // Copy primitive indices to the end of the array
          for (uint32_t primId : primitiveIds) {
-             primitiveIndices.push_back(primId);
+             primitiveIndices[index].push_back(primId);
          }
 
          return nodeIndex;
@@ -32,12 +118,12 @@ uint32_t DualBVH::buildRecursive(std::vector<uint32_t>& primitiveIds, uint32_t d
      // Internal node - find best split
      int bestAxis;
      float bestPos;
-     uint32_t bestCost = findBestSplit(primitiveIds, bestAxis, bestPos);
+     uint32_t bestCost = findBestSplit(primitiveIds, bestAxis, bestPos, index);
 
      // Partition primitives
      auto partition = std::partition(primitiveIds.begin(), primitiveIds.end(),
                                      [&](uint32_t primId) {
-                                         return primitives[primId].bounds.getCoarseAABB().center()[bestAxis] < bestPos;
+                                         return primitives[index][primId].bounds.getCoarseAABB().center()[bestAxis] < bestPos;
                                      });
 
      std::vector<uint32_t> leftPrims(primitiveIds.begin(), partition);
@@ -48,8 +134,8 @@ uint32_t DualBVH::buildRecursive(std::vector<uint32_t>& primitiveIds, uint32_t d
          // Fallback to median split
          std::sort(primitiveIds.begin(), primitiveIds.end(),
                    [&](uint32_t a, uint32_t b) {
-                       return primitives[a].bounds.getCoarseAABB().center()[bestAxis] <
-                           primitives[b].bounds.getCoarseAABB().center()[bestAxis];
+                       return primitives[index][a].bounds.getCoarseAABB().center()[bestAxis] <
+                           primitives[index][b].bounds.getCoarseAABB().center()[bestAxis];
                    });
 
          size_t mid = primitiveIds.size() / 2;
@@ -59,17 +145,17 @@ uint32_t DualBVH::buildRecursive(std::vector<uint32_t>& primitiveIds, uint32_t d
 
      node.setLeaf(false);
      node.splitAxis = bestAxis;
-     node.leftChild = buildRecursive(leftPrims, depth + 1, nodeIndex);
-     node.rightChild = buildRecursive(rightPrims, depth + 1, nodeIndex);
+     node.leftChild = buildRecursive(leftPrims, depth + 1, nodeIndex, index);
+     node.rightChild = buildRecursive(rightPrims, depth + 1, nodeIndex, index);
 
      return nodeIndex;
     }
 
-uint32_t DualBVH::findBestSplit(const std::vector<uint32_t>& primitiveIds, int& bestAxis, float& bestPos) {
+uint32_t DualBVH::findBestSplit(const std::vector<uint32_t>& primitiveIds, int& bestAxis, float& bestPos, uint8_t index) {
 
     if (settings.useMedianSplit) {
         // Simple median split
-        AABB bounds = computeBounds(primitiveIds);
+        AABB bounds = computeBounds(primitiveIds, index);
         glm::vec3 extent = bounds.size();
 
         bestAxis = 0;
@@ -85,7 +171,7 @@ uint32_t DualBVH::findBestSplit(const std::vector<uint32_t>& primitiveIds, int& 
     bestAxis = 0;
     bestPos = 0.0f;
 
-    AABB totalBounds = computeBounds(primitiveIds);
+    AABB totalBounds = computeBounds(primitiveIds, index);
     float totalSA = totalBounds.surfaceArea();
 
     for (int axis = 0; axis < 3; ++axis) {
@@ -93,8 +179,8 @@ uint32_t DualBVH::findBestSplit(const std::vector<uint32_t>& primitiveIds, int& 
         std::vector<uint32_t> sorted = primitiveIds;
         std::sort(sorted.begin(), sorted.end(),
                   [&](uint32_t a, uint32_t b) {
-                      return primitives[a].bounds.getCoarseAABB().center()[axis] <
-                          primitives[b].bounds.getCoarseAABB().center()[axis];
+                      return primitives[index][a].bounds.getCoarseAABB().center()[axis] <
+                          primitives[index][b].bounds.getCoarseAABB().center()[axis];
                   });
 
         // Try different split positions
@@ -102,8 +188,8 @@ uint32_t DualBVH::findBestSplit(const std::vector<uint32_t>& primitiveIds, int& 
             std::vector<uint32_t> leftPrims(sorted.begin(), sorted.begin() + i);
             std::vector<uint32_t> rightPrims(sorted.begin() + i, sorted.end());
 
-            AABB leftBounds = computeBounds(leftPrims);
-            AABB rightBounds = computeBounds(rightPrims);
+            AABB leftBounds = computeBounds(leftPrims, index);
+            AABB rightBounds = computeBounds(rightPrims, index);
 
             float leftSA = leftBounds.surfaceArea();
             float rightSA = rightBounds.surfaceArea();
@@ -117,8 +203,8 @@ uint32_t DualBVH::findBestSplit(const std::vector<uint32_t>& primitiveIds, int& 
             if (cost < bestCost) {
                 bestCost = cost;
                 bestAxis = axis;
-                bestPos = (primitives[sorted[i - 1]].bounds.getCoarseAABB().center()[axis] +
-                           primitives[sorted[i]].bounds.getCoarseAABB().center()[axis]) * 0.5f;
+                bestPos = (primitives[index][sorted[i - 1]].bounds.getCoarseAABB().center()[axis] +
+                           primitives[index][sorted[i]].bounds.getCoarseAABB().center()[axis]) * 0.5f;
             }
         }
     }
@@ -177,71 +263,63 @@ void DualBVH::collectOccluders(const glm::vec3& cameraPos, const Frustum& frustu
     //}
 }
 
-void DualBVH::build(ArenaRegistry& registry) {
+
+
+void DualBVH::buildNodes(ArenaRegistry& registry, uint8_t index) {
     // Clear existing data
-    nodes.clear();
-    primitives.clear();
-    primitiveIndices.clear();
-    entityToPrimitive.clear();
-    occluderIndices.clear();
-    occluderCorners.clear();
+    nodes[index].clear();
+    //primitives[index].clear();
+    //primitiveIndices[index].clear();
+    //entityToPrimitive[index].clear();
+    occluderIndices[index].clear();
+    occluderCorners[index].clear();
 
-    // Collect all entities with Transform and AABB components
-    auto view = registry.view<BoundingVolumeComponent>();
-    //primitives.reserve(view.size_hint());
-    //primitiveIndices.reserve(view.size_hint());
+    //// Collect all entities with Transform and AABB components
+    //auto view = registry.view<BoundingVolumeComponent>();
+    //uint32_t primIndex = 0;
+    //for (auto [entity, boundComp] : view.each()) {
 
-    uint32_t primIndex = 0;
-    for (auto [entity, boundComp] : view.each()) {
-        //const auto& transformComp = view.get<TransformComponent>(entity);
-        //const auto& boundComp = view.get<BoundingVolumeComponent>(entity);
+    //    BoundingVolume bounds = BoundingVolume{ &registry, entity };
+    //    primitives[index].emplace_back(entity, bounds);
+    //    primitives[index].back().frameUpdated = currentFrame;
 
+    //    if (boundComp.flags & static_cast<uint32_t>(BoundingVolumeFlags::Occluder)) {
+    //        auto cornerIndex = occluderCorners.size();
+    //        auto verts = bounds.getCoarseAABB().getVertices();
+    //        occluderCorners[index].insert(occluderCorners[index].end(), verts.begin(), verts.end());
+    //        occluderIndices[index].push_back({ primIndex, cornerIndex, 0.0f });
+    //    }
 
-        BoundingVolume bounds = BoundingVolume{ &registry, entity };
-        //AABB box = bounds.getCoarseAABB();
-        primitives.emplace_back(entity, bounds);
-        //primitives.back().worldBounds = box;
-        primitives.back().frameUpdated = currentFrame;
+    //    entityToPrimitive[index][entity] = primIndex++;
+    //}
 
-        if (boundComp.flags & static_cast<uint32_t>(BoundingVolumeFlags::Occluder)) {
-            auto cornerIndex = occluderCorners.size();
-            auto verts = bounds.getCoarseAABB().getVertices();
-            occluderCorners.insert(occluderCorners.end(), verts.begin(), verts.end());
-            occluderIndices.push_back({ primIndex, cornerIndex, 0.0f });
-        }
+    //if (primitives.empty()) {
+    //    nodeCount[index] = 0;
+    //    rootIndex[index] = 0;
+    //    return;
+    //}
 
-        entityToPrimitive[entity] = primIndex++;
-    }
-
-    if (primitives.empty()) {
-        nodeCount = 0;
-        rootIndex = 0;
-        return;
-    }
-
-    // Build primitive indices array
-    primitiveIndices.resize(primitives.size());
-    std::iota(primitiveIndices.begin(), primitiveIndices.end(), 0);
+    //// Build primitive indices array
+    //primitiveIndices[index].resize(primitives.size());
+    //std::iota(primitiveIndices[index].begin(), primitiveIndices[index].end(), 0);
 
     // Build tree
-    std::vector<uint32_t> allPrimitives(primitives.size());
+    std::vector<uint32_t> allPrimitives(primitives[index].size());
     std::iota(allPrimitives.begin(), allPrimitives.end(), 0);
 
-    nodes.reserve(primitives.size() * 2);  // Worst case
-    nodeCount = 0;
-    rootIndex = buildRecursive(allPrimitives, 0, 0);
+    nodes[index].reserve(primitives[index].size() * 2);  // Worst case
+    nodeCount[index] = 0;
+    rootIndex[index] = buildRecursive(allPrimitives, 0, 0, index);
 
-    dirtyCount = 0;
+    //dirtyCount = 0;
 }
 
-void DualBVH::incrementalUpdate(ArenaRegistry& registry) {
+void DualBVH::incrementalUpdate(ArenaRegistry& registry, uint8_t index) {
 
-    // DEBUG
-    build(registry);
-    return;
 
-    if (primitives.empty()) {
-        build(registry);
+    if (primitives[index].empty()) {
+        rebuildPrimitives(registry, index);
+        buildNodes(registry, index);
         return;
     }
 
@@ -250,10 +328,10 @@ void DualBVH::incrementalUpdate(ArenaRegistry& registry) {
     uint32_t updatedCount = 0;
 
     for (auto entity : view) {
-        auto it = entityToPrimitive.find(entity);
-        if (it == entityToPrimitive.end()) {
+        auto it = entityToPrimitive[index].find(entity);
+        if (it == entityToPrimitive[index].end()) {
             // New entity - trigger rebuild
-            build(registry);
+            buildNodes(registry, index);
             return;
         }
 
@@ -269,50 +347,50 @@ void DualBVH::incrementalUpdate(ArenaRegistry& registry) {
     }
 
     // Check if rebuild is needed
-    if (needsRebuild()) {
-        rebuild(registry);
-    }
+    //if (needsRebuild()) {
+    //    rebuild(registry, index);
+    //}
 }
 
 
 
 
-void DualBVH::frustumCull(DualBVH::TraversalResult& result, const Frustum& f) const {
-    //TraversalResult result;
-        if (isEmpty()) return; //result;
-
-    std::vector<uint32_t> nodeStack;
-    nodeStack.reserve(64);
-    nodeStack.push_back(rootIndex);
-
-    while (!nodeStack.empty()) {
-        uint32_t nodeIndex = nodeStack.back();
-        nodeStack.pop_back();
-
-        const BVHNode& node = nodes[nodeIndex];
-        result.nodesVisited++;
-
-        // Test AABB against frustum
-        if (!MMath::aabbVisible(node.bounds.min, node.bounds.max, f)) {
-            continue;
-        }
-
-        if (node.isLeaf()) {
-            // Add all primitives in this leaf
-            for (uint32_t i = 0; i < node.primitiveCount; ++i) {
-                uint32_t primIndex = primitiveIndices[node.firstPrimitive + i];
-                result.visibleEntities.push_back(primitives[primIndex].entity);
-                result.primitivesVisited++;
-            }
-        } else {
-            // Add children to stack (back-to-front for better culling)
-            if (node.rightChild != 0) nodeStack.push_back(node.rightChild);
-            if (node.leftChild != 0) nodeStack.push_back(node.leftChild);
-        }
-    }
-
-    return; //result;
-}
+//void DualBVH::frustumCull(DualBVH::TraversalResult& result, const Frustum& f) const {
+//    //TraversalResult result;
+//        if (isEmpty()) return; //result;
+//
+//    std::vector<uint32_t> nodeStack;
+//    nodeStack.reserve(64);
+//    nodeStack.push_back(rootIndex);
+//
+//    while (!nodeStack.empty()) {
+//        uint32_t nodeIndex = nodeStack.back();
+//        nodeStack.pop_back();
+//
+//        const BVHNode& node = nodes[nodeIndex];
+//        result.nodesVisited++;
+//
+//        // Test AABB against frustum
+//        if (!MMath::aabbVisible(node.bounds.min, node.bounds.max, f)) {
+//            continue;
+//        }
+//
+//        if (node.isLeaf()) {
+//            // Add all primitives in this leaf
+//            for (uint32_t i = 0; i < node.primitiveCount; ++i) {
+//                uint32_t primIndex = primitiveIndices[node.firstPrimitive + i];
+//                result.visibleEntities.push_back(primitives[primIndex].entity);
+//                result.primitivesVisited++;
+//            }
+//        } else {
+//            // Add children to stack (back-to-front for better culling)
+//            if (node.rightChild != 0) nodeStack.push_back(node.rightChild);
+//            if (node.leftChild != 0) nodeStack.push_back(node.leftChild);
+//        }
+//    }
+//
+//    return; //result;
+//}
 
 void DualBVH::frustumCullWithOcclusion(
     DualBVH::TraversalResult& result,
@@ -321,27 +399,36 @@ void DualBVH::frustumCullWithOcclusion(
     ArenaRegistry* const registry,
     OcclusionMethod method) {
 
+
+
     //TraversalResult result;
     if (isEmpty()) return; //result;
 
+    curFrameIndex = _getIndexToUseThisFrame(curFrameIndex);
+    if (curFrameIndex == UINT8_INVALID) {
+        result.clear();
+        return;
+    }
+    auto frameIndex = curFrameIndex;
+
     // Collect potential occluders first (front-to-back)
     std::vector<OccluderData> potentialOccluders;
-    for (auto& [index, offset, depth] : occluderIndices) {
+    for (auto& [index, offset, depth] : occluderIndices[frameIndex]) {
 
-        auto& prim = primitives[index];
+        auto& prim = primitives[frameIndex][index];
         AABB worldBounds = prim.bounds.getCoarseAABB();
         if (!MMath::aabbVisible(worldBounds.min, worldBounds.max, frustum)) {
             continue;
         }
         float d[8] = {
-             glm::length2(occluderCorners[offset + 0] - cameraPos),
-             glm::length2(occluderCorners[offset + 1] - cameraPos),
-             glm::length2(occluderCorners[offset + 2] - cameraPos),
-             glm::length2(occluderCorners[offset + 3] - cameraPos),
-             glm::length2(occluderCorners[offset + 4] - cameraPos),
-             glm::length2(occluderCorners[offset + 5] - cameraPos),
-             glm::length2(occluderCorners[offset + 6] - cameraPos),
-             glm::length2(occluderCorners[offset + 7] - cameraPos),
+             glm::length2(occluderCorners[frameIndex][offset + 0] - cameraPos),
+             glm::length2(occluderCorners[frameIndex][offset + 1] - cameraPos),
+             glm::length2(occluderCorners[frameIndex][offset + 2] - cameraPos),
+             glm::length2(occluderCorners[frameIndex][offset + 3] - cameraPos),
+             glm::length2(occluderCorners[frameIndex][offset + 4] - cameraPos),
+             glm::length2(occluderCorners[frameIndex][offset + 5] - cameraPos),
+             glm::length2(occluderCorners[frameIndex][offset + 6] - cameraPos),
+             glm::length2(occluderCorners[frameIndex][offset + 7] - cameraPos),
         };
         __m256 v = _mm256_loadu_ps(d);
         float mn;
@@ -381,17 +468,17 @@ void DualBVH::frustumCullWithOcclusion(
     // Traverse with occlusion
     //std::vector<TraversalNode> nodeStack;
     //nodeStack.reserve(64);
-    nodeStack.clear();
+    nodeStack[frameIndex].clear();
 
     float rootMinDepth, rootMaxDepth;
-    computeNodeDepthRange(rootIndex, cameraPos, rootMinDepth, rootMaxDepth);
-    nodeStack.push_back({ rootIndex, rootMinDepth, rootMaxDepth });
+    computeNodeDepthRange(rootIndex[frameIndex], cameraPos, rootMinDepth, rootMaxDepth, frameIndex);
+    nodeStack[frameIndex].push_back({ rootIndex[frameIndex], rootMinDepth, rootMaxDepth });
 
-    while (!nodeStack.empty()) {
-        TraversalNode current = nodeStack.back();
-        nodeStack.pop_back();
+    while (!nodeStack[frameIndex].empty()) {
+        TraversalNode current = nodeStack[frameIndex].back();
+        nodeStack[frameIndex].pop_back();
 
-        const BVHNode& node = nodes[current.nodeIndex];
+        const BVHNode& node = nodes[frameIndex][current.nodeIndex];
         result.nodesVisited++;
 
         // Frustum test first (cheapest)
@@ -428,8 +515,8 @@ void DualBVH::frustumCullWithOcclusion(
         if (node.isLeaf()) {
             // Process leaf primitives
             for (uint32_t i = 0; i < node.primitiveCount; ++i) {
-                uint32_t primIndex = primitiveIndices[node.firstPrimitive + i];
-                const BVHPrimitive& prim = primitives[primIndex];
+                uint32_t primIndex = primitiveIndices[frameIndex][node.firstPrimitive + i];
+                const BVHPrimitive& prim = primitives[frameIndex][primIndex];
 
                 // Fine-grained occlusion test for individual primitives
                 bool occluded = false;
@@ -457,7 +544,7 @@ void DualBVH::frustumCullWithOcclusion(
                     float mn;
                     MMath::hmin8(v, mn);
 
-                    occluded = isOccludedRaycast(primWorldBounds, activeOccluders, cameraPos, mn) &&
+                    occluded = isOccludedRaycast(primWorldBounds, activeOccluders, cameraPos, mn, frameIndex) &&
                         !primWorldBounds.contains(cameraPos);
                 }
 
@@ -470,13 +557,13 @@ void DualBVH::frustumCullWithOcclusion(
             // Add children to stack with depth ranges
             if (node.leftChild != 0) {
                 float minDepth, maxDepth;
-                computeNodeDepthRange(node.leftChild, cameraPos, minDepth, maxDepth);
-                nodeStack.push_back({ node.leftChild, minDepth, maxDepth });
+                computeNodeDepthRange(node.leftChild, cameraPos, minDepth, maxDepth, frameIndex);
+                nodeStack[frameIndex].push_back({ node.leftChild, minDepth, maxDepth });
             }
             if (node.rightChild != 0) {
                 float minDepth, maxDepth;
-                computeNodeDepthRange(node.rightChild, cameraPos, minDepth, maxDepth);
-                nodeStack.push_back({ node.rightChild, minDepth, maxDepth });
+                computeNodeDepthRange(node.rightChild, cameraPos, minDepth, maxDepth, frameIndex);
+                nodeStack[frameIndex].push_back({ node.rightChild, minDepth, maxDepth });
             }
         }
     }
@@ -484,15 +571,17 @@ void DualBVH::frustumCullWithOcclusion(
     return; //result;
 }
 
-DualBVH::TraversalResult DualBVH::broadPhaseCollision() const {
+DualBVH::TraversalResult DualBVH::broadPhaseCollision(uint8_t index) const {
     TraversalResult result;
     if (isEmpty()) return result;
 
     // Self-collision detection using recursive traversal
-    std::function<void(uint32_t, uint32_t)> traverse =
-        [&](uint32_t nodeA, uint32_t nodeB) {
-        const BVHNode& a = nodes[nodeA];
-        const BVHNode& b = nodes[nodeB];
+    std::function<void(uint32_t, uint32_t, uint8_t)> traverse =
+        [&](uint32_t nodeA, uint32_t nodeB, uint8_t frameIndex)
+        {
+
+        const BVHNode& a = nodes[frameIndex][nodeA];
+        const BVHNode& b = nodes[frameIndex][nodeB];
 
         result.nodesVisited++;
 
@@ -502,39 +591,40 @@ DualBVH::TraversalResult DualBVH::broadPhaseCollision() const {
             // Test all primitive pairs
             for (uint32_t i = 0; i < a.primitiveCount; ++i) {
                 for (uint32_t j = (nodeA == nodeB ? i + 1 : 0); j < b.primitiveCount; ++j) {
-                    uint32_t primA = primitiveIndices[a.firstPrimitive + i];
-                    uint32_t primB = primitiveIndices[b.firstPrimitive + j];
+                    uint32_t primA = primitiveIndices[frameIndex][a.firstPrimitive + i];
+                    uint32_t primB = primitiveIndices[frameIndex][b.firstPrimitive + j];
 
 
 
-                    if (primitives[primA].bounds.getCoarseAABB().intersects(primitives[primB].bounds.getCoarseAABB())) {
+                    if (primitives[frameIndex][primA].bounds.getCoarseAABB().intersects(
+                            primitives[frameIndex][primB].bounds.getCoarseAABB())) {
                         result.collisionPairs.emplace_back(
-                            primitives[primA].entity,
-                            primitives[primB].entity
+                            primitives[frameIndex][primA].entity,
+                            primitives[frameIndex][primB].entity
                         );
                         result.primitivesVisited += 2;
                     }
                 }
             }
         } else if (a.isLeaf()) {
-            if (b.leftChild != 0) traverse(nodeA, b.leftChild);
-            if (b.rightChild != 0) traverse(nodeA, b.rightChild);
+            if (b.leftChild != 0) traverse(nodeA, b.leftChild, frameIndex);
+            if (b.rightChild != 0) traverse(nodeA, b.rightChild, frameIndex);
         } else if (b.isLeaf()) {
-            if (a.leftChild != 0) traverse(a.leftChild, nodeB);
-            if (a.rightChild != 0) traverse(a.rightChild, nodeB);
+            if (a.leftChild != 0) traverse(a.leftChild, nodeB, frameIndex);
+            if (a.rightChild != 0) traverse(a.rightChild, nodeB, frameIndex);
         } else {
             // Both are internal nodes - test all combinations
             if (a.leftChild != 0 && b.leftChild != 0)
-                traverse(a.leftChild, b.leftChild);
+                traverse(a.leftChild, b.leftChild, frameIndex);
             if (a.leftChild != 0 && b.rightChild != 0)
-                traverse(a.leftChild, b.rightChild);
+                traverse(a.leftChild, b.rightChild, frameIndex);
             if (a.rightChild != 0 && b.leftChild != 0)
-                traverse(a.rightChild, b.leftChild);
+                traverse(a.rightChild, b.leftChild, frameIndex);
             if (a.rightChild != 0 && b.rightChild != 0)
-                traverse(a.rightChild, b.rightChild);
+                traverse(a.rightChild, b.rightChild, frameIndex);
         }
         };
 
-    traverse(rootIndex, rootIndex);
+    traverse(rootIndex[index], rootIndex[index], index);
     return result;
 }

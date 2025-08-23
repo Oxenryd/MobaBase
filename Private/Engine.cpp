@@ -342,7 +342,7 @@ inline void Engine::_updateEarly(double dt) {
 			m_scenes[index]->startDispatch();
 
 		m_scenes[index]->updateDispatch(dt);
-		m_scenes[index]->bvhSystem().updateBVH(m_scenes[index]->m_reg, m_totalFrames);
+		m_scenes[index]->bvhSystem().updateBVH(m_scenes[index]->m_reg, m_totalFrames, m_updateDeltaTime, 0.01667f);
 	}
 	onEarlyUpdateExit.notify(this);
 }
