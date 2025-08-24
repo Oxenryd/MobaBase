@@ -11,7 +11,9 @@
 
 BasePSIn main(BaseVSIn input)
 {    
-    float4x4 modelToWorld = basePush.modelToWorld;
+    float4x4 modelToWorld = basePush.flags & INSTANCE_FLAG
+        ? modelMatrices[instanceData[input.instanceID].matrixIndex].modelToWorld
+        : basePush.modelToWorld;
     
     BasePSIn output = (BasePSIn) 0;
         
@@ -32,6 +34,7 @@ BasePSIn main(BaseVSIn input)
     output.binormal = normalize(mul(modelToWorld, float4(input.binormal, 0)).xyz);
     output.localNormal = input.normal;
     output.texCoord = input.texCoord;
+    output.instanceID = input.instanceID;
 		
     return output;
 }

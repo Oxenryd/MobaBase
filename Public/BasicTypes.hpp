@@ -461,7 +461,8 @@ enum class BoundingVolumeFlags : uint8_t
 	None = 0x00,
 	Static = 0x01,
 	Occluder = 0x02,
-	ShadowCast = 0x04
+	Occludee = 0x04,
+	ShadowCast = 0x08
 };
 
 struct BoundingVolumeComponent
@@ -473,13 +474,17 @@ struct BoundingVolumeComponent
 		rawData{ 0 },
 		coarseIndexLocal{ UINT32_INVALID },
 		coarseIndexWorld{ UINT32_INVALID }
-	{}
+	{
+		flags = (uint32_t)BoundingVolumeFlags::Occluder | (uint32_t)BoundingVolumeFlags::Occludee;
+	}
 
 	BoundingVolumeComponent(const uint32_t coarseIndexLocal, const uint32_t coarseIndexWorld) :
 		rawData{ 0 },
 		coarseIndexLocal{coarseIndexLocal},
 		coarseIndexWorld{ coarseIndexWorld }
-	{}
+	{
+		flags = (uint32_t)BoundingVolumeFlags::Occluder | (uint32_t)BoundingVolumeFlags::Occludee;
+	}
 
 	//BoundingVolumeComponent(const uint32_t coarseIndex, const BoundingShape firstShape, const uint32_t firstFineIndex) :
 	//	rawData{ 0 },

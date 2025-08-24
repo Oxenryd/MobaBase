@@ -48,7 +48,7 @@ struct alignas(64) BVHNode
 struct BVHPrimitive
 {
     entt::entity entity;
-    uint32_t frameUpdated;  // Last frame this was updated
+    //uint32_t frameUpdated;  // Last frame this was updated
     BoundingVolume bounds;
     //uint32_t local_BIndex;
     //uint32_t world_BIndex;
@@ -57,19 +57,19 @@ struct BVHPrimitive
     
     BVHPrimitive() : 
         entity{entt::null},
-        frameUpdated{UINT32_INVALID},
+        //frameUpdated{UINT32_INVALID},
         bounds{}
     {}
     BVHPrimitive(const BVHPrimitive& other) :
         entity{other.entity},
-        frameUpdated{other.frameUpdated},
+        //frameUpdated{other.frameUpdated},
         bounds{other.bounds}
     {}
     BVHPrimitive& operator=(const BVHPrimitive& rhs) {
         if (this == &rhs) return *this;
 
         entity = rhs.entity;
-        frameUpdated = rhs.frameUpdated;
+        //frameUpdated = rhs.frameUpdated;
         bounds = rhs.bounds;
 
         return *this;
@@ -79,18 +79,19 @@ struct BVHPrimitive
         if (this == &rhs) return *this;
 
         entity = rhs.entity;
-        frameUpdated = rhs.frameUpdated;
+        //frameUpdated = rhs.frameUpdated;
         bounds = rhs.bounds;
 
         rhs.entity = entt::null;
-        rhs.frameUpdated = UINT32_INVALID;
+        //rhs.frameUpdated = UINT32_INVALID;
         rhs.bounds = BoundingVolume{};
 
         return *this;
     }
 
     BVHPrimitive(entt::entity e, const BoundingVolume& boundVol) :
-        entity{ e }, bounds{ boundVol }, frameUpdated{ UINT32_INVALID } {}
+        entity{ e }, bounds{ boundVol } //frameUpdated{ UINT32_INVALID } 
+    {}
 
     //BVHPrimitive(entt::entity e, const AABB& bounds)
     //    : entity(e), localBounds(bounds), worldBounds(bounds), frameUpdated(0) {}
@@ -99,6 +100,8 @@ struct BVHPrimitive
 struct Frustum;
 
 // Thread-safe BVH with dual-purpose design
+
+
 class DualBVH
 {
 private:
@@ -108,23 +111,51 @@ private:
 
     // Thread safety
     //mutable std::shared_mutex treeMutex;
-    std::atomic<uint32_t> currentFrame{ 0 };
-    std::atomic<uint32_t> rebuildCounter{ 0 };
-    std::atomic<uint32_t> dirtyCount{ 0 };
+    //std::atomic<uint32_t> currentFrame{ 0 };
+    //std::atomic<uint32_t> rebuildCounter{ 0 };
+    //std::atomic<uint32_t> dirtyCount{ 0 };
 
     // Entity to primitive mapping for fast lookups
     std::array<std::unordered_map<entt::entity, uint32_t>, 2> entityToPrimitive;
 
     // Configuration
+    static constexpr uint32_t MAX_DEPTH = 32;
     static constexpr uint32_t MAX_LEAF_PRIMITIVES = 4;
     static constexpr float REBUILD_THRESHOLD = 0.3f; // 30% of objects moved
 
     std::array<uint32_t, 2> rootIndex;
     std::array<uint32_t, 2> nodeCount;
                                      
+    struct WorkerPkg
+    {
+        WorkerPkg() = default;
+        std::vector<uint32_t>* primitiveIds;
+        uint32_t depth{ UINT32_INVALID };
+        uint32_t parent{ UINT32_INVALID };
+        uint8_t index{ UINT8_INVALID };
+
+    };
+    bool workersRunning = true;
+    std::atomic<uint8_t> nextThId;
+    std::array<std::thread*, 4> workers;
+    std::array<std::atomic<WorkerPkg>, 4> workerPkgs;
+    std::array<std::binary_semaphore*, 4> startSemas;
+    std::array<std::binary_semaphore*, 4> doneSemas;
+    std::array<std::vector<uint32_t>, 4> workerPrimsTemp;
+    std::array<std::atomic<uint32_t>, 4> workerResults;
+    std::atomic<bool> hasIndicesAccess = true;
+    std::atomic<bool> hasNodesAccess = true;
+    static void _recursiveWorker(DualBVH* _this, uint8_t threadId);
+
+    uint8_t _getNextThreadId() {
+        return nextThId.fetch_add(1, std::memory_order_relaxed);
+    }
+
 public:
+    std::vector<entt::entity> alwaysVisible[2];
     struct BuildSettings
     {
+        uint32_t maxDepth = MAX_DEPTH;
         uint32_t maxLeafPrimitives = MAX_LEAF_PRIMITIVES;
         bool useMedianSplit = true;  // false = SAH, true = median
         float rebuildThreshold = REBUILD_THRESHOLD;
@@ -188,11 +219,13 @@ public:
     };
 
     void setPendingUpdate() {
-        if (_pendingWork.load(std::memory_order_acquire))
-            return;
+        if (_threadDone.try_acquire()) {
+            nextThId.store(0, std::memory_order_release);
+            _threadStart.release();
+        }
 
-        _pendingWork.store(true, std::memory_order_release);
-        _pendingWork.notify_one();
+        //_pendingWork.store(true, std::memory_order_release);
+        //_pendingWork.notify_one();
     }
     bool hasValidHierarchy() const {
         return _threadIndexToUse.load() != UINT8_INVALID && curFrameIndex != UINT8_INVALID;
@@ -209,11 +242,9 @@ private:
     std::array<std::vector<TraversalNode>, 2> nodeStack;
     std::thread* rebuildThread;
     std::atomic<uint8_t> _threadIndexToUse = UINT8_INVALID;
-    std::atomic<bool> _pendingWork = false;
-    std::atomic<bool> _threadDone = false;
-    std::atomic<uint8_t> _threadLastSuccesful = UINT8_INVALID;
-    std::binary_semaphore _threadLock{ 1 };
-    std::atomic<bool> _threadRunning = false;
+    std::binary_semaphore _threadStart{ 0 };
+    std::binary_semaphore _threadDone{ 1 };
+    bool _threadRunning = true;
 
     // Building methods
     uint8_t _getIndexToUseThisFrame(uint8_t lastFrameIndex);
@@ -248,12 +279,12 @@ private:
         //}
 
         prim.bounds.setCoarseAABB(newWorldBounds);
-        prim.frameUpdated = currentFrame;
+        //prim.frameUpdated = currentFrame;
 
         // Mark nodes as dirty up the hierarchy
         // Note: This is simplified - in practice you'd want to track which 
         // leaf each primitive belongs to for faster updates
-        dirtyCount++;
+        //dirtyCount++;
     }
     void refitBottomUp(uint32_t nodeIndex, uint8_t index) {
         if (nodeIndex == 0) return;
@@ -287,9 +318,9 @@ private:
         }
     }
 
-    bool needsRebuild() const {
-        return dirtyCount > (primitives.size() * settings.rebuildThreshold);
-    }
+    //bool needsRebuild() const {
+    //    return dirtyCount > (primitives.size() * settings.rebuildThreshold);
+    //}
 
     // Helper methods
     bool boundsChanged(const AABB& oldBounds, const AABB& newBounds, float threshold = 0.01f) const {
@@ -439,7 +470,7 @@ private:
     }
 
     void computeNodeDepthRange(uint32_t nodeIndex, const glm::vec3& cameraPos,
-                               float& minDepth, float& maxDepth, uint8_t index) const {
+                               float& minDepth, float& maxDepth, uint8_t index) {
         if (nodeIndex == 0) {
             minDepth = maxDepth = 0.0f;
             return;
@@ -463,10 +494,24 @@ private:
 
 public:
     ~DualBVH() {
-        _threadRunning.store(false);
-        _pendingWork.store(true);
+        _threadRunning = false;
+        _threadStart.release();
         rebuildThread->join();
         delete rebuildThread;
+
+        workersRunning = false;
+        for (size_t i = 0; i < 4; ++i) {
+            startSemas[i]->release();
+            workers[i]->join();
+            delete workers[i];
+            workers[i] = nullptr;
+
+            delete startSemas[i];
+            startSemas[i] = nullptr;
+            delete doneSemas[i];
+            doneSemas[i] = nullptr;
+        }
+
     }
     explicit DualBVH(ArenaRegistry& registry, const BuildSettings& settings = {}) : settings(settings) {
         for (size_t i = 0; i < 2; ++i) {
@@ -480,12 +525,19 @@ public:
             nodeCount[i] = 0;
         }
 
-        _threadRunning.store(true);
-        _threadLastSuccesful.store(true);
+        _threadRunning = true;
         rebuildThread = new std::thread{
             DualBVH::_buildThreadMethod,
             this,
             std::ref(registry) };
+
+        workersRunning = true;
+        for (size_t i = 0; i < 4; ++i) {
+            startSemas[i] = new std::binary_semaphore{ 0 };
+            doneSemas[i] = new std::binary_semaphore{ 1 };
+            workers[i] = new std::thread{ DualBVH::_recursiveWorker, this, i };
+            workerResults[i] = 0;
+        }
 
     }
 
@@ -592,15 +644,15 @@ public:
     //        }
     //    }
     //}
-    void nextFrame() {
-        currentFrame++;
-        dirtyCount = 0;
-    }
+    //void nextFrame() {
+    //    currentFrame++;
+    //    dirtyCount = 0;
+    //}
 
     // Thread-safe accessors
     uint32_t getNodeCount(uint8_t index) const { return nodeCount[index]; }
     uint32_t getPrimitiveCount() const { return primitives.size(); }
-    bool isEmpty() const { return primitives.empty(); }
+    bool isEmpty(uint8_t index) const { return primitives[index].empty(); }
 
     // Debug/profiling methods
     //void printStats(uint8_t index) const {
@@ -635,13 +687,13 @@ public:
 
     // Validate tree structure (debug)
     bool validateTree(uint8_t index) const {
-        if (isEmpty()) return true;
+        if (isEmpty(index)) return true;
 
 
         std::function<bool(uint32_t, uint8_t)> validate = [&](uint32_t nodeIndex, uint8_t index) -> bool {
             if (nodeIndex == 0 || nodeIndex > nodeCount[index]) return false;
 
-            const BVHNode& node = nodes[currentFrame][nodeIndex];
+            const BVHNode& node = nodes[index][nodeIndex];
 
             if (node.isLeaf()) {
                 // Validate leaf node
@@ -650,7 +702,7 @@ public:
 
                 // Check bounds contain all primitives
                 for (uint32_t i = 0; i < node.primitiveCount; ++i) {
-                    uint32_t primIndex = primitiveIndices[currentFrame][node.firstPrimitive + i];
+                    uint32_t primIndex = primitiveIndices[index][node.firstPrimitive + i];
                     if (primIndex >= primitives.size()) return false;
 
                     // Note: This is a simplified check - in practice you'd want 
@@ -684,7 +736,7 @@ class BVHSystem
 private:
     DualBVH bvh;
     uint32_t lastUpdateFrame = UINT32_INVALID;
-    float counter = 0;
+    float counter = 4333424.0f;
 
 public:
     BVHSystem(ArenaRegistry& registry) :
@@ -696,9 +748,9 @@ public:
         counter += dt;
         if (counter >= time) {
             counter = 0;
-            //bvh.setPendingUpdate();
+            bvh.setPendingUpdate();
         }
-        bvh.nextFrame();
+        //bvh.nextFrame();
         lastUpdateFrame = currentFrame;
         
     }

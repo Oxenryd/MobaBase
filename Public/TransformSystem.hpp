@@ -2,9 +2,10 @@
 #define TRANSFORM_SYSTEM_HPP
 
 #include <thread>
-#include <barrier>
+#include <semaphore>
 #include <array>
 #include <atomic>
+#include <algorithm>
 
 #include "SystemECS.h"
 #include "ErrorCodes.hpp"
@@ -12,31 +13,98 @@
 #include "EnabledTag.hpp"
 #include "MobaMath.hpp"
 #include "BoundingSystem.h"
+#include "Range.hpp"
 
 
 
 class TransformSystem : public SystemECS_ModelTransformsProvider
 {
 	struct StackItem { entt::entity e; bool parentDirty; };
-	using RangePair = std::pair<uint32_t, uint32_t>;
 private:
-	ArenaVector<StackItem> stack;
+	std::array<std::vector<StackItem>, TRANSFORM_THREADS_MAX> m_threadsStacks;
 	ArenaUMap<entt::entity, size_t> m_entityRootIndexMap;
 	ArenaVector<entt::entity> m_roots;
 	ArenaVector<ModelTransform> m_modelTransforms;
 	ArenaVector<entt::entity> m_parentOf;
 	ArenaVector<std::vector<entt::entity>> m_childrenOf;
 
-	std::array<std::thread, 8> m_workers;
-	std::array<RangePair, 8> m_workerRanges;
-	std::barrier<> m_barrier;
-	uint8_t m_curNumWorkers = 0;
-	std::atomic_bool m_signalThreadStart{ false };
-	std::atomic_bool m_signalThreadFinish{ false };
-	std::atomic_bool m_threadsContinue{ true };
+	std::array<std::thread*, TRANSFORM_THREADS_MAX> m_workers;
+	std::array<Range, TRANSFORM_THREADS_MAX> m_workerRanges;
+	uint8_t m_curNumWorkers = 1;
+	BoundingSystem* m_boundSysPtr = nullptr;
+	std::array<std::binary_semaphore*, TRANSFORM_THREADS_MAX> m_startSemas;
+	std::array<std::binary_semaphore*, TRANSFORM_THREADS_MAX> m_doneSemas;
+	bool m_threadsRunning = true;
+	
 
-	INLINE void _workerThread() {
+	static void _workerThread(TransformSystem* this_, uint8_t tI) {
+		while (true) {
+			
+			this_->m_startSemas[tI]->acquire();
 
+			if (!this_->m_threadsRunning)
+				return;
+
+
+			// Push roots (cache this list, or gather each frame if you prefer)
+			auto& stack = this_->m_threadsStacks[tI];
+			Range& range = this_->m_workerRanges[tI];
+			for (size_t i = range.start(); i < range.end(); ++i) {
+				auto& root = this_->m_roots[i];
+				stack.push_back({ root, false });
+			}
+
+			while (!stack.empty()) {
+				const auto [e, parentDirty] = stack.back();
+				stack.pop_back();
+
+				if (!this_->m_reg->all_of<EnabledTag>(e))
+					continue;
+
+				auto& t = this_->m_reg->get<TransformComponent>(e);
+				t.state.clearByEnum(ObjectState::MovedThisFrame);
+				const bool selfDirtyLocal = t.state.hasFlag(ObjectState::DirtyTransform);
+				const bool worldDirty = parentDirty || selfDirtyLocal;
+
+				if (worldDirty) {
+					// Compute local TRS
+					glm::mat4 local = t.trs();
+
+					// Compose with parent (parent world is guaranteed up-to-date now)
+					if (!t.state.hasFlag(ObjectState::IgnoreParentTransform)) {
+						const entt::entity p = this_->m_parentOf.empty() ? entt::null : this_->m_parentOf[entt::to_integral(e)];
+						if (p != entt::null /* && m_reg->valid(p) */ && this_->m_reg->all_of<TransformComponent>(p)) {
+							const auto& pt = this_->m_reg->get<TransformComponent>(p);
+							this_->m_modelTransforms[t.matrixIndex] = this_->m_modelTransforms[pt.matrixIndex] * local;
+						} else {
+							this_->m_modelTransforms[t.matrixIndex] = local;
+						}
+					} else {
+						this_->m_modelTransforms[t.matrixIndex] = local;
+					}
+
+					// Bounds update
+					if (auto b = this_->m_reg->try_get<BoundingVolumeComponent>(e)) {
+						const auto& localAABB = this_->m_boundSysPtr->cachedLocals()[b->coarseIndexLocal];
+						this_->m_boundSysPtr->aabbs()[b->coarseIndexWorld] =
+							localAABB.transformed_noPerspective(this_->m_modelTransforms[t.matrixIndex]);
+					}
+
+					// Flags
+					t.state.clearByEnum(ObjectState::DirtyTransform);
+					if (selfDirtyLocal) t.state.setByEnum(ObjectState::MovedThisFrame);
+					if (parentDirty) t.state.setByEnum(ObjectState::ParentMovedThisFrame);
+
+
+					// Children
+					const auto& kids = this_->m_childrenOf[entt::to_integral(e)];
+					for (auto child : kids) {
+						stack.push_back({ child, worldDirty });
+					}
+				}
+			}
+			this_->m_doneSemas[tI]->release();
+		}
 	}
 
 	INLINE void _onDestroy(ArenaRegistry& reg, entt::entity entity) {
@@ -53,23 +121,6 @@ private:
 		}
 	}
 
-	//INLINE void _updateTransform(TransformComponent& transform, glm::mat4& trs, uint32_t entityIntegralId) {
-
-	//	// Combine with parent
-	//	if (!(transform.state.hasFlag(ObjectState::IgnoreParentTransform))) {
-	//		entt::entity parent = m_parentOf.empty() ? entt::null : m_parentOf[entityIntegralId];
-	//		if (parent != entt::null && m_reg->valid(parent) && m_reg->all_of<TransformComponent>(parent)) {
-	//			const auto& parentTransform = m_reg->get<TransformComponent>(parent);
-	//			m_modelTransforms[transform.matrixIndex] = m_modelTransforms[parentTransform.matrixIndex] * trs;
-
-	//		} else {
-	//			m_modelTransforms[transform.matrixIndex] = trs;
-	//		}
-	//	} else {
-	//		m_modelTransforms[transform.matrixIndex] = trs;
-	//	}
-	//}
-
 	INLINE void _checkEntityIsRoot(entt::entity e) {
 		auto id = entt::to_integral(e);
 		
@@ -82,12 +133,12 @@ private:
 				m_entityRootIndexMap.insert({ e, index });
 			}
 
-		} else {
-			auto it = m_entityRootIndexMap.find(e);
-			if (it != m_entityRootIndexMap.end()) {
-				m_roots[it->second] = m_roots.back();
-				m_roots.pop_back();
-			}
+			} else {
+				auto it = m_entityRootIndexMap.find(e);
+				if (it != m_entityRootIndexMap.end()) {
+					m_roots[it->second] = m_roots.back();
+					m_roots.pop_back();
+				}
 		}
 	}
 
@@ -95,129 +146,67 @@ public:
 	virtual ~TransformSystem() {
 		m_reg->on_destroy<TransformComponent>()
 			.disconnect<&TransformSystem::_onDestroy>(this);
+
+		m_threadsRunning = false;
+		for (size_t i = 0; i < TRANSFORM_THREADS_MAX; ++i) {
+			m_startSemas[i]->release();
+			m_workers[i]->join();
+			delete m_workers[i];
+			m_workers[i] = nullptr;
+			delete m_startSemas[i];
+			m_startSemas[i] = nullptr;
+			delete m_doneSemas[i];
+			m_doneSemas[i] = nullptr;
+		}
 	}
+
 	TransformSystem(ArenaRegistry* const registry, uint16_t sceneIndex, Arena* const arena)
-		: SystemECS_ModelTransformsProvider{registry, sceneIndex},
+		: SystemECS_ModelTransformsProvider{ registry, sceneIndex },
 		m_modelTransforms{ ArenaAllocator<ModelTransform>(arena) },
 		m_parentOf{ ArenaAllocator<entt::entity>(arena) },
 		m_childrenOf{ ArenaAllocator<entt::entity>(arena) },
-		stack{ ArenaAllocator<StackItem>(arena) },
 		m_roots{ ArenaAllocator<entt::entity>(arena) },
-		m_entityRootIndexMap{ ArenaAllocator<std::pair<entt::entity, size_t>>{arena}},
-		m_barrier{9}
-	{
+		m_entityRootIndexMap{ ArenaAllocator<std::pair<entt::entity, size_t>>{arena} }
+{
 		registry->on_destroy<TransformComponent>()
 			.connect<&TransformSystem::_onDestroy>(this);
 
-		stack.reserve(256);
+		for (auto& stack : m_threadsStacks)
+			stack.reserve(256);
+
+		// Start Threads
+		for (uint8_t i = 0; i < TRANSFORM_THREADS_MAX; ++i) {
+			m_workers[i] = new std::thread{ TransformSystem::_workerThread, this, i };
+			m_startSemas[i] = new std::binary_semaphore{ 0 };
+			m_doneSemas[i] = new std::binary_semaphore{ 0 };
+		}
 	}
 
-	//INLINE void run(BoundingSystem& boundSys)  {
-
-	//	auto view = m_reg->view<EnabledTag, TransformComponent>();
-
-	//	for (auto entity : view) {
-	//		auto& transform = view.get<TransformComponent>(entity);
-	//		auto id = entt::to_integral(entity);
-
-	//		transform.state.clearByEnum(ObjectState::MovedThisFrame);
-
-	//		if (!transform.state.hasFlag(ObjectState::DirtyTransform))
-	//			continue;
-
-	//		// Build local matrix
-	//		glm::mat4 trs = transform.trs();
-
-	//		// Combine with parent
-	//		_updateTransform(transform, trs, id);
-	//		//if (!(transform.state.hasFlag(ObjectState::IgnoreParentTransform))) {
-	//		//	entt::entity parent = m_parentOf.empty() ? entt::null : m_parentOf[id];
-	//		//	if (parent != entt::null && m_reg->valid(parent) && m_reg->all_of<TransformComponent>(parent)) {
-	//		//		const auto& parentTransform = m_reg->get<TransformComponent>(parent);
-	//		//		m_modelTransforms[transform.matrixIndex] = m_modelTransforms[parentTransform.matrixIndex] * trs;
-
-	//		//	} else {
-	//		//		m_modelTransforms[transform.matrixIndex] = trs;
-	//		//	}
-	//		//} else {
-	//		//	m_modelTransforms[transform.matrixIndex] = trs;
-	//		//}
-
-	//		// Move bounds if needed
-	//		auto bVolume = m_reg->try_get<BoundingVolumeComponent>(entity);
-	//		if (bVolume) {
-	//			auto& localAABB = boundSys.cachedLocals()[bVolume->coarseIndexLocal];
-	//			boundSys.aabbs()[bVolume->coarseIndexWorld] = localAABB.transformed_noPerspective(m_modelTransforms[transform.matrixIndex]);
-	//		}
-	//		
-	//		transform.state.clearByEnum(ObjectState::DirtyTransform);
-	//		transform.state.setByEnum(ObjectState::MovedThisFrame);
-	//	}
-
-	//}
 
 	INLINE void run(BoundingSystem& boundSys) {
 
-		stack.clear();
+		//TEST MT
+		static constexpr size_t workerDiv = (TRANSFORM_THREADS_MAX * (TRANSFORM_THREADS_MAX / 2));
+		m_boundSysPtr = &boundSys;
+		m_curNumWorkers = static_cast<uint8_t>(
+			std::clamp(m_roots.size() / workerDiv,
+					   static_cast <size_t>(1),
+					   static_cast<size_t>(TRANSFORM_THREADS_MAX)));
 
-		// Push roots (cache this list, or gather each frame if you prefer)
-		for (auto root : m_roots) {
-			stack.push_back({ root, false });
+		uint32_t offset = static_cast<uint32_t>(
+				std::ceil(static_cast<float>(m_roots.size() / static_cast<float>(m_curNumWorkers)))
+			);
+		for (uint32_t i = 0; i < m_curNumWorkers; ++i) {
+			uint32_t start = i * offset;
+			uint32_t count = (i == m_curNumWorkers - 1 && m_roots.size() % offset != 0)
+				? m_roots.size() % offset
+				: offset;
+			m_workerRanges[i] = { start, count };
+			m_startSemas[i]->release();
 		}
 
-		while (!stack.empty()) {
-			const auto [e, parentDirty] = stack.back();
-			stack.pop_back();
-
-			if (!m_reg->valid(e) || !m_reg->all_of<EnabledTag, TransformComponent>(e))
-				continue;
-
-			auto& t = m_reg->get<TransformComponent>(e);
-			t.state.clearByEnum(ObjectState::MovedThisFrame);
-			const bool selfDirtyLocal = t.state.hasFlag(ObjectState::DirtyTransform);
-			const bool worldDirty = parentDirty || selfDirtyLocal;
-
-			if (worldDirty) {
-				// Compute local TRS
-				glm::mat4 local = t.trs();
-
-				// Compose with parent (parent world is guaranteed up-to-date now)
-				if (!t.state.hasFlag(ObjectState::IgnoreParentTransform)) {
-					const entt::entity p = m_parentOf.empty() ? entt::null : m_parentOf[entt::to_integral(e)];
-					if (p != entt::null /* && m_reg->valid(p) */ && m_reg->all_of<TransformComponent>(p)) {
-						const auto& pt = m_reg->get<TransformComponent>(p);
-						m_modelTransforms[t.matrixIndex] = m_modelTransforms[pt.matrixIndex] * local;
-					} else {
-						m_modelTransforms[t.matrixIndex] = local;
-					}
-				} else {
-					m_modelTransforms[t.matrixIndex] = local;
-				}
-
-				// Bounds update
-				if (auto b = m_reg->try_get<BoundingVolumeComponent>(e)) {
-					const auto& localAABB = boundSys.cachedLocals()[b->coarseIndexLocal];
-					boundSys.aabbs()[b->coarseIndexWorld] =
-						localAABB.transformed_noPerspective(m_modelTransforms[t.matrixIndex]);
-				}
-
-				// Flags
-				t.state.clearByEnum(ObjectState::DirtyTransform);
-				if (selfDirtyLocal) t.state.setByEnum(ObjectState::MovedThisFrame);
-				if (parentDirty) t.state.setByEnum(ObjectState::ParentMovedThisFrame);
-
-
-				// Children
-				const auto& kids = m_childrenOf[entt::to_integral(e)];
-				for (auto child : kids) {
-					stack.push_back({ child, worldDirty });
-				}
-			}
-
-			//// Only traverse into children if something up this path was dirty.
-			//if (worldDirty) {
-
-			//}
+		for (size_t i = 0; i < m_curNumWorkers; ++i) {
+			m_doneSemas[i]->acquire();
 		}
 	}
 

@@ -9,6 +9,9 @@
 #define CLUSTER_THREADS_Z 4
 
 
+#define INSTANCE_FLAG 0x00000001
+
+
 static const uint LightType_Directional = 0;
 static const uint LightType_Point = 1;
 static const uint LightType_Spot = 2;
@@ -139,7 +142,7 @@ struct PhongTerms
 struct BaseMatPush
 {
     float4x4    modelToWorld;
-    uint        matrixIndex;
+    uint        flags;
     uint        matInstanceIndex;
     uint        boneOffset;
     uint        boneCount;
@@ -153,7 +156,7 @@ struct ModelTransform
 struct InstanceData
 {
     uint matrixIndex;
-    uint materialIndex;
+    uint matInstanceIndex;
     uint boneOffset;
     uint boneCount;
 };
@@ -208,6 +211,7 @@ struct BasePSIn
     [[vk::location(5)]] float3 binormal : BINORMAL;
     [[vk::location(6)]] float3 localNormal : TEXCOORD1;
     [[vk::location(7)]] float2 texCoord : TEX;
+    [[vk::location(8)]] uint instanceID : TEXCOORD3;
 };
 
 

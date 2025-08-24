@@ -14,7 +14,16 @@ float4 main(BasePSIn input) : SV_Target
     float2 fixedTexUV = float2(input.texCoord.x, 1.0 - input.texCoord.y);
 
     
-    uint matIndex = basePush.matInstanceIndex != UINT_INVALID ? basePush.matInstanceIndex : 0;
+    //return float4(1.0, 0.0, 0.0, 1.0) + RetainGlobals();
+    
+    uint matIndex = basePush.flags & INSTANCE_FLAG
+        ? instanceData[input.instanceID].matInstanceIndex
+        : basePush.matInstanceIndex != UINT_INVALID
+            ? basePush.matInstanceIndex
+            : 0;
+    
+    
+    
     BaseMaterialInstance M = baseMatInstances[matIndex];
     
     // Ambient

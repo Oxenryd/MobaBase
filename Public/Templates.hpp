@@ -33,7 +33,7 @@ public:
         auto& lightRef = lightSystem().registerLight(dirLight, m_skyLight);
 
         
-        size_t numOfObjects = 2048;
+        size_t numOfObjects = 4096 * 16;
         m_goList.reserve(numOfObjects);
         auto step = MMath::fTAU / numOfObjects;
         const std::string pathObject = std::format("{}{}", ASSETS_DIR, "Sphere/sphere.obj");
@@ -43,6 +43,9 @@ public:
             sceneRender().createMeshFromModel(pathObject, &objectMesh, m_goList[i].entity());
             auto trans = objectMesh.getTransform();
             trans.modifyPosition() = glm::vec3{std::cos(step * i) * 12, std::sin(step * i) * 12, 0};
+            auto children = trans.getChildrenEntities();
+            BoundingVolume bVol = BoundingVolume{ &m_reg, children[0] };
+            bVol.setFlags((BoundingVolumeFlags)0);
         }
 
         //m_go1 = gameObjectSystem().createGameObject<GameObject>("Room");
@@ -161,8 +164,8 @@ public:
                                        });
 
 
-        Engine::getInstance()->getGlobalSystem().printAllTags();
-        transformSystem().printHierarchy();
+        //Engine::getInstance()->getGlobalSystem().printAllTags();
+        //transformSystem().printHierarchy();
     }
 
     void update(float dt) {

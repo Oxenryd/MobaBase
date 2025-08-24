@@ -334,10 +334,6 @@ struct InstanceData
 	uint32_t boneCount{ 0 };
 
 	operator uint32_t() {
-		Index32 test = 32;
-
-		uint32_t test2 = test;
-
 		return matInstanceIndex;
 	}
 	bool isValid() {
@@ -364,10 +360,16 @@ struct InstanceData
 //	glm::vec2 uv;
 //};
 
+enum class BaseMatPushFlags : uint32_t
+{
+	None		= 0x00000000,
+	Instanced	= 0x00000001
+};
+
 struct BaseMatPush
 {
 	glm::mat4x4 modelToWorld{ 1 };
-	uint32_t matrixIndex{ UINT32_INVALID };
+	uint32_t flags{ 0 };
 	uint32_t matInstanceIndex{ UINT32_INVALID };
 	uint32_t boneOffset{ UINT32_INVALID };
 	uint32_t boneCount{ 0 };

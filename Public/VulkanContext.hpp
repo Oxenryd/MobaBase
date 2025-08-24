@@ -565,10 +565,14 @@ private:
 									std::vector<VkDescriptorSetLayout>& layouts, std::vector<BindSetCombo>& descriptorSetsList,
 									bool doAllocs) {
 
+		auto caps = queryDescriptorCaps(m_phyDevice);
+
 		for (auto& [set, key] : material.descriptorSetLayoutKeys) {
 
 			VkDescriptorSetLayout layout;
 			auto layoutIt = descSetLayoutCache.find(key);
+			std::vector<VkDescriptorSetLayoutBindingFlagsCreateInfo> bindingFlagsList;
+			bindingFlagsList.reserve(32);
 			if (layoutIt == descSetLayoutCache.end()) {
 
 				// not found, create the descriptor set
@@ -580,13 +584,38 @@ private:
 					binding.descriptorCount = key.counts[i];
 					binding.stageFlags = key.stageFlags[i];
 					binding.pImmutableSamplers = nullptr;
+
 					setBindings[set].push_back(binding);
 				}
+
+				VkDescriptorSetLayoutBindingFlagsCreateInfo* flagsPtr = nullptr;
+				//if (set == 0 && material.vShaderName != SHADER_SHAPERENDERER_VS ) {
+				//	std::array<VkDescriptorBindingFlags, 3> bindingFlags = {
+				//		0,
+
+				//		VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT, //|
+				//		//VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT |
+				//		//VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT,
+
+				//		VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT |
+				//		//VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT |
+				//		VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT
+				//	};
+				//	VkDescriptorSetLayoutBindingFlagsCreateInfo flagsInfo{
+				//		VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO,
+				//		nullptr,
+				//		(uint32_t)bindingFlags.size(),
+				//		bindingFlags.data()
+				//	};
+				//	bindingFlagsList.push_back(flagsInfo);
+				//	flagsPtr = &bindingFlagsList.back();
+				//}
 
 				VkDescriptorSetLayoutCreateInfo layoutInfo{};
 				layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
 				layoutInfo.bindingCount = static_cast<uint32_t>(setBindings[set].size());
 				layoutInfo.pBindings = setBindings[set].data();
+				layoutInfo.pNext = flagsPtr;
 				layoutInfo.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
 
 				if (doAllocs)
@@ -598,7 +627,7 @@ private:
 			uint64_t layoutHandle = reinterpret_cast<uint64_t>(layout);
 
 			std::vector<PendingWrite> pendingWrites;
-			pendingWrites.reserve(key.bindings.size() * VULKAN_FRAMES_IN_FLIGHT);
+			pendingWrites.reserve(key.bindings.size() * VULKAN_FRAMES_IN_FLIGHT * 16);
 
 			std::vector< VkDescriptorSetVariableDescriptorCountAllocateInfo> pendingCounts;
 			pendingCounts.reserve(key.bindings.size() * VULKAN_FRAMES_IN_FLIGHT);
@@ -646,6 +675,8 @@ private:
 					rBind.handle = reinterpret_cast<uint64_t>(&matBuf_baseMatInstances);
 					layoutHandle = 0;
 
+
+
 				} else if (set == MAT_MODELMATRICES_SET && renderMan->getParamName(key.nameIndices[i]) == MAT_MODELMATRICES_NAME) {
 					rBind.handle = reinterpret_cast<uint64_t>(&matBuf_modelTransforms);
 					layoutHandle = 0;
@@ -662,7 +693,7 @@ private:
 						pw.write.dstBinding = key.bindings[i];
 						pw.write.dstArrayElement = 0;
 						pw.write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-						pw.write.descriptorCount = 1;
+						pw.write.descriptorCount = 1; // caps.maxSetSSBOs;
 
 						pendingWrites.push_back(pw);
 						pendingWrites.back().write.pBufferInfo = &pendingWrites.back().bufferInfo;
@@ -672,15 +703,15 @@ private:
 					rBind.handle = reinterpret_cast<uint64_t>(&baseSamplers);
 					layoutHandle = 0;
 
-				} else if (set == MAT_BASE_MAT_INSTANCES_INDICES_SET && renderMan->getParamName(key.nameIndices[i]) == MAT_BASE_MAT_INSTANCES_INDICES_NAME) {
+				} else if (set == MAT_BASE_INSTANCES_DATA_SET && renderMan->getParamName(key.nameIndices[i]) == MAT_BASE_INSTANCES_DATA_NAME) {
 
-					rBind.handle = reinterpret_cast<uint64_t>(&instanceIndexStage);
+					rBind.handle = reinterpret_cast<uint64_t>(this);
 					layoutHandle = 0;
 					for (size_t j = 0; j < VULKAN_FRAMES_IN_FLIGHT; j++) {
 
 						PendingWrite pw{};
 
-						pw.bufferInfo.buffer = instanceIndexStageBuffer[j];
+						pw.bufferInfo.buffer = instanceIndexBuffer[j];
 						pw.bufferInfo.offset = 0;
 						pw.bufferInfo.range = VK_WHOLE_SIZE;
 
@@ -689,7 +720,7 @@ private:
 						pw.write.dstBinding = key.bindings[i];
 						pw.write.dstArrayElement = 0;
 						pw.write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-						pw.write.descriptorCount = 1;
+						pw.write.descriptorCount = 1;// caps.maxSetSSBOs;
 
 						pendingWrites.push_back(pw);
 						pendingWrites.back().write.pBufferInfo = &pendingWrites.back().bufferInfo;
@@ -975,12 +1006,14 @@ public:
 	std::vector<ModelTransform> moddelTransforms;
 	VkBuffer matBuf_modelTransforms[VULKAN_FRAMES_IN_FLIGHT] = { nullptr, nullptr };
 	VkDeviceMemory matDevMem_modelTransforms[VULKAN_FRAMES_IN_FLIGHT] = { nullptr, nullptr };
+	size_t modelTransforms_lastBufferSize[VULKAN_FRAMES_IN_FLIGHT] = { 0, 0 };
 
 	std::vector<VkTextureResource> texResources;
 
-	std::vector<uint32_t> instanceIndexStage;
-	VkBuffer instanceIndexStageBuffer[VULKAN_FRAMES_IN_FLIGHT] = { nullptr, nullptr };
-	VkDeviceMemory instanceIndexStageMemory[VULKAN_FRAMES_IN_FLIGHT] = { nullptr, nullptr };
+	//std::vector<uint32_t> instanceIndexStage;
+	VkBuffer instanceIndexBuffer[VULKAN_FRAMES_IN_FLIGHT] = { nullptr, nullptr };
+	VkDeviceMemory instanceIndexMemory[VULKAN_FRAMES_IN_FLIGHT] = { nullptr, nullptr };
+	size_t instancesIndex_lastBufferSize[VULKAN_FRAMES_IN_FLIGHT] = { 0, 0 };
 
 	std::vector<BaseMaterialInstance> matData_baseMatInstances;
 	VkBuffer matBuf_baseMatInstances[VULKAN_FRAMES_IN_FLIGHT] = { nullptr, nullptr };
@@ -1587,15 +1620,15 @@ public:
 
 
 			// Instance Stage Indices
-			instanceIndexStage.resize(VULKAN_INSTANCE_INDEX_STAGE_SIZE);
+			//instanceIndexStage.resize(VULKAN_INSTANCE_INDEX_STAGE_SIZE);
 			VkBufferCreateInfo indicesBufferInfo{};
 			indicesBufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-			indicesBufferInfo.size = sizeof(uint32_t) * instanceIndexStage.size();
+			indicesBufferInfo.size = sizeof(uint32_t) * VULKAN_INSTANCE_INDEX_STAGE_SIZE;//instanceIndexStage.size();
 			indicesBufferInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
 			indicesBufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-			Vk_CHECK(vkResult, vkCreateBuffer(m_vkDevice, &indicesBufferInfo, nullptr, &instanceIndexStageBuffer[i]));
+			Vk_CHECK(vkResult, vkCreateBuffer(m_vkDevice, &indicesBufferInfo, nullptr, &instanceIndexBuffer[i]));
 
-			vkGetBufferMemoryRequirements(m_vkDevice, instanceIndexStageBuffer[i], &memRequirements);
+			vkGetBufferMemoryRequirements(m_vkDevice, instanceIndexBuffer[i], &memRequirements);
 
 			VkMemoryAllocateInfo indexAllocInfo{};
 			indexAllocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
@@ -1604,8 +1637,8 @@ public:
 															VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
 															m_phyDevice);
 
-			Vk_CHECK(vkResult, vkAllocateMemory(m_vkDevice, &indexAllocInfo, nullptr, &instanceIndexStageMemory[i]));
-			Vk_CHECK(vkResult, vkBindBufferMemory(m_vkDevice, instanceIndexStageBuffer[i], instanceIndexStageMemory[i], 0));
+			Vk_CHECK(vkResult, vkAllocateMemory(m_vkDevice, &indexAllocInfo, nullptr, &instanceIndexMemory[i]));
+			Vk_CHECK(vkResult, vkBindBufferMemory(m_vkDevice, instanceIndexBuffer[i], instanceIndexMemory[i], 0));
 
 
 

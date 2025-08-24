@@ -22,20 +22,6 @@ if(MSVC)
     set(CMAKE_STATIC_LINKER_FLAGS_RELEASE "${CMAKE_STATIC_LINKER_FLAGS_RELEASE} /LTCG")
     set(CMAKE_SHARED_LINKER_FLAGS_RELEASE "${CMAKE_SHARED_LINKER_FLAGS_RELEASE} /LTCG")
 
-
-	foreach(flag_var
-            CMAKE_C_FLAGS_RELEASE
-            CMAKE_CXX_FLAGS_RELEASE
-            CMAKE_C_FLAGS_RELWITHDEBINFO
-            CMAKE_CXX_FLAGS_RELWITHDEBINFO)
-        string(REPLACE "/O2" "/O2 /Zi" ${flag_var} "${${flag_var}}")   # Optimized + debug info
-    endforeach()
-
-    # Make the linker emit a .pdb file
-    set(CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} /DEBUG")
-    set(CMAKE_SHARED_LINKER_FLAGS_RELEASE "${CMAKE_SHARED_LINKER_FLAGS_RELEASE} /DEBUG")
-    set(CMAKE_STATIC_LINKER_FLAGS_RELEASE "${CMAKE_STATIC_LINKER_FLAGS_RELEASE} /DEBUG")
-
 endif()
 
 # FETCHES -----------------------------------------------------------------------------
@@ -211,6 +197,7 @@ add_executable (MobaBase
 	"Public/Frustum.hpp"
 	"Public/TransformComponent.hpp"
 	"Public/GlfwSurface.h"
+	"Public/Range.hpp"
 
 
 	"Private/Engine.cpp"
@@ -325,9 +312,9 @@ target_compile_definitions(MobaBase PRIVATE
 	MAT_TEXTURES_SET=1
 	MAT_TEXTURES_BIND=3
 
-	MAT_BASE_MAT_INSTANCES_INDICES_NAME=\"instanceData\"
-	MAT_BASE_MAT_INSTANCES_INDICES_SET=0
-	MAT_BASE_MAT_INSTANCES_INDICES_BIND=3
+	MAT_BASE_INSTANCES_DATA_NAME=\"instanceData\"
+	MAT_BASE_INSTANCES_DATA_SET=0
+	MAT_BASE_INSTANCES_DATA_BIND=3
 
 	MAT_BASE_MAT_INSTANCES_NAME=\"baseMatInstances\"
 	MAT_BASE_MAT_INSTANCES_SET=1
@@ -355,6 +342,7 @@ target_compile_definitions(MobaBase PRIVATE
 	LAYERS_FIELD_TYPE=uint32_t
 	SCENE_MAX_SCENES=512
 	RENDER_SCENE_MAX_THREADS=128
+	TRANSFORM_THREADS_MAX=16
 
 	# Directories
 	SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/\"

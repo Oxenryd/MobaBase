@@ -2,6 +2,7 @@
 #include "VulkanContext.hpp"
 #include <format>
 #include <chrono>
+#include <set>
 
 INLINE MeshDrawCommand VulkanContext::subMeshEntity_to_drawCommand(SceneBase* scene, ArenaRegistry& reg, entt::entity entity) {
 	auto& subMeshComp = reg.get<SubMeshComponent>(entity);
@@ -25,7 +26,6 @@ void VulkanContext::draw(const DrawContext& ctx) {
 	}
 
 	auto& frame = frameSync[currentFrame];
-
 
 	// Wait for previous frame fence 
 	vkWaitForFences(m_vkDevice, 1, &frame.inFlight, VK_TRUE, UINT64_MAX);
@@ -72,7 +72,7 @@ void VulkanContext::draw(const DrawContext& ctx) {
 	camData.clustersX = VULKAN_LIGHT_CLUSTERS_X;
 	camData.clustersY = VULKAN_LIGHT_CLUSTERS_Y;
 	camData.clustersZ = VULKAN_LIGHT_CLUSTERS_Z;
-	//Frustum& f = mainCam->getFrustum();
+	Frustum& f = mainCam->getFrustum();
 
 	// Update CameraData cBuffer
 	void* mappedData = nullptr;
@@ -98,6 +98,201 @@ void VulkanContext::draw(const DrawContext& ctx) {
 	const uint32_t groupsZ = ceilDiv(camData.clustersZ, LOCAL_Z);
 
 	vkCmdDispatch(frame.cmdBuffer, VULKAN_LIGHT_CLUSTERS_X, VULKAN_LIGHT_CLUSTERS_Y, VULKAN_LIGHT_CLUSTERS_Z);
+
+
+	//// In updateLightsData(), after vkBindBufferMemory
+	//void* mappedData2 = nullptr;
+	//vkMapMemory(m_vkDevice, lightsMemory[currentFrame], 0, sizeof(GPULight) * lightsData.size(), 0, &mappedData2);
+	//memcpy(mappedData2, lightsData.data(), sizeof(GPULight) * lightsData.size());
+	//vkUnmapMemory(m_vkDevice, lightsMemory[currentFrame]);
+	//// DEBUG: Verify the data
+	//GPULight* uploadedLights = (GPULight*)mappedData2;
+	//for (size_t j = 0; j < lightsData.size(); j++) {
+	//	printf("Light %zu: type=%d, pos=(%f,%f,%f) flags:%zu\n", j, uploadedLights[j].type,
+	//		   uploadedLights[j].positionVS.x, uploadedLights[j].positionVS.y, uploadedLights[j].positionVS.z,
+	//		   uploadedLights[j].flags);
+	//}
+
+
+
+
+	// Find the draw commands
+	struct BoundedInstanceData
+	{
+		std::vector<InstanceData> instances;
+		AABB bounds;
+	};
+	static std::vector<MeshDrawCommand> drawCmds;
+	static std::unordered_map<uint32_t, BoundedInstanceData> submeshDrawInstanceData[VULKAN_FRAMES_IN_FLIGHT];
+	static std::vector<ModelTransform> collectedMatrices[VULKAN_FRAMES_IN_FLIGHT];
+	static std::unordered_set<uint32_t> submeshKeysWithMultipleInstances[VULKAN_FRAMES_IN_FLIGHT];
+	collectedMatrices[currentFrame].clear();
+	submeshDrawInstanceData[currentFrame].clear();
+	drawCmds.clear();
+	submeshKeysWithMultipleInstances[currentFrame].clear();
+	for (auto& scene : Engine::getInstance()->getActiveScenes()) {
+
+		if (collectedMatrices[currentFrame].capacity() < scene->transformSystem().modelTransforms().size())
+			collectedMatrices[currentFrame].reserve(collectedMatrices[currentFrame].capacity() + scene->transformSystem().modelTransforms().size());
+
+		collectedMatrices[currentFrame].insert(collectedMatrices[currentFrame].end(),
+								 scene->transformSystem().modelTransforms().begin(),
+								 scene->transformSystem().modelTransforms().end());
+
+		auto& reg = scene->registry();
+		for (auto& entity : scene->cullResults.visibleEntities) {
+			auto newDrawCmd = subMeshEntity_to_drawCommand(scene, reg, entity);
+			auto it = submeshDrawInstanceData[currentFrame].find(newDrawCmd.submeshOffset);
+			if (it == submeshDrawInstanceData[currentFrame].end()) {
+				drawCmds.push_back(newDrawCmd);
+				submeshDrawInstanceData[currentFrame].insert({ newDrawCmd.submeshOffset, BoundedInstanceData() });
+				
+				auto& transComp = scene->registry().get<TransformComponent>(newDrawCmd.subMeshEntity);
+				InstanceData instData{};
+				instData.matInstanceIndex = newDrawCmd.materialIndex;				
+				instData.matrixIndex = transComp.matrixIndex;
+				submeshDrawInstanceData[currentFrame][newDrawCmd.submeshOffset].instances.push_back(instData);
+				BoundingVolume bVol = BoundingVolume{ &scene->registry() , newDrawCmd.subMeshEntity};
+				submeshDrawInstanceData[currentFrame][newDrawCmd.submeshOffset].bounds.merge(bVol.getCoarseAABB());
+
+			} else {
+				auto& transComp = scene->registry().get<TransformComponent>(newDrawCmd.subMeshEntity);
+				InstanceData instData{};
+				instData.matInstanceIndex = newDrawCmd.materialIndex;
+				instData.matrixIndex = transComp.matrixIndex;
+				submeshDrawInstanceData[currentFrame][newDrawCmd.submeshOffset].instances.push_back(instData);
+				BoundingVolume bVol = BoundingVolume{ &scene->registry() , newDrawCmd.subMeshEntity };
+				submeshDrawInstanceData[currentFrame][newDrawCmd.submeshOffset].bounds.merge(bVol.getCoarseAABB());
+				
+				submeshKeysWithMultipleInstances[currentFrame].insert(it->first);
+			}
+		}
+	}
+	std::sort(drawCmds.begin(), drawCmds.end());
+
+
+	// push matrices to GPU
+	{
+		VkResult vkResult{};
+		VkDeviceSize bufferSize = sizeof(ModelTransform) * collectedMatrices[currentFrame].size();
+		VkBufferCreateInfo createInfo{};
+		createInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+		createInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+		createInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+		createInfo.size = bufferSize;
+		if (modelTransforms_lastBufferSize[currentFrame] != bufferSize) {
+			vkDestroyBuffer(m_vkDevice, matBuf_modelTransforms[currentFrame], nullptr);
+			modelTransforms_lastBufferSize[currentFrame] = bufferSize;
+
+			if (matDevMem_modelTransforms[currentFrame] != VK_NULL_HANDLE)
+				vkFreeMemory(m_vkDevice, matDevMem_modelTransforms[currentFrame], nullptr);
+
+			vkResult = vkCreateBuffer(m_vkDevice, &createInfo, nullptr, &matBuf_modelTransforms[currentFrame]);
+			VkMemoryRequirements bufferMemReq{};
+			vkGetBufferMemoryRequirements(m_vkDevice, matBuf_modelTransforms[currentFrame], &bufferMemReq);
+			VkMemoryAllocateInfo allocInfo{};
+			allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+			allocInfo.allocationSize = bufferMemReq.size;
+			allocInfo.memoryTypeIndex = findMemoryType(
+				bufferMemReq.memoryTypeBits,
+				VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+				m_phyDevice
+			);
+			vkResult = vkAllocateMemory(m_vkDevice, &allocInfo, nullptr, &matDevMem_modelTransforms[currentFrame]);
+			vkResult = vkBindBufferMemory(m_vkDevice, matBuf_modelTransforms[currentFrame], matDevMem_modelTransforms[currentFrame], 0);
+		
+			VkDescriptorSet matricesSet = bindingToDescriptorSet[{MAT_MODELMATRICES_BIND, MAT_MODELMATRICES_SET, 0}][currentFrame];
+			std::vector<VkWriteDescriptorSet> descriptorWrites;
+			VkDescriptorBufferInfo modelMatricesBufferInfo{};
+			modelMatricesBufferInfo.buffer = matBuf_modelTransforms[currentFrame];
+			modelMatricesBufferInfo.offset = 0;
+			modelMatricesBufferInfo.range = VK_WHOLE_SIZE;
+
+			VkWriteDescriptorSet matrixDataWrite{};
+			matrixDataWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+			matrixDataWrite.dstSet = matricesSet;
+			matrixDataWrite.dstBinding = MAT_MODELMATRICES_BIND;
+			matrixDataWrite.dstArrayElement = 0;
+			matrixDataWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+			matrixDataWrite.descriptorCount = 1;
+			matrixDataWrite.pBufferInfo = &modelMatricesBufferInfo;
+			vkUpdateDescriptorSets(m_vkDevice, 1, &matrixDataWrite, 0, nullptr);
+		
+		}
+
+		void* data;
+		vkMapMemory(m_vkDevice, matDevMem_modelTransforms[currentFrame], 0, bufferSize, 0, &data);
+		memcpy(data, collectedMatrices[currentFrame].data(), (size_t)bufferSize);
+		vkUnmapMemory(m_vkDevice, matDevMem_modelTransforms[currentFrame]);
+	}
+
+
+	// update instanceData on gpu
+	static std::vector<InstanceData> instDataTemp[VULKAN_FRAMES_IN_FLIGHT];
+	instDataTemp[currentFrame].clear();
+	for (auto& key : submeshKeysWithMultipleInstances[currentFrame]) {
+
+
+		for (auto& instData : submeshDrawInstanceData[currentFrame][key].instances)
+			instDataTemp[currentFrame].push_back(instData);
+
+
+		// Copy instance data to GPU
+		{
+			VkResult vkResult{};
+			VkDeviceSize bufferSize = sizeof(InstanceData) * instDataTemp[currentFrame].size();
+			VkBufferCreateInfo createInfo{};
+			createInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+			createInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+			createInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+			createInfo.size = bufferSize;
+			if (instancesIndex_lastBufferSize[currentFrame] != bufferSize) {
+				vkDestroyBuffer(m_vkDevice, instanceIndexBuffer[currentFrame], nullptr);
+				instancesIndex_lastBufferSize[currentFrame] = bufferSize;
+
+				if (instanceIndexMemory[currentFrame] != VK_NULL_HANDLE)
+					vkFreeMemory(m_vkDevice, instanceIndexMemory[currentFrame], nullptr);
+
+				vkResult = vkCreateBuffer(m_vkDevice, &createInfo, nullptr, &instanceIndexBuffer[currentFrame]);
+				VkMemoryRequirements bufferMemReq{};
+				vkGetBufferMemoryRequirements(m_vkDevice, instanceIndexBuffer[currentFrame], &bufferMemReq);
+				VkMemoryAllocateInfo allocInfo{};
+				allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+				allocInfo.allocationSize = bufferMemReq.size;
+				allocInfo.memoryTypeIndex = findMemoryType(
+					bufferMemReq.memoryTypeBits,
+					VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+					m_phyDevice
+				);
+				vkResult = vkAllocateMemory(m_vkDevice, &allocInfo, nullptr, &instanceIndexMemory[currentFrame]);
+				vkResult = vkBindBufferMemory(m_vkDevice, instanceIndexBuffer[currentFrame], instanceIndexMemory[currentFrame], 0);
+
+				VkDescriptorSet instanceIndexSet = bindingToDescriptorSet[{MAT_BASE_INSTANCES_DATA_BIND, MAT_BASE_INSTANCES_DATA_SET, 0}][currentFrame];
+				std::vector<VkWriteDescriptorSet> descriptorWrites;
+				VkDescriptorBufferInfo instanceIndexBufferInfo{};
+				instanceIndexBufferInfo.buffer = instanceIndexBuffer[currentFrame];
+				instanceIndexBufferInfo.offset = 0;
+				instanceIndexBufferInfo.range = VK_WHOLE_SIZE;
+				VkWriteDescriptorSet instanceDataWrite{};
+				instanceDataWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+				instanceDataWrite.dstSet = instanceIndexSet;
+				instanceDataWrite.dstBinding = MAT_BASE_INSTANCES_DATA_BIND;
+				instanceDataWrite.dstArrayElement = 0;
+				instanceDataWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+				instanceDataWrite.descriptorCount = 1;
+				instanceDataWrite.pBufferInfo = &instanceIndexBufferInfo;
+				vkUpdateDescriptorSets(m_vkDevice, 1, &instanceDataWrite, 0, nullptr);
+
+			}
+
+			void* data;
+			vkMapMemory(m_vkDevice, instanceIndexMemory[currentFrame], 0, bufferSize, 0, &data);
+			memcpy(data, instDataTemp[currentFrame].data(), (size_t)bufferSize);
+			vkUnmapMemory(m_vkDevice, instanceIndexMemory[currentFrame]);
+
+		}
+
+	}
 
 	// Barrier: make compute writes visible to graphics reads
 #if VK_HEADER_VERSION >= 230  // assuming you have 1.3 / sync2
@@ -127,42 +322,6 @@ void VulkanContext::draw(const DrawContext& ctx) {
 		0, nullptr,
 		0, nullptr);
 #endif
-
-
-
-
-	//// In updateLightsData(), after vkBindBufferMemory
-	//void* mappedData2 = nullptr;
-	//vkMapMemory(m_vkDevice, lightsMemory[currentFrame], 0, sizeof(GPULight) * lightsData.size(), 0, &mappedData2);
-	//memcpy(mappedData2, lightsData.data(), sizeof(GPULight) * lightsData.size());
-	//vkUnmapMemory(m_vkDevice, lightsMemory[currentFrame]);
-	//// DEBUG: Verify the data
-	//GPULight* uploadedLights = (GPULight*)mappedData2;
-	//for (size_t j = 0; j < lightsData.size(); j++) {
-	//	printf("Light %zu: type=%d, pos=(%f,%f,%f) flags:%zu\n", j, uploadedLights[j].type,
-	//		   uploadedLights[j].positionVS.x, uploadedLights[j].positionVS.y, uploadedLights[j].positionVS.z,
-	//		   uploadedLights[j].flags);
-	//}
-
-
-
-
-	// Find the draw commands
-	static std::vector<MeshDrawCommand> drawCmds;
-	drawCmds.clear();
-	for (auto& scene : Engine::getInstance()->getActiveScenes()) {
-
-		auto& reg = scene->registry();
-		for (auto& entity : scene->cullResults.visibleEntities) {
-			drawCmds.push_back(subMeshEntity_to_drawCommand(scene, reg, entity));
-		}
-	}
-	std::sort(drawCmds.begin(), drawCmds.end());
-
-
-
-
-
 
 
 	// Begin Render Pass
@@ -198,7 +357,13 @@ void VulkanContext::draw(const DrawContext& ctx) {
 	uint32_t drawCount = 0;
 	uint32_t pipelinesCount = 0;
 	for (const auto& cmd : drawCmds) {
-	
+		auto instanceSize = submeshDrawInstanceData[currentFrame][cmd.submeshOffset].instances.size();
+		if (instanceSize > 1) {
+			auto& aabb = submeshDrawInstanceData[currentFrame][cmd.submeshOffset].bounds;
+			if (!MMath::aabbVisible(aabb.min, aabb.max, f))
+				continue;	
+		}
+
 		auto* scene = Engine::getInstance()->getScene(cmd.sceneIndex);
 
 		Material* matBase = RenderManager::getInstance()->getMaterial(cmd.materialIndex);
@@ -240,23 +405,43 @@ void VulkanContext::draw(const DrawContext& ctx) {
 			lastMatIndex = cmd.materialIndex;
 		}
 
-		// Push
-		BaseMatPush push{};
-		push.matrixIndex = UINT32_INVALID;
-		push.matInstanceIndex = cmd.instanceIndex;
-		auto& transComp = scene->registry().get<TransformComponent>(cmd.subMeshEntity);
-		push.modelToWorld = scene->transformSystem().modelTransforms()[transComp.matrixIndex];
-		vkCmdPushConstants(frame.cmdBuffer, pipelineLayouts[matBase->pipelineLayoutId], VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
-						   0, sizeof(BaseMatPush), &push);
-
 		
-		auto& submesh = scene->sceneRender().getSubMeshes()[cmd.submeshOffset];
-		auto vertexOffset = submesh.vertexOffset;
-		auto indexOffset = submesh.indexOffset;
-		auto indexCount = submesh.indexCount;
+		if (instanceSize > 1) {
+			
+			// Push for instanced
+			BaseMatPush push{};
+			push.flags = (uint32_t)BaseMatPushFlags::Instanced;
+			vkCmdPushConstants(frame.cmdBuffer, pipelineLayouts[matBase->pipelineLayoutId], VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+							   0, sizeof(BaseMatPush), &push);
 
-		vkCmdDrawIndexed(frame.cmdBuffer, indexCount, 1, indexOffset, vertexOffset, 0);
-		drawCount++;
+			auto& submesh = scene->sceneRender().getSubMeshes()[cmd.submeshOffset];
+			auto vertexOffset = submesh.vertexOffset;
+			auto indexOffset = submesh.indexOffset;
+			auto indexCount = submesh.indexCount;
+
+			vkCmdDrawIndexed(frame.cmdBuffer, indexCount, static_cast<uint32_t>(instanceSize), indexOffset, vertexOffset, 0);
+			drawCount++;
+
+
+		} else {
+			// Push
+			BaseMatPush push{};
+			push.flags = 0;
+			push.matInstanceIndex = cmd.instanceIndex;
+			auto& transComp = scene->registry().get<TransformComponent>(cmd.subMeshEntity);
+			push.modelToWorld = scene->transformSystem().modelTransforms()[transComp.matrixIndex];
+			vkCmdPushConstants(frame.cmdBuffer, pipelineLayouts[matBase->pipelineLayoutId], VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+							   0, sizeof(BaseMatPush), &push);
+
+
+			auto& submesh = scene->sceneRender().getSubMeshes()[cmd.submeshOffset];
+			auto vertexOffset = submesh.vertexOffset;
+			auto indexOffset = submesh.indexOffset;
+			auto indexCount = submesh.indexCount;
+
+			vkCmdDrawIndexed(frame.cmdBuffer, indexCount, 1, indexOffset, vertexOffset, 0);
+			drawCount++;
+		}
 	}
 
 
@@ -406,7 +591,6 @@ void VulkanContext::preDraw(RenderManager* const renderMan) {
 		auto* lightClusterCs = renderMan->getShader(SHADER_BASE_LIGHTCLUSTER_CS);
 		createLightClusterPipeline(lightClusterCs);
 	}
-
 
 	// Reset stuff
 	pendingLightUpdates.clear();
