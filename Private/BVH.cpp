@@ -27,7 +27,7 @@ uint8_t DualBVH::_getIndexToUseThisFrame(uint8_t lastFrameIndex) {
 
     //if (_threadLastSuccesful.load())
     //    return lastFrameIndex;
-    while (_threadIndexToUse == UINT8_INVALID) {}
+    //while (_threadIndexToUse == UINT8_INVALID) {}
 
     return _threadIndexToUse.load(std::memory_order_acquire);
 }
@@ -115,16 +115,17 @@ void DualBVH::rebuildPrimitives(ArenaRegistry& registry, uint8_t index) {
 uint32_t DualBVH::buildRecursive(std::vector<uint32_t>& primitiveIds, uint32_t depth, uint32_t parent, uint8_t index) {
      if (primitiveIds.empty()) return 0;
 
-     uint32_t nodeIndex = ++nodeCount[index];
-     if (nodeIndex >= nodes[index].size()) {
-         hasNodesAccess.wait(false, std::memory_order_acquire);
-         hasNodesAccess.store(false, std::memory_order_release);
-         nodes[index].resize(nodeIndex + 1);
-         hasNodesAccess.store(true, std::memory_order_release);
-         hasNodesAccess.notify_one();
-     }
+
+     uint32_t nodeIndex = nodeCount[index].fetch_add(1, std::memory_order_acquire);
+     //if (nodeIndex >= nodes[index].size()) {
+
+     //    nodes[index].resize(nodeIndex + 1);
+
+     //}
 
      BVHNode& node = nodes[index][nodeIndex];
+
+
      node.parentIndex = parent;
      node.bounds = computeBounds(primitiveIds, index);
      node.setDirty(false);
@@ -132,23 +133,25 @@ uint32_t DualBVH::buildRecursive(std::vector<uint32_t>& primitiveIds, uint32_t d
      // Leaf node condition
      if (primitiveIds.size() <= settings.maxLeafPrimitives || depth > settings.maxDepth) {
          node.setLeaf(true);
-         //size_t first = 6543456455;
-         //size_t firstId = 23452345234;
-         //for (size_t i = 0; i < primitiveIds.size(); ++i) {
-         //    if (primitiveIds[i] < first) {
-         //        first = primitiveIds[i];
-         //        firstId = i;
-         //    }
-         //}
-         //node.firstPrimitive = primitiveIds[firstId];
-         //node.primitiveCount = primitiveIds.size();
-         node.firstPrimitive = primitiveIndices[index].size();
-         node.primitiveCount = primitiveIds.size();
 
-         // Copy primitive indices to the end of the array  ??????????????????????????????????????????
-         for (uint32_t primId : primitiveIds) {
-             primitiveIndices[index].push_back(primId);
+         // find lowest
+         //uint32_t lowestId = 0xffffffff;
+         //for (auto& index : primitiveIds) {
+         //    if (index < lowestId)
+         //        lowestId = index;
+         //}
+
+         //node.firstPrimitive = indicesCount[index].fetch_add(primitiveIds.size(), std::memory_order_acquire);//primitiveIndices[index].size();
+         node.primCount = primitiveIds.size();
+
+         for (size_t i = 0; i < primitiveIds.size(); ++i) {
+             //primitiveIndices[index][node.firstPrimitive + i] = primitiveIds[i];
+             node.primIndices[i] = primitiveIds[i];
          }
+
+         //for (uint32_t primId : primitiveIds) {
+         //    primitiveIndices[index][node.firstPrimitive] = primId;//push_back(primId);
+         //}
 
          return nodeIndex;
      }
@@ -182,7 +185,7 @@ uint32_t DualBVH::buildRecursive(std::vector<uint32_t>& primitiveIds, uint32_t d
 
      node.setLeaf(false);
      node.splitAxis = bestAxis;
-     if (depth == 10000) {
+     if (depth < 2) {
 
          auto idL = _getNextThreadId();
          workerPrimsTemp[idL].resize(leftPrims.size());
@@ -199,7 +202,7 @@ uint32_t DualBVH::buildRecursive(std::vector<uint32_t>& primitiveIds, uint32_t d
          workerPrimsTemp[idR].resize(rightPrims.size());
          std::memcpy(workerPrimsTemp[idR].data(), rightPrims.data(), rightPrims.size() * sizeof(uint32_t));
          WorkerPkg r_pkg;
-         r_pkg.primitiveIds = &workerPrimsTemp[idL];
+         r_pkg.primitiveIds = &workerPrimsTemp[idR];
          r_pkg.depth = depth + 1;
          r_pkg.index = index;
          r_pkg.parent = nodeIndex;
@@ -336,13 +339,13 @@ void DualBVH::collectOccluders(const glm::vec3& cameraPos, const Frustum& frustu
 
 void DualBVH::buildNodes(ArenaRegistry& registry, uint8_t index) {
     // Clear existing data
-    nodes[index].clear();
+    //nodes[index].clear();
     //primitives[index].clear();
-    //primitiveIndices[index].clear();
+    primitiveIndices[index].clear();
     //entityToPrimitive[index].clear();
     occluderIndices[index].clear();
     occluderCorners[index].clear();
-    primitiveIndices[index].clear();
+    //primitiveIndices[index].clear();
     //// Collect all entities with Transform and AABB components
     //auto view = registry.view<BoundingVolumeComponent>();
     //uint32_t primIndex = 0;
@@ -376,8 +379,10 @@ void DualBVH::buildNodes(ArenaRegistry& registry, uint8_t index) {
     std::vector<uint32_t> allPrimitives(primitives[index].size());
     std::iota(allPrimitives.begin(), allPrimitives.end(), 0);
 
-    nodes[index].reserve(primitives[index].size() * 2);  // Worst case
+    primitiveIndices[index].resize(primitives[index].size());
+    nodes[index].resize(primitives[index].size() * 2);  // Worst case
     nodeCount[index] = 0;
+    indicesCount[index] = 0;
     rootIndex[index] = buildRecursive(allPrimitives, 0, 0, index);
 
     //dirtyCount = 0;
@@ -584,8 +589,8 @@ void DualBVH::frustumCullWithOcclusion(
 
         if (node.isLeaf()) {
             // Process leaf primitives
-            for (uint32_t i = 0; i < node.primitiveCount; ++i) {
-                uint32_t primIndex = primitiveIndices[frameIndex][node.firstPrimitive + i];
+            for (uint32_t i = 0; i < node.primCount; ++i) {
+                uint32_t primIndex = node.primIndices[i];//primitiveIndices[frameIndex][node.firstPrimitive + i];
                 const BVHPrimitive& prim = primitives[frameIndex][primIndex];
 
                 // Fine-grained occlusion test for individual primitives
@@ -661,8 +666,8 @@ DualBVH::TraversalResult DualBVH::broadPhaseCollision(uint8_t index) const {
             // Test all primitive pairs
             for (uint32_t i = 0; i < a.primitiveCount; ++i) {
                 for (uint32_t j = (nodeA == nodeB ? i + 1 : 0); j < b.primitiveCount; ++j) {
-                    uint32_t primA = primitiveIndices[frameIndex][a.firstPrimitive + i];
-                    uint32_t primB = primitiveIndices[frameIndex][b.firstPrimitive + j];
+                    uint32_t primA = -1;// primitiveIndices[frameIndex][a.firstPrimitive + i];
+                    uint32_t primB = -1; // primitiveIndices[frameIndex][b.firstPrimitive + j];
 
 
 

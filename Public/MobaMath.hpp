@@ -80,7 +80,31 @@ namespace MMath
         mx = hmax4(_mm_max_ps(lo, hi));
     }
 
+    INLINE void matrix_multiply_avx2(const float* a, const float* b, float* result) {
+        // Load matrix A columns
+        __m256 a_col0 = _mm256_load_ps(a);      // a[0-7]
+        __m256 a_col1 = _mm256_load_ps(a + 8);  // a[8-15]
 
+        // Load matrix B columns
+        __m256 b_col0 = _mm256_load_ps(b);
+        __m256 b_col1 = _mm256_load_ps(b + 8);
+
+        // First 8 elements of result
+        __m256 r0 = _mm256_mul_ps(a_col0, _mm256_broadcast_ps((const __m128*)(b)));
+        r0 = _mm256_fmadd_ps(a_col1, _mm256_broadcast_ps((const __m128*)(b + 4)), r0);
+        _mm256_store_ps(result, r0);
+
+        __m256 r1 = _mm256_mul_ps(a_col0, _mm256_broadcast_ps((const __m128*)(b + 8)));
+        r1 = _mm256_fmadd_ps(a_col1, _mm256_broadcast_ps((const __m128*)(b + 12)), r1);
+        _mm256_store_ps(result + 8, r1);
+    }
+
+    
+    INLINE glm::mat4 fast_matrix_multiply(const glm::mat4& parent, const glm::mat4& local) {
+        alignas(32) glm::mat4 result;
+        matrix_multiply_avx2(&parent[0][0], &local[0][0], &result[0][0]);
+        return result;
+    }
 
     INLINE Frustum getFrustum(const glm::mat4x4& viewProjection, bool normalize = true) {
 

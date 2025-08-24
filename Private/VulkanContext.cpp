@@ -495,6 +495,25 @@ void VulkanContext::draw(const DrawContext& ctx) {
 				vkCmdDrawIndexed(frame.cmdBuffer, 36, 1, 0, 0, 0);
 				drawCount++;
 			}
+		} else if (scene->sceneRender().drawNodes()) {
+
+			for (size_t n = 0; n < scene->bvhSystem().bvh().getNodeCount(0); ++n) {
+				auto& node = scene->bvhSystem().bvh().nodes[0][n];
+				AABB& box = node.bounds;
+				ShapePush shapePush{};
+				shapePush.modelToWorld = glm::mat4{ 1 };
+				shapePush.color = { 1.0f, 0.01f, 1.00f, 0.01f };
+				shapePush.rotation = glm::quat();
+				shapePush.aabb = { box.min, box.max };
+				shapePush.drawNumber = shapeDraws++;
+
+				vkCmdPushConstants(frame.cmdBuffer, pipelineLayouts[shapeMat->pipelineLayoutId], VK_SHADER_STAGE_VERTEX_BIT,
+								   0, sizeof(ShapePush), &shapePush);
+
+				vkCmdDrawIndexed(frame.cmdBuffer, 36, 1, 0, 0, 0);
+				drawCount++;
+			}
+			
 		} else {
 			auto view = scene->registry().view<BoundingVolumeComponent, TransformComponent>();
 			for (auto [entity, bound, transform] : view.each()) {

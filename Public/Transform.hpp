@@ -16,7 +16,10 @@
 static const glm::vec3 DIR_FORWARD{ 0.0f, 0.0f, -1.0f };
 static const glm::vec3 DIR_RIGHT{ 1.0f, 0.0f, 0.0f };
 static const glm::vec3 DIR_UP{ 0.0f, 1.0f, 0.0f };
-
+static const uint8_t TRANSLATION = 0;
+static const uint8_t ROTATION = 1;
+static const uint8_t SCALE = 2;
+static const uint8_t TRANSFORM = 3;
 struct Transform
 {
 	
@@ -24,8 +27,23 @@ private:
 	ArenaRegistry* m_reg;
 	entt::entity m_entity;
 
-	INLINE TransformComponent& _markDirty() {
+	INLINE TransformComponent& _markDirty(uint8_t what) {
 		auto& comp = m_reg->get<TransformComponent>(m_entity);
+		switch (what) {
+			default: break;
+			case TRANSLATION:
+				comp.state.setByEnum(ObjectState::TranslationDirty); break;
+			case ROTATION:
+				comp.state.setByEnum(ObjectState::RotationDirty); break;
+			case SCALE:
+				comp.state.setByEnum(ObjectState::ScaleDirty); break;
+			case TRANSFORM:
+			{
+				comp.state.setByEnum(ObjectState::TranslationDirty);
+				comp.state.setByEnum(ObjectState::RotationDirty);
+				comp.state.setByEnum(ObjectState::ScaleDirty);
+			} break;
+		}
 		comp.state.setByEnum(ObjectState::DirtyTransform);
 		if (comp.onDirtyCallback) {
 			comp.onDirtyCallback(comp.callbackUserData);
@@ -75,18 +93,18 @@ public:
 	}
 	
 	INLINE glm::vec3& modifyPosition() { 
-		return _markDirty().position;
+		return _markDirty(TRANSLATION).position;
 	}
 	INLINE glm::quat& modifyRotation() {
-		auto& rot = _markDirty().rotation;
+		auto& rot = _markDirty(ROTATION).rotation;
 		rot = glm::normalize(rot);
 		return rot;
 	}
 	INLINE glm::vec3& modifyScale() {
-		return _markDirty().scale;
+		return _markDirty(SCALE).scale;
 	}
 	INLINE StateField& modifyState() {
-		return _markDirty().state;
+		return _markDirty(UINT8_INVALID).state;
 	}
 	INLINE glm::quat& setFromEuler(const glm::vec3& anglesDeg) {
 		return modifyRotation() = glm::quat{ glm::radians(anglesDeg) };
@@ -127,7 +145,7 @@ public:
 	}
 
 	INLINE Transform& lerpBetween(const Transform& a, const Transform& b, float t) {
-		auto& comp = _markDirty();
+		auto& comp = _markDirty(TRANSFORM);
 		const TransformComponent& A = a;
 		const TransformComponent& B = b;
 		comp.position = glm::mix(A.position, B.position, t);
@@ -153,15 +171,15 @@ public:
 	INLINE glm::vec3 up() { return rotation() * DIR_UP; }
 
 	INLINE void translate(const glm::vec3& direction) {
-		auto& comp = _markDirty();
+		auto& comp = _markDirty(TRANSLATION);
 		comp.position += direction;
 	}
 	INLINE void rotate(const glm::vec3& rotationDelta) {
-		auto& comp = _markDirty();
+		auto& comp = _markDirty(ROTATION);
 		comp.rotation = glm::normalize(glm::quat(rotationDelta) * comp.rotation);
 	}
 	INLINE void rotateLocal(const glm::vec3& rotDelta) {
-		auto& comp = _markDirty();
+		auto& comp = _markDirty(ROTATION);
 
 		float yaw = rotDelta.x;
 		float pitch = rotDelta.y;
@@ -194,7 +212,7 @@ public:
 	}
 
 	INLINE void rotateAroundWorldAxis(const glm::vec3& axis, float angle) {
-		auto& comp = _markDirty();
+		auto& comp = _markDirty(ROTATION);
 		glm::quat deltaRot = glm::angleAxis(angle, axis);
 		comp.rotation = glm::normalize(deltaRot * comp.rotation);
 	}

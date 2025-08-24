@@ -14,7 +14,7 @@
 #include "BoundingVolume.hpp"
 
 // BVH Node - designed for cache efficiency
-struct alignas(64) BVHNode
+struct BVHNode //alignas(64)
 {
     AABB bounds;
 
@@ -36,7 +36,8 @@ struct alignas(64) BVHNode
     uint32_t parentIndex;     // For bottom-up updates
     uint8_t flags;            // Dirty bit, leaf bit, etc.
     uint8_t splitAxis;        // X=0, Y=1, Z=2
-    uint16_t padding;
+    uint8_t primCount;
+    std::array<uint32_t, 6> primIndices;
 
     bool isLeaf() const { return flags & 0x01; }
     bool isDirty() const { return flags & 0x02; }
@@ -104,7 +105,9 @@ struct Frustum;
 
 class DualBVH
 {
-private:
+
+    static constexpr const unsigned int NUM_THREADS = 6;
+public:
     std::array<std::vector<BVHNode>, 2> nodes;
     std::array<std::vector<BVHPrimitive>, 2> primitives;
     std::array<std::vector<uint32_t>, 2> primitiveIndices;  // Leaf nodes point into this
@@ -124,7 +127,9 @@ private:
     static constexpr float REBUILD_THRESHOLD = 0.3f; // 30% of objects moved
 
     std::array<uint32_t, 2> rootIndex;
-    std::array<uint32_t, 2> nodeCount;
+    //std::array<uint32_t, 2> nodeCount;
+    std::atomic<uint32_t> nodeCount[2];
+    std::atomic<uint32_t> indicesCount[2];
                                      
     struct WorkerPkg
     {
@@ -137,21 +142,20 @@ private:
     };
     bool workersRunning = true;
     std::atomic<uint8_t> nextThId;
-    std::array<std::thread*, 4> workers;
-    std::array<std::atomic<WorkerPkg>, 4> workerPkgs;
-    std::array<std::binary_semaphore*, 4> startSemas;
-    std::array<std::binary_semaphore*, 4> doneSemas;
-    std::array<std::vector<uint32_t>, 4> workerPrimsTemp;
-    std::array<std::atomic<uint32_t>, 4> workerResults;
-    std::atomic<bool> hasIndicesAccess = true;
-    std::atomic<bool> hasNodesAccess = true;
+    std::array<std::thread*, NUM_THREADS> workers;
+    std::array<std::atomic<WorkerPkg>, NUM_THREADS> workerPkgs;
+    std::array<std::binary_semaphore*, NUM_THREADS> startSemas;
+    std::array<std::binary_semaphore*, NUM_THREADS> doneSemas;
+    std::array<std::vector<uint32_t>, NUM_THREADS> workerPrimsTemp;
+    std::array<std::atomic<uint32_t>, NUM_THREADS> workerResults;
+
     static void _recursiveWorker(DualBVH* _this, uint8_t threadId);
 
     uint8_t _getNextThreadId() {
         return nextThId.fetch_add(1, std::memory_order_relaxed);
     }
 
-public:
+
     std::vector<entt::entity> alwaysVisible[2];
     struct BuildSettings
     {
@@ -222,7 +226,9 @@ public:
         if (_threadDone.try_acquire()) {
             nextThId.store(0, std::memory_order_release);
             _threadStart.release();
-        }
+            return;
+        } else
+            return;
 
         //_pendingWork.store(true, std::memory_order_release);
         //_pendingWork.notify_one();
@@ -237,7 +243,7 @@ public:
     std::array<std::vector<glm::vec3>, 2> occluderCorners;
 
     bool threadRunning() const { return _threadRunning; }
-private:
+
     uint8_t curFrameIndex = UINT8_INVALID;
     std::array<std::vector<TraversalNode>, 2> nodeStack;
     std::thread* rebuildThread;
@@ -286,37 +292,37 @@ private:
         // leaf each primitive belongs to for faster updates
         //dirtyCount++;
     }
-    void refitBottomUp(uint32_t nodeIndex, uint8_t index) {
-        if (nodeIndex == 0) return;
+    //void refitBottomUp(uint32_t nodeIndex, uint8_t index) {
+    //    if (nodeIndex == 0) return;
 
-        BVHNode& node = nodes[index][nodeIndex];
+    //    BVHNode& node = nodes[index][nodeIndex];
 
-        if (node.isLeaf()) {
-            // Recompute bounds from primitives
-            std::vector<uint32_t> primitiveIds;
-            for (uint32_t i = 0; i < node.primitiveCount; ++i) {
-                primitiveIds.push_back(primitiveIndices[index][node.firstPrimitive + i]);
-            }
-            node.bounds = computeBounds(primitiveIds, index);
-        } else {
-            // Recompute from children
-            AABB newBounds;
-            if (node.leftChild != 0) {
-                newBounds = newBounds.merge(nodes[index][node.leftChild].bounds);
-            }
-            if (node.rightChild != 0) {
-                newBounds = newBounds.merge(nodes[index][node.rightChild].bounds);
-            }
-            node.bounds = newBounds;
-        }
+    //    if (node.isLeaf()) {
+    //        // Recompute bounds from primitives
+    //        std::vector<uint32_t> primitiveIds;
+    //        for (uint32_t i = 0; i < node.primitiveCount; ++i) {
+    //            primitiveIds.push_back(primitiveIndices[index][node.firstPrimitive + i]);
+    //        }
+    //        node.bounds = computeBounds(primitiveIds, index);
+    //    } else {
+    //        // Recompute from children
+    //        AABB newBounds;
+    //        if (node.leftChild != 0) {
+    //            newBounds = newBounds.merge(nodes[index][node.leftChild].bounds);
+    //        }
+    //        if (node.rightChild != 0) {
+    //            newBounds = newBounds.merge(nodes[index][node.rightChild].bounds);
+    //        }
+    //        node.bounds = newBounds;
+    //    }
 
-        node.setDirty(false);
+    //    node.setDirty(false);
 
-        // Continue up the tree
-        if (node.parentIndex != 0) {
-            refitBottomUp(node.parentIndex, index);
-        }
-    }
+    //    // Continue up the tree
+    //    if (node.parentIndex != 0) {
+    //        refitBottomUp(node.parentIndex, index);
+    //    }
+    //}
 
     //bool needsRebuild() const {
     //    return dirtyCount > (primitives.size() * settings.rebuildThreshold);
@@ -492,7 +498,7 @@ private:
         }
     }
 
-public:
+
     ~DualBVH() {
         _threadRunning = false;
         _threadStart.release();
@@ -500,7 +506,7 @@ public:
         delete rebuildThread;
 
         workersRunning = false;
-        for (size_t i = 0; i < 4; ++i) {
+        for (size_t i = 0; i < NUM_THREADS; ++i) {
             startSemas[i]->release();
             workers[i]->join();
             delete workers[i];
@@ -517,7 +523,7 @@ public:
         for (size_t i = 0; i < 2; ++i) {
             nodes[i].reserve(1024);  // Pre-allocate for better performance
             primitives[i].reserve(512);
-            primitiveIndices[i].reserve(512);
+            //primitiveIndices[i].reserve(512);
             occluderIndices[i].reserve(256);
             occluderCorners[i].reserve(1024);
             nodeStack[i].reserve(64);
@@ -532,9 +538,9 @@ public:
             std::ref(registry) };
 
         workersRunning = true;
-        for (size_t i = 0; i < 4; ++i) {
+        for (size_t i = 0; i < NUM_THREADS; ++i) {
             startSemas[i] = new std::binary_semaphore{ 0 };
-            doneSemas[i] = new std::binary_semaphore{ 1 };
+            doneSemas[i] = new std::binary_semaphore{ 0 };
             workers[i] = new std::thread{ DualBVH::_recursiveWorker, this, i };
             workerResults[i] = 0;
         }
@@ -651,7 +657,7 @@ public:
 
     // Thread-safe accessors
     uint32_t getNodeCount(uint8_t index) const { return nodeCount[index]; }
-    uint32_t getPrimitiveCount() const { return primitives.size(); }
+    uint32_t getPrimitiveCount(uint8_t index) const { return primitives[index].size(); }
     bool isEmpty(uint8_t index) const { return primitives[index].empty(); }
 
     // Debug/profiling methods
@@ -686,47 +692,47 @@ public:
     //}
 
     // Validate tree structure (debug)
-    bool validateTree(uint8_t index) const {
-        if (isEmpty(index)) return true;
+    //bool validateTree(uint8_t index) const {
+    //    if (isEmpty(index)) return true;
 
 
-        std::function<bool(uint32_t, uint8_t)> validate = [&](uint32_t nodeIndex, uint8_t index) -> bool {
-            if (nodeIndex == 0 || nodeIndex > nodeCount[index]) return false;
+    //    std::function<bool(uint32_t, uint8_t)> validate = [&](uint32_t nodeIndex, uint8_t index) -> bool {
+    //        if (nodeIndex == 0 || nodeIndex > nodeCount[index]) return false;
 
-            const BVHNode& node = nodes[index][nodeIndex];
+    //        const BVHNode& node = nodes[index][nodeIndex];
 
-            if (node.isLeaf()) {
-                // Validate leaf node
-                if (node.primitiveCount == 0) return false;
-                if (node.firstPrimitive + node.primitiveCount > primitiveIndices.size()) return false;
+    //        if (node.isLeaf()) {
+    //            // Validate leaf node
+    //            if (node.primitiveCount == 0) return false;
+    //            if (node.firstPrimitive + node.primitiveCount > primitiveIndices.size()) return false;
 
-                // Check bounds contain all primitives
-                for (uint32_t i = 0; i < node.primitiveCount; ++i) {
-                    uint32_t primIndex = primitiveIndices[index][node.firstPrimitive + i];
-                    if (primIndex >= primitives.size()) return false;
+    //            // Check bounds contain all primitives
+    //            for (uint32_t i = 0; i < node.primitiveCount; ++i) {
+    //                uint32_t primIndex = primitiveIndices[index][node.firstPrimitive + i];
+    //                if (primIndex >= primitives.size()) return false;
 
-                    // Note: This is a simplified check - in practice you'd want 
-                    // more sophisticated bounds validation
-                }
-            } else {
-                // Validate internal node
-                if (node.leftChild == 0 && node.rightChild == 0) return false;
+    //                // Note: This is a simplified check - in practice you'd want 
+    //                // more sophisticated bounds validation
+    //            }
+    //        } else {
+    //            // Validate internal node
+    //            if (node.leftChild == 0 && node.rightChild == 0) return false;
 
-                if (node.leftChild != 0 && !validate(node.leftChild, index)) return false;
-                if (node.rightChild != 0 && !validate(node.rightChild, index)) return false;
-            }
+    //            if (node.leftChild != 0 && !validate(node.leftChild, index)) return false;
+    //            if (node.rightChild != 0 && !validate(node.rightChild, index)) return false;
+    //        }
 
-            return true;
-            };
+    //        return true;
+    //        };
 
-        for (size_t i = 0; i < 2; ++i) {
-            auto result = validate(rootIndex[i], index);
-            if (!result)
-                return false;
-        }
+    //    for (size_t i = 0; i < 2; ++i) {
+    //        auto result = validate(rootIndex[i], index);
+    //        if (!result)
+    //            return false;
+    //    }
 
-        return true;
-    }
+    //    return true;
+    //}
 
 };
 
@@ -734,13 +740,13 @@ public:
 class BVHSystem
 {
 private:
-    DualBVH bvh;
+    DualBVH m_bvh;
     uint32_t lastUpdateFrame = UINT32_INVALID;
     float counter = 4333424.0f;
 
 public:
     BVHSystem(ArenaRegistry& registry) :
-        bvh{registry} {}
+        m_bvh{registry} {}
     // Called once per frame in main thread
     void updateBVH(ArenaRegistry& registry, uint32_t currentFrame, float dt, float time) {
             //bvh.incrementalUpdate(registry);
@@ -748,12 +754,14 @@ public:
         counter += dt;
         if (counter >= time) {
             counter = 0;
-            bvh.setPendingUpdate();
+            m_bvh.setPendingUpdate();
         }
         //bvh.nextFrame();
         lastUpdateFrame = currentFrame;
         
     }
+
+    DualBVH& bvh() { return m_bvh; }
 
     // Called from render thread
     //auto performFrustumCulling(DualBVH::TraversalResult& result, const Frustum& f, ArenaRegistry* const registry) const {
@@ -766,12 +774,12 @@ public:
                                             const glm::vec3& cameraPos,
                                             ArenaRegistry* const registry,
                                             DualBVH::OcclusionMethod method = DualBVH::OcclusionMethod::SIMPLE_DEPTH) { 
-        return bvh.frustumCullWithOcclusion(result, f, cameraPos, registry, method);
+        return m_bvh.frustumCullWithOcclusion(result, f, cameraPos, registry, method);
     }
 
     // Called from physics thread (can be concurrent with frustum culling)
     auto performBroadPhase() const {
-        return bvh.broadPhaseCollision(0);
+        return m_bvh.broadPhaseCollision(0);
     }
 
     // Add/remove entities

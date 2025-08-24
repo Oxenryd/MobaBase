@@ -54,6 +54,7 @@ private:
 
 	bool m_drawAabbs = false;
 	bool m_drawOccluders = false;
+	bool m_drawNodes = false;
 
 public:
 	~SceneRenderSystem() {
@@ -169,6 +170,8 @@ public:
 	bool drawCoarseAbbs() const { return m_drawAabbs; }
 	void setDrawOccluders(bool state) { m_drawOccluders = state; }
 	bool drawOccluders() const { return m_drawOccluders; }
+	void setDrawNodes(bool state) { m_drawNodes = state; }
+	bool drawNodes() const { return m_drawNodes; }
 
 };
 

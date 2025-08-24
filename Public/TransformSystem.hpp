@@ -19,7 +19,7 @@
 
 class TransformSystem : public SystemECS_ModelTransformsProvider
 {
-	struct StackItem { entt::entity e; bool parentDirty; };
+	struct StackItem { entt::entity e; ObjectStateType dirtyState; };
 private:
 	std::array<std::vector<StackItem>, TRANSFORM_THREADS_MAX> m_threadsStacks;
 	ArenaUMap<entt::entity, size_t> m_entityRootIndexMap;
@@ -51,57 +51,93 @@ private:
 			Range& range = this_->m_workerRanges[tI];
 			for (size_t i = range.start(); i < range.end(); ++i) {
 				auto& root = this_->m_roots[i];
-				stack.push_back({ root, false });
+
+				if (!this_->m_reg->all_of<EnabledTag>(root))
+					continue;
+
+				auto& rootTransform = this_->m_reg->get<TransformComponent>(root);
+				//if (rootTransform.state.hasFlag(ObjectState::DirtyTransform)) {
+					stack.push_back({ root, rootTransform.state.value()});
+				//}
 			}
 
 			while (!stack.empty()) {
-				const auto [e, parentDirty] = stack.back();
+				const auto [e, rootState] = stack.back();
 				stack.pop_back();
-
-				if (!this_->m_reg->all_of<EnabledTag>(e))
-					continue;
 
 				auto& t = this_->m_reg->get<TransformComponent>(e);
 				t.state.clearByEnum(ObjectState::MovedThisFrame);
-				const bool selfDirtyLocal = t.state.hasFlag(ObjectState::DirtyTransform);
-				const bool worldDirty = parentDirty || selfDirtyLocal;
+				const ObjectStateType selfState = t.state.value();
+				const ObjectStateType worldDirty = rootState | selfState;
 
-				if (worldDirty) {
-					// Compute local TRS
-					glm::mat4 local = t.trs();
+				if (!objectState_is_dirty(worldDirty)) {
+					continue;
+				}
 
-					// Compose with parent (parent world is guaranteed up-to-date now)
-					if (!t.state.hasFlag(ObjectState::IgnoreParentTransform)) {
-						const entt::entity p = this_->m_parentOf.empty() ? entt::null : this_->m_parentOf[entt::to_integral(e)];
-						if (p != entt::null /* && m_reg->valid(p) */ && this_->m_reg->all_of<TransformComponent>(p)) {
-							const auto& pt = this_->m_reg->get<TransformComponent>(p);
-							this_->m_modelTransforms[t.matrixIndex] = this_->m_modelTransforms[pt.matrixIndex] * local;
+				// Compose with parent
+				if (!t.state.hasFlag(ObjectState::IgnoreParentTransform) && objectState_is_dirty(rootState) )
+				{
+					const entt::entity p = this_->m_parentOf.empty() ? entt::null : this_->m_parentOf[entt::to_integral(e)];
+					if (p != entt::null && this_->m_reg->all_of<TransformComponent>(p)) {
+						const auto& pt = this_->m_reg->get<TransformComponent>(p);
+						const auto& parentState = pt.state.value();
+						if (
+							( !objectState_is_dirty(parentState) || objectState_only_translation_dirty(parentState) ) &&
+							!t.state.hasFlag(ObjectState::RotationDirty) &&
+							!t.state.hasFlag(ObjectState::ScaleDirty)
+							)
+						{
+							this_->m_modelTransforms[t.matrixIndex].modelToWorld[3] = 
+												  this_->m_modelTransforms[pt.matrixIndex].modelToWorld * glm::vec4(t.position, 1.0f);
 						} else {
+							glm::mat4 local = t.trs();
+							this_->m_modelTransforms[t.matrixIndex] =
+								this_->m_modelTransforms[pt.matrixIndex] * local;
+						}
+					} else { // Parent == null
+						if (objectState_only_translation_dirty(selfState)) {
+							this_->m_modelTransforms[t.matrixIndex].modelToWorld[3] = glm::vec4(t.position, 1.0f);
+						} else {
+							glm::mat4 local = t.trs();
 							this_->m_modelTransforms[t.matrixIndex] = local;
 						}
+					}
+				} else if (objectState_is_dirty(selfState)) {
+					if (objectState_only_translation_dirty(selfState)) {
+						this_->m_modelTransforms[t.matrixIndex].modelToWorld[3] = glm::vec4(t.position, 1.0f);
 					} else {
+						glm::mat4 local = t.trs();
 						this_->m_modelTransforms[t.matrixIndex] = local;
 					}
-
-					// Bounds update
-					if (auto b = this_->m_reg->try_get<BoundingVolumeComponent>(e)) {
-						const auto& localAABB = this_->m_boundSysPtr->cachedLocals()[b->coarseIndexLocal];
-						this_->m_boundSysPtr->aabbs()[b->coarseIndexWorld] =
-							localAABB.transformed_noPerspective(this_->m_modelTransforms[t.matrixIndex]);
-					}
-
-					// Flags
-					t.state.clearByEnum(ObjectState::DirtyTransform);
-					if (selfDirtyLocal) t.state.setByEnum(ObjectState::MovedThisFrame);
-					if (parentDirty) t.state.setByEnum(ObjectState::ParentMovedThisFrame);
-
-
-					// Children
-					const auto& kids = this_->m_childrenOf[entt::to_integral(e)];
-					for (auto child : kids) {
-						stack.push_back({ child, worldDirty });
-					}
 				}
+
+				// Bounds update
+				if (auto b = this_->m_reg->try_get<BoundingVolumeComponent>(e)) {
+					const auto& localAABB = this_->m_boundSysPtr->cachedLocals()[b->coarseIndexLocal];
+					this_->m_boundSysPtr->aabbs()[b->coarseIndexWorld] =
+						localAABB.transformed_noPerspective(this_->m_modelTransforms[t.matrixIndex]);
+				}
+
+				// Flags
+				t.state.clearByEnum( 
+					(ObjectState)(
+						static_cast<ObjectStateType>(ObjectState::DirtyTransform) | 
+						static_cast<ObjectStateType>(ObjectState::TranslationDirty) |
+						static_cast<ObjectStateType>(ObjectState::RotationDirty) |
+						static_cast<ObjectStateType>(ObjectState::ScaleDirty)
+					)
+				);
+
+				if (objectState_is_dirty(selfState)) t.state.setByEnum(ObjectState::MovedThisFrame);
+				if (objectState_is_dirty(rootState)) t.state.setByEnum(ObjectState::ParentMovedThisFrame);
+
+
+				// Children
+				const auto& kids = this_->m_childrenOf[entt::to_integral(e)];
+				for (auto child : kids) {
+					stack.push_back({ child, worldDirty });
+				}
+
 			}
 			this_->m_doneSemas[tI]->release();
 		}
@@ -140,6 +176,10 @@ private:
 					m_roots.pop_back();
 				}
 		}
+	}
+
+	INLINE static void _applyTranslationOnly(glm::mat4x4& M, const glm::mat4x4& parentWorld, const glm::vec3& translation) {
+		M[3] = parentWorld * glm::vec4(translation, 1.0f);
 	}
 
 public:

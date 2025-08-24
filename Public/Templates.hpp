@@ -43,9 +43,9 @@ public:
             sceneRender().createMeshFromModel(pathObject, &objectMesh, m_goList[i].entity());
             auto trans = objectMesh.getTransform();
             trans.modifyPosition() = glm::vec3{std::cos(step * i) * 12, std::sin(step * i) * 12, 0};
-            auto children = trans.getChildrenEntities();
-            BoundingVolume bVol = BoundingVolume{ &m_reg, children[0] };
-            bVol.setFlags((BoundingVolumeFlags)0);
+            //auto children = trans.getChildrenEntities();
+            //BoundingVolume bVol = BoundingVolume{ &m_reg, children[0] };
+            //bVol.setFlags((BoundingVolumeFlags)0);
         }
 
         //m_go1 = gameObjectSystem().createGameObject<GameObject>("Room");
@@ -117,6 +117,7 @@ public:
                                       switch (code) {
                                           case KeyCode::B: sceneRender().setDrawAABBs(!sceneRender().drawCoarseAbbs()); break;
                                           case KeyCode::O: sceneRender().setDrawOccluders(!sceneRender().drawOccluders()); break;
+                                          case KeyCode::N: sceneRender().setDrawNodes(!sceneRender().drawNodes()); break;
                                           case KeyCode::ArrowLeft:
                                           {
                                               auto sTrans = Transform{&registry(), m_go2};
