@@ -150,7 +150,7 @@ void VulkanContext::draw(const DrawContext& ctx) {
 				auto& transComp = scene->registry().get<TransformComponent>(newDrawCmd.subMeshEntity);
 				InstanceData instData{};
 				instData.matInstanceIndex = newDrawCmd.materialIndex;				
-				instData.matrixIndex = transComp.matrixIndex;
+				instData.matrixIndex = transComp.dataIndex;
 				submeshDrawInstanceData[currentFrame][newDrawCmd.submeshOffset].instances.push_back(instData);
 				BoundingVolume bVol = BoundingVolume{ &scene->registry() , newDrawCmd.subMeshEntity};
 				submeshDrawInstanceData[currentFrame][newDrawCmd.submeshOffset].bounds.merge(bVol.getCoarseAABB());
@@ -159,7 +159,7 @@ void VulkanContext::draw(const DrawContext& ctx) {
 				auto& transComp = scene->registry().get<TransformComponent>(newDrawCmd.subMeshEntity);
 				InstanceData instData{};
 				instData.matInstanceIndex = newDrawCmd.materialIndex;
-				instData.matrixIndex = transComp.matrixIndex;
+				instData.matrixIndex = transComp.dataIndex;
 				submeshDrawInstanceData[currentFrame][newDrawCmd.submeshOffset].instances.push_back(instData);
 				BoundingVolume bVol = BoundingVolume{ &scene->registry() , newDrawCmd.subMeshEntity };
 				submeshDrawInstanceData[currentFrame][newDrawCmd.submeshOffset].bounds.merge(bVol.getCoarseAABB());
@@ -429,7 +429,7 @@ void VulkanContext::draw(const DrawContext& ctx) {
 			push.flags = 0;
 			push.matInstanceIndex = cmd.instanceIndex;
 			auto& transComp = scene->registry().get<TransformComponent>(cmd.subMeshEntity);
-			push.modelToWorld = scene->transformSystem().modelTransforms()[transComp.matrixIndex];
+			push.modelToWorld = scene->transformSystem().modelTransforms()[transComp.dataIndex];
 			vkCmdPushConstants(frame.cmdBuffer, pipelineLayouts[matBase->pipelineLayoutId], VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
 							   0, sizeof(BaseMatPush), &push);
 
@@ -483,7 +483,7 @@ void VulkanContext::draw(const DrawContext& ctx) {
 				auto [bound, transform] = scene->registry().get<BoundingVolumeComponent, TransformComponent>(entity);
 				AABB worldBox = scene->boundingSystem().aabbs()[bound.coarseIndexWorld];
 				ShapePush shapePush{};
-				shapePush.modelToWorld = transform.trs();
+				shapePush.modelToWorld = Transform::composeTRS(&scene->registry(), entity);
 				shapePush.color = { 1.0f, 0.01f, 0.02f, 0.01f };
 				shapePush.rotation = glm::quat();
 				shapePush.aabb = { worldBox.min, worldBox.max };
@@ -520,7 +520,7 @@ void VulkanContext::draw(const DrawContext& ctx) {
 
 				AABB worldBox = scene->boundingSystem().aabbs()[bound.coarseIndexWorld];
 				ShapePush shapePush{};
-				shapePush.modelToWorld = transform.trs();
+				shapePush.modelToWorld = Transform::composeTRS(&scene->registry(), entity);
 				shapePush.color = { 0.02f, 1.0f, 0.02f, 0.01f };
 				shapePush.rotation = glm::quat();
 				shapePush.aabb = { worldBox.min, worldBox.max };

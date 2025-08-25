@@ -28,6 +28,11 @@ private:
 	ArenaVector<entt::entity> m_parentOf;
 	ArenaVector<std::vector<entt::entity>> m_childrenOf;
 
+	// Component Data
+	ArenaVector<glm::vec3> m_positions;
+	ArenaVector<glm::quat> m_rotations;
+	ArenaVector<glm::vec3> m_scales;
+
 	std::array<std::thread*, TRANSFORM_THREADS_MAX> m_workers;
 	std::array<Range, TRANSFORM_THREADS_MAX> m_workerRanges;
 	uint8_t m_curNumWorkers = 1;
@@ -87,27 +92,27 @@ private:
 							!t.state.hasFlag(ObjectState::ScaleDirty)
 							)
 						{
-							this_->m_modelTransforms[t.matrixIndex].modelToWorld[3] = 
-												  this_->m_modelTransforms[pt.matrixIndex].modelToWorld * glm::vec4(t.position, 1.0f);
+							this_->m_modelTransforms[t.dataIndex].modelToWorld[3] = 
+												  this_->m_modelTransforms[pt.dataIndex].modelToWorld * glm::vec4(this_->m_positions[t.dataIndex], 1.0f);
 						} else {
-							glm::mat4 local = t.trs();
-							this_->m_modelTransforms[t.matrixIndex] =
-								this_->m_modelTransforms[pt.matrixIndex] * local;
+							glm::mat4 local = MMath::composeTRS(this_->m_positions[t.dataIndex], this_->m_rotations[t.dataIndex], this_->m_scales[t.dataIndex]); //t.trs();
+							this_->m_modelTransforms[t.dataIndex] =
+								this_->m_modelTransforms[pt.dataIndex] * local;
 						}
 					} else { // Parent == null
 						if (objectState_only_translation_dirty(selfState)) {
-							this_->m_modelTransforms[t.matrixIndex].modelToWorld[3] = glm::vec4(t.position, 1.0f);
+							this_->m_modelTransforms[t.dataIndex].modelToWorld[3] = glm::vec4(this_->m_positions[t.dataIndex], 1.0f);
 						} else {
-							glm::mat4 local = t.trs();
-							this_->m_modelTransforms[t.matrixIndex] = local;
+							glm::mat4 local = MMath::composeTRS(this_->m_positions[t.dataIndex], this_->m_rotations[t.dataIndex], this_->m_scales[t.dataIndex]);//t.trs();
+							this_->m_modelTransforms[t.dataIndex] = local;
 						}
 					}
 				} else if (objectState_is_dirty(selfState)) {
 					if (objectState_only_translation_dirty(selfState)) {
-						this_->m_modelTransforms[t.matrixIndex].modelToWorld[3] = glm::vec4(t.position, 1.0f);
+						this_->m_modelTransforms[t.dataIndex].modelToWorld[3] = glm::vec4(this_->m_positions[t.dataIndex], 1.0f);
 					} else {
-						glm::mat4 local = t.trs();
-						this_->m_modelTransforms[t.matrixIndex] = local;
+						glm::mat4 local = MMath::composeTRS(this_->m_positions[t.dataIndex], this_->m_rotations[t.dataIndex], this_->m_scales[t.dataIndex]);//t.trs();
+						this_->m_modelTransforms[t.dataIndex] = local;
 					}
 				}
 
@@ -115,7 +120,7 @@ private:
 				if (auto b = this_->m_reg->try_get<BoundingVolumeComponent>(e)) {
 					const auto& localAABB = this_->m_boundSysPtr->cachedLocals()[b->coarseIndexLocal];
 					this_->m_boundSysPtr->aabbs()[b->coarseIndexWorld] =
-						localAABB.transformed_noPerspective(this_->m_modelTransforms[t.matrixIndex]);
+						localAABB.transformed_noPerspective(this_->m_modelTransforms[t.dataIndex]);
 				}
 
 				// Flags
@@ -178,9 +183,9 @@ private:
 		}
 	}
 
-	INLINE static void _applyTranslationOnly(glm::mat4x4& M, const glm::mat4x4& parentWorld, const glm::vec3& translation) {
-		M[3] = parentWorld * glm::vec4(translation, 1.0f);
-	}
+	//INLINE static void _applyTranslationOnly(glm::mat4x4& M, const glm::mat4x4& parentWorld, const glm::vec3& translation) {
+	//	M[3] = parentWorld * glm::vec4(translation, 1.0f);
+	//}
 
 public:
 	virtual ~TransformSystem() {
@@ -206,6 +211,9 @@ public:
 		m_parentOf{ ArenaAllocator<entt::entity>(arena) },
 		m_childrenOf{ ArenaAllocator<entt::entity>(arena) },
 		m_roots{ ArenaAllocator<entt::entity>(arena) },
+		m_positions{ArenaAllocator<glm::vec3>{arena}},
+		m_scales{ ArenaAllocator<glm::vec3>{arena} },
+		m_rotations{ ArenaAllocator<glm::quat>{arena} },
 		m_entityRootIndexMap{ ArenaAllocator<std::pair<entt::entity, size_t>>{arena} }
 {
 		registry->on_destroy<TransformComponent>()
@@ -213,6 +221,10 @@ public:
 
 		for (auto& stack : m_threadsStacks)
 			stack.reserve(256);
+
+		m_positions.reserve(4096 * 16);
+		m_scales.reserve(4096 * 16);
+		m_rotations.reserve(4096 * 16);
 
 		// Start Threads
 		for (uint8_t i = 0; i < TRANSFORM_THREADS_MAX; ++i) {
@@ -222,6 +234,9 @@ public:
 		}
 	}
 
+	INLINE ArenaVector<glm::vec3>& positions() { return m_positions; }
+	INLINE ArenaVector<glm::quat>& rotations() { return m_rotations; }
+	INLINE ArenaVector<glm::vec3>& scales() { return m_scales; }
 
 	INLINE void run(BoundingSystem& boundSys) {
 
@@ -257,14 +272,23 @@ public:
 		auto& transComp = m_reg->emplace_or_replace<TransformComponent>(entity, TransformComponent{});
 		
 		auto matrixIndex = static_cast<uint32_t>(m_modelTransforms.size());
-		transComp.matrixIndex = matrixIndex;
+		transComp.dataIndex = matrixIndex;
 		transComp.sceneIndex = m_sceneIndex;
 		auto index = entt::to_integral(entity);
 		if (index >= m_parentOf.size())
 			m_parentOf.resize(index + 1, entt::null);
 		if (index >= m_childrenOf.size())
 			m_childrenOf.resize(index + 1);
-		m_modelTransforms.push_back(transComp.trs());
+
+		//glm::vec3 position{ 0, 0, 0 };
+//glm::quat rotation{ 1, 0, 0, 0 };
+//glm::vec3 scale{ 1,1,1 };
+
+		m_positions.push_back({ 0, 0, 0 });
+		m_rotations.push_back({ 1, 0, 0, 0 });
+		m_scales.push_back({ 1,1,1 });
+		m_modelTransforms.emplace_back( MMath::composeTRS(m_positions.back(), m_rotations.back(), m_scales.back()) );
+
 
 		if (valueInPtr) {
 			auto parent = static_cast<entt::entity*>(valueInPtr);

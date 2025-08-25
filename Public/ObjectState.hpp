@@ -10,15 +10,16 @@
 
 enum class ObjectState : ObjectStateType
 {
-	None					= 0x00,
-	DirtyTransform			= 0x01,
-	IgnoreParentTransform   = 0x02,
-	LocalEnableOverride		= 0x04,
-	MovedThisFrame			= 0x08,
-	ParentMovedThisFrame	= 0x10,
-	TranslationDirty		= 0x20,
-	RotationDirty			= 0x40,
-	ScaleDirty				= 0x80
+	None					= 0x0000,
+	DirtyTransform			= 0x0001,
+	IgnoreParentTransform   = 0x0002,
+	LocalEnableOverride		= 0x0004,
+	MovedThisFrame			= 0x0008,
+	ParentMovedThisFrame	= 0x0010,
+	TranslationDirty		= 0x0020,
+	RotationDirty			= 0x0040,
+	ScaleDirty				= 0x0080,
+	DirtyChildren			= 0x0100
 };
 
 
