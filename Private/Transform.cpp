@@ -90,14 +90,45 @@ void Transform::translate(const glm::vec3& direction) {
 	Engine::getInstance()->getScene(comp.sceneIndex)->transformSystem().positions()[comp.dataIndex] += direction;
 }
 
-void Transform::rotate(const glm::vec3& rotationDelta) {
+//void Transform::rotate(const glm::vec3& rotationDelta) {
+//	auto& comp = _markDirty(ROTATION);
+//	auto& rotation = Engine::getInstance()->getScene(comp.sceneIndex)->transformSystem().rotations()[comp.dataIndex];
+//	rotation =
+//		glm::normalize(glm::quat(rotationDelta) * rotation);
+//}
+
+void Transform::rotateByVector(const glm::vec3& deltaVec) {
 	auto& comp = _markDirty(ROTATION);
-	auto& rotation = Engine::getInstance()->getScene(comp.sceneIndex)->transformSystem().rotations()[comp.dataIndex];
-	rotation =
-		glm::normalize(glm::quat(rotationDelta) * rotation);
+	auto& rotation = Engine::getInstance()->getScene(comp.sceneIndex)
+		->transformSystem().rotations()[comp.dataIndex];
+
+	glm::quat dq = MMath::quatFromRotationVector(deltaVec); // delta in WORLD frame
+	rotation = glm::normalize(dq * rotation);          // pre-multiply = world space
+}
+void Transform::rotate(const glm::quat& deltaWorld) {
+	auto& comp = _markDirty(ROTATION);
+	auto& rotation = Engine::getInstance()->getScene(comp.sceneIndex)
+		->transformSystem().rotations()[comp.dataIndex];
+
+	// Ensure unit delta (robustness)
+	glm::quat dq = glm::normalize(deltaWorld);
+	rotation = glm::normalize(dq * rotation);          // pre-multiply = world space
+}
+void Transform::rotate(const glm::vec3& deltaEuler) {
+	auto& comp = _markDirty(ROTATION);
+	auto& rotation = Engine::getInstance()->getScene(comp.sceneIndex)
+		->transformSystem().rotations()[comp.dataIndex];
+
+	glm::quat qx = glm::angleAxis(deltaEuler.x, DIR_RIGHT);
+	glm::quat qy = glm::angleAxis(deltaEuler.y, DIR_UP);
+	glm::quat qz = glm::angleAxis(deltaEuler.z, DIR_FORWARD);
+
+	// Choose a clear order; here X then Y then Z in WORLD frame:
+	glm::quat dq = qz * qy * qx;
+	rotation = glm::normalize(dq * rotation);  // world space
 }
 
-void Transform::rotateLocal(const glm::vec3& rotDelta) {
+void Transform::rotateLocalWorldYaw(const glm::vec3& rotDelta) {
 	auto& comp = _markDirty(ROTATION);
 
 	float yaw = rotDelta.x;
@@ -130,6 +161,43 @@ void Transform::rotateLocal(const glm::vec3& rotDelta) {
 	} else {
 		rotation = glm::normalize(yawRotation * pitchRotation * rotation);
 	}
+}
+
+void Transform::rotateLocal(const glm::quat& rotDeltaLocal) {
+	auto& comp = _markDirty(ROTATION);
+	auto& rotation = Engine::getInstance()
+		->getScene(comp.sceneIndex)
+		->transformSystem().rotations()[comp.dataIndex];
+
+	const glm::quat dq = glm::normalize(rotDeltaLocal); // safety
+	rotation = glm::normalize(rotation * dq);           // post-multiply = LOCAL space
+}
+
+void Transform::rotateLocal(const glm::vec3& rotDeltaLocal) {
+	auto& comp = _markDirty(ROTATION);
+	auto& rotation = Engine::getInstance()
+		->getScene(comp.sceneIndex)
+		->transformSystem().rotations()[comp.dataIndex];
+
+	rotation = glm::normalize(rotation);
+
+	// Local basis from current orientation
+	const glm::vec3 right = rotation * DIR_RIGHT;
+	const glm::vec3 up = rotation * DIR_UP;
+	const glm::vec3 forward = rotation * DIR_FORWARD;
+
+	const float pitch = rotDeltaLocal.x; // about local right
+	const float yaw = rotDeltaLocal.y; // about local up
+	const float roll = rotDeltaLocal.z; // about local forward
+
+	const glm::quat qPitch = glm::angleAxis(pitch, right);
+	const glm::quat qYaw = glm::angleAxis(yaw, up);
+	const glm::quat qRoll = glm::angleAxis(roll, forward);
+
+	// choose order; here: yaw -> pitch -> roll in LOCAL frame
+	const glm::quat qLocal = qYaw * qPitch * qRoll;
+
+	rotation = glm::normalize(rotation * qLocal); // LOCAL: post-multiply
 }
 
 void Transform::rotateAroundWorldAxis(const glm::vec3& axis, float angle) {
@@ -184,9 +252,20 @@ void Transform::clearChildren() {
 	Engine::getInstance()->getScene(comp.sceneIndex)->transformSystem().clearChildren(m_entity);
 }
 
+const glm::mat4x4& Transform::localToWorld(ArenaRegistry* registry, entt::entity entity) {
+	auto& comp = registry->get<TransformComponent>(entity);
+	return Engine::getInstance()->getScene(comp.sceneIndex)->transformSystem().modelTransforms().at(comp.dataIndex);
+}
+
 glm::vec3& Transform::position(ArenaRegistry* registry, entt::entity entity) {
 	auto& comp = registry->get<TransformComponent>(entity);
 	return Engine::getInstance()->getScene(comp.sceneIndex)->transformSystem().positions()[comp.dataIndex];
+}
+
+glm::vec3 Transform::positionInvertY(ArenaRegistry* registry, entt::entity entity) {
+	auto& comp = registry->get<TransformComponent>(entity);
+	auto& vec = Engine::getInstance()->getScene(comp.sceneIndex)->transformSystem().positions()[comp.dataIndex];
+	return glm::vec3{ vec.x, -vec.y, vec.z };
 }
 
 glm::vec3& Transform::scale(ArenaRegistry* registry, entt::entity entity) {

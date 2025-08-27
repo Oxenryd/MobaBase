@@ -30,6 +30,8 @@
 #include "RenderManager.h"
 #include "Scene.h"
 #include "GlobalSystem.hpp"
+#include "MRandom.hpp"
+#include "MWork.hpp"
 
 
 constexpr const double			DEFAULT_DELTATIME_JITTER_SETTING = 0.002;
@@ -124,12 +126,15 @@ private:
 	INLINE ErrorCode _initGraphics();
 	INLINE ErrorCode _initBaseShaders();
 	INLINE ErrorCode _initBaseCallbacks();
+	INLINE ErrorCode _initJobSystem();
 
 	// Base Systems
 	RenderManager* m_renderMan = nullptr;
 	WindowSurface* m_wnd = nullptr;;
 	InputManager* m_inputMan = nullptr;;
 	VulkanContext* m_vkCtx = nullptr;;
+	HeapArena* m_workArena = nullptr;
+
 
 	GlobalSystem m_globalSystem;
 

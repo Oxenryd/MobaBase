@@ -9,7 +9,7 @@
 
 
 #include "GlobalMacros.h"
-#include "MobaMath.hpp"
+#include "MMath.hpp"
 
 
 struct ColorRGBA_f
@@ -37,6 +37,10 @@ struct ColorRGBA_f
 			float a;
 		};
 	};
+
+	operator glm::vec4() {
+		return glm::vec4(r, g, b, a);
+	}
 
 
 	float& operator[] (size_t idx) {
@@ -68,7 +72,33 @@ struct ColorRGBA_f
 	}
 };
 
+template <std::integral T>
+INLINE ColorRGBA_f colorCycle(T step, float a) {
+	auto s = step % 18;
+	switch (s) {
 
+		case 0:  return	ColorRGBA_f{ 1.0f,		0.0f,		0.0f,		a };
+		case 1: return	ColorRGBA_f{ 0.951185f,	0.117851f,	0.0f,		a };
+		case 2: return	ColorRGBA_f{ 0.853554f,	0.353554f,	0.0f,		a };
+		case 3: return	ColorRGBA_f{ 0.707107f,	0.707107f,	0.0f,		a };
+		case 4: return	ColorRGBA_f{ 0.353554f,	0.853554f,	0.0f,		a };
+		case 5: return	ColorRGBA_f{ 0.117851f,	0.951185f,	0.0f,		a };
+
+		case 6: return	ColorRGBA_f{ 0.0f,		1.0f,		0.0f,		a };
+		case 7: return	ColorRGBA_f{ 1.0f,		0.951185f,	0.117851f,	a };
+		case 8: return	ColorRGBA_f{ 1.0f,		0.853554f,	0.353554f,	a };
+		case 9: return	ColorRGBA_f{ 1.0f,		0.707107f,	0.707107f,	a };
+		case 10: return	ColorRGBA_f{ 0.0f,		0.353554f,	0.853554f,	a };
+		case 11: return	ColorRGBA_f{ 0.0f,		0.117851f,	0.951185f,	a };
+
+		case 12: return	ColorRGBA_f{ 0.0f,		0.0f,		1.0f,		a };
+		case 13: return	ColorRGBA_f{ 0.0f,		0.0f,		0.951185f,	a };
+		case 14: return	ColorRGBA_f{ 0.0f,		0.0f,		0.853554f,	a };
+		case 15: return	ColorRGBA_f{ 0.707107f,	0.0f,		0.707107f,	a };
+		case 16: return	ColorRGBA_f{ 0.853554f,	0.0f,		0.353554f,	a };
+		default: return	ColorRGBA_f{ 0.951185f,	0.0f,		0.117851f,	a };
+	}
+}
 
 
 struct ColorRGBA
@@ -499,7 +529,7 @@ struct BoundingVolumeComponent
 		rawData = other.rawData;
 		coarseIndexLocal = other.coarseIndexLocal;
 		coarseIndexWorld = other.coarseIndexWorld;
-		std::memcpy(fineIndex, other.fineIndex, 6 * sizeof(uint32_t));
+		std::memcpy(fineIndex, other.fineIndex, 4 * sizeof(uint32_t));
 	}
 	BoundingVolumeComponent& operator=(const BoundingVolumeComponent& rhs) {
 		if (&rhs == this)
@@ -508,14 +538,14 @@ struct BoundingVolumeComponent
 		rawData = rhs.rawData;
 		coarseIndexLocal = rhs.coarseIndexLocal;
 		coarseIndexWorld = rhs.coarseIndexWorld;
-		std::memcpy(fineIndex, rhs.fineIndex, 6 * sizeof(uint32_t));
+		std::memcpy(fineIndex, rhs.fineIndex, 4 * sizeof(uint32_t));
 
 		return *this;
 	}
 	bool operator==(const BoundingVolumeComponent& rhs) const {
 		return
 			rawData == rhs.rawData &&
-			std::memcmp(fineIndex, rhs.fineIndex, 6 * sizeof(uint32_t)) == 0 &&
+			std::memcmp(fineIndex, rhs.fineIndex, 4 * sizeof(uint32_t)) == 0 &&
 			coarseIndexLocal == rhs.coarseIndexLocal &&
 			coarseIndexWorld == rhs.coarseIndexWorld;
 	}

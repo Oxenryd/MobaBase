@@ -11,7 +11,7 @@
 #include "ErrorCodes.hpp"
 #include "Transform.hpp"
 #include "EnabledTag.hpp"
-#include "MobaMath.hpp"
+#include "MMath.hpp"
 #include "BoundingSystem.h"
 #include "Range.hpp"
 
@@ -34,13 +34,242 @@ private:
 	ArenaVector<glm::vec3> m_scales;
 
 	std::array<std::thread*, TRANSFORM_THREADS_MAX> m_workers;
-	std::array<Range, TRANSFORM_THREADS_MAX> m_workerRanges;
-	uint8_t m_curNumWorkers = 1;
+	std::array<Range<uint32_t>, TRANSFORM_THREADS_MAX> m_workerRanges;
+	std::array<std::vector<entt::entity>, TRANSFORM_THREADS_MAX> m_workerEntities;
+	std::atomic<uint8_t> m_curNumWorkers = 0;
 	BoundingSystem* m_boundSysPtr = nullptr;
 	std::array<std::binary_semaphore*, TRANSFORM_THREADS_MAX> m_startSemas;
 	std::array<std::binary_semaphore*, TRANSFORM_THREADS_MAX> m_doneSemas;
 	bool m_threadsRunning = true;
 	
+
+
+	// Optimized batch update function
+	static void _brute_update_transform_batch_avx2(
+		const std::vector<entt::entity>& entities,
+		TransformSystem* this_,
+		size_t start_idx,
+		size_t count) {
+
+		constexpr size_t batch_size = 4;
+		const size_t batched_count = (count / batch_size) * batch_size;
+
+		// Process in batches of 4
+		for (size_t i = start_idx; i < start_idx + batched_count; i += batch_size) {
+			glm::vec3 positions[4];
+			glm::quat rotations[4];
+			glm::vec3 scales[4];
+			glm::mat4 local_matrices[4];
+
+			// Gather data for 4 entities
+			for (int j = 0; j < 4; ++j) {
+				const entt::entity e = entities[i + j];
+				if (!this_->m_reg->all_of<EnabledTag>(e)) continue;
+
+				auto& t = this_->m_reg->get<TransformComponent>(e);
+				positions[j] = this_->m_positions[t.dataIndex];
+				rotations[j] = this_->m_rotations[t.dataIndex];
+				scales[j] = this_->m_scales[t.dataIndex];
+			}
+
+			// Build 4 TRS matrices with SIMD
+			MMath::build_trs_matrices_avx2(positions, rotations, scales, local_matrices);
+
+			// Apply parent transforms and store results
+			for (int j = 0; j < 4; ++j) {
+				const entt::entity e = entities[i + j];
+				if (!this_->m_reg->all_of<EnabledTag>(e)) continue;
+
+				auto& t = this_->m_reg->get<TransformComponent>(e);
+				const entt::entity p = this_->m_parentOf[entt::to_integral(e)];
+
+				if (p != entt::null && this_->m_reg->all_of<TransformComponent>(p)) {
+					const auto& pt = this_->m_reg->get<TransformComponent>(p);
+					if (objectState_is_dirty(pt.state.value())) t.state.setByEnum(ObjectState::ParentMovedThisFrame);
+					this_->m_modelTransforms[t.dataIndex] = MMath::matrix_multiply_avx2(
+						this_->m_modelTransforms[pt.dataIndex], local_matrices[j]);
+				} else {
+					this_->m_modelTransforms[t.dataIndex] = local_matrices[j];
+				}
+
+				// Always update bounds
+				if (auto b = this_->m_reg->try_get<BoundingVolumeComponent>(e)) {
+					const auto& localAABB = this_->m_boundSysPtr->cachedLocals()[b->coarseIndexLocal];
+					this_->m_boundSysPtr->aabbs()[b->coarseIndexWorld] =
+						localAABB.transformed_noPerspective(this_->m_modelTransforms[t.dataIndex]);
+				}
+
+				if (objectState_is_dirty(t.state.value())) t.state.setByEnum(ObjectState::MovedThisFrame);
+
+				// Flags
+				t.state.clearByEnum(
+					(ObjectState)(
+						static_cast<ObjectStateType>(ObjectState::DirtyTransform) |
+						static_cast<ObjectStateType>(ObjectState::TranslationDirty) |
+						static_cast<ObjectStateType>(ObjectState::RotationDirty) |
+						static_cast<ObjectStateType>(ObjectState::ScaleDirty)
+						)
+				);
+
+				// Children
+				const auto& kids = this_->m_childrenOf[entt::to_integral(e)];
+				if (kids.size() >= 4) {
+					auto tRange = this_->_setupWorkerThreadRange(kids.data(), kids.size());
+					if (tRange.count > 0) {
+						for (size_t t = tRange.start(); t < tRange.end(); ++t) {
+							this_->m_startSemas[t]->release();
+						}
+						for (size_t t = tRange.start(); t < tRange.end(); ++t) {
+							this_->m_doneSemas[t]->acquire();
+						}
+					} else {
+						_brute_update_transform_batch_avx2(kids, this_, 0, kids.size());
+					}
+					
+				} else {
+					for (auto child : kids) {
+						_brute_update_transform_scalar(child, this_);
+					}
+				}
+			}
+		}
+
+		// Handle remaining entities with scalar code
+		for (size_t i = start_idx + batched_count; i < start_idx + count; ++i) {
+			_brute_update_transform_scalar(entities[i], this_);
+		}
+	}
+
+	static void _brute_update_transform_scalar(entt::entity root, TransformSystem* this_) {
+		if (!this_->m_reg->all_of<EnabledTag>(root)) return;
+
+
+		auto& t = this_->m_reg->get<TransformComponent>(root);
+		glm::mat4 local =
+			MMath::composeTRS(this_->m_positions[t.dataIndex], this_->m_rotations[t.dataIndex], this_->m_scales[t.dataIndex]);
+
+		t.state.clearByEnum(ObjectState::MovedThisFrame);
+
+		auto intEntity = entt::to_integral(root);
+
+		// Always update, no dirty checks
+		const entt::entity p = this_->m_parentOf[intEntity];
+		if (p != entt::null && this_->m_reg->all_of<TransformComponent>(p)) {
+			const auto& pt = this_->m_reg->get<TransformComponent>(p);
+			if (objectState_is_dirty(pt.state.value())) t.state.setByEnum(ObjectState::ParentMovedThisFrame);
+
+			this_->m_modelTransforms[t.dataIndex] = MMath::matrix_multiply_avx2(
+				this_->m_modelTransforms[pt.dataIndex], local);
+		} else {
+			this_->m_modelTransforms[t.dataIndex] = local;
+		}
+
+		// Always update bounds
+		if (auto b = this_->m_reg->try_get<BoundingVolumeComponent>(root)) {
+			const auto& localAABB = this_->m_boundSysPtr->cachedLocals()[b->coarseIndexLocal];
+			this_->m_boundSysPtr->aabbs()[b->coarseIndexWorld] =
+				localAABB.transformed_noPerspective(this_->m_modelTransforms[t.dataIndex]);
+		}
+
+		if (objectState_is_dirty(t.state.value())) t.state.setByEnum(ObjectState::MovedThisFrame);
+
+		// Flags
+		t.state.clearByEnum(
+			(ObjectState)(
+				static_cast<ObjectStateType>(ObjectState::DirtyTransform) |
+				static_cast<ObjectStateType>(ObjectState::TranslationDirty) |
+				static_cast<ObjectStateType>(ObjectState::RotationDirty) |
+				static_cast<ObjectStateType>(ObjectState::ScaleDirty)
+				)
+		);
+
+
+
+		const auto& kids = this_->m_childrenOf[intEntity];
+		if (kids.size() >= 4) {
+			auto tRange = this_->_setupWorkerThreadRange(kids.data(), kids.size());
+			if (tRange.count > 0) {
+				for (size_t t = tRange.start(); t < tRange.end(); ++t) {
+					this_->m_startSemas[t]->release();
+				}
+				for (size_t t = tRange.start(); t < tRange.end(); ++t) {
+					this_->m_doneSemas[t]->acquire();
+				}
+			} else {
+				_brute_update_transform_batch_avx2(kids, this_, 0, kids.size());
+			}
+
+		} else {
+			for (auto child : kids) {
+				_brute_update_transform_scalar(child, this_);
+			}
+		}
+
+
+
+
+		//// Children
+		//const auto& kids = this_->m_childrenOf[entt::to_integral(root)];
+		//if (kids.size() >= 4) {
+		//	_brute_update_transform_batch_avx2(kids, this_, 0, kids.size());
+		//} else {
+		//	for (auto child : kids) {
+		//		_brute_update_transform_scalar(child, this_);
+		//	}
+		//}
+	}
+
+	static void _workerThread_avx2_test(TransformSystem* this_, uint8_t tI) {
+		while (true) {
+			this_->m_startSemas[tI]->acquire();
+			if (!this_->m_threadsRunning) return;
+
+			Range<uint32_t>& range = this_->m_workerRanges[tI];
+			thread_local static std::vector<entt::entity> entities;
+			entities.clear();
+
+			// Collect entities in this range
+			for (size_t i = range.start(); i < range.end(); ++i) {
+				entities.push_back(this_->m_roots[i]);
+			}
+
+			// Process in batches of 4 with AVX2
+			_brute_update_transform_batch_avx2(entities, this_, 0, entities.size());
+
+			this_->m_doneSemas[tI]->release();
+		}
+	}
+
+	static void _workerThread_avx2_test_entities(TransformSystem* this_, uint8_t tI) {
+		while (true) {
+			this_->m_startSemas[tI]->acquire();
+			if (!this_->m_threadsRunning) return;
+
+			// Process in batches of 4 with AVX2
+			_brute_update_transform_batch_avx2(this_->m_workerEntities[tI], this_, 0, this_->m_workerEntities[tI].size());
+
+			this_->m_doneSemas[tI]->release();
+		}
+	}
+
+	// Test: Skip ALL dirty checking, just brute force update everything
+	static void _workerThread_brute_test(TransformSystem* this_, uint8_t tI) {
+		while (true) {
+			this_->m_startSemas[tI]->acquire();
+			if (!this_->m_threadsRunning) return;
+
+			Range<uint32_t>& range = this_->m_workerRanges[tI];
+
+			// Brute force: update every transform in range
+			for (size_t i = range.start(); i < range.end(); ++i) {
+				auto& root = this_->m_roots[i];
+				_brute_update_transform_scalar(root, this_);
+			}
+
+			this_->m_doneSemas[tI]->release();
+		}
+	}
+
 
 	static void _workerThread(TransformSystem* this_, uint8_t tI) {
 		while (true) {
@@ -53,7 +282,7 @@ private:
 
 			// Push roots (cache this list, or gather each frame if you prefer)
 			auto& stack = this_->m_threadsStacks[tI];
-			Range& range = this_->m_workerRanges[tI];
+			Range<uint32_t>& range = this_->m_workerRanges[tI];
 			for (size_t i = range.start(); i < range.end(); ++i) {
 				auto& root = this_->m_roots[i];
 
@@ -222,13 +451,17 @@ public:
 		for (auto& stack : m_threadsStacks)
 			stack.reserve(256);
 
-		m_positions.reserve(4096 * 16);
-		m_scales.reserve(4096 * 16);
-		m_rotations.reserve(4096 * 16);
+		m_positions.reserve(4096 * 64);
+		m_scales.reserve(4096 * 64);
+		m_rotations.reserve(4096 * 64);
+		m_modelTransforms.reserve(4096 * 64);
 
 		// Start Threads
 		for (uint8_t i = 0; i < TRANSFORM_THREADS_MAX; ++i) {
-			m_workers[i] = new std::thread{ TransformSystem::_workerThread, this, i };
+			//m_workers[i] = new std::thread{ TransformSystem::_workerThread, this, i }; 
+			//m_workers[i] = new std::thread{ TransformSystem::workerThread_brute_test, this, i };
+			//m_workers[i] = new std::thread{ TransformSystem::_workerThread_avx2_test, this, i };
+			m_workers[i] = new std::thread{ TransformSystem::_workerThread_avx2_test_entities, this, i };
 			m_startSemas[i] = new std::binary_semaphore{ 0 };
 			m_doneSemas[i] = new std::binary_semaphore{ 0 };
 		}
@@ -237,30 +470,96 @@ public:
 	INLINE ArenaVector<glm::vec3>& positions() { return m_positions; }
 	INLINE ArenaVector<glm::quat>& rotations() { return m_rotations; }
 	INLINE ArenaVector<glm::vec3>& scales() { return m_scales; }
+	
+private:
+	static constexpr size_t _workerDiv = (TRANSFORM_THREADS_MAX * (TRANSFORM_THREADS_MAX / 2));
 
+	INLINE Range<uint32_t> _setupWorkerThreadRange(const entt::entity* entities, size_t entCount) {
+
+		auto startWorkers = static_cast<uint8_t>(
+			std::clamp(entCount / _workerDiv,
+					   static_cast <size_t>(1),
+					   static_cast<size_t>(TRANSFORM_THREADS_MAX)));
+
+		auto curThreads = m_curNumWorkers.load(std::memory_order_acquire);
+		if (curThreads >= TRANSFORM_THREADS_MAX)
+			return { 0, 0 };
+
+		auto availWorkers = std::clamp(static_cast<unsigned int>(startWorkers),
+									   (unsigned int)0,
+									   (unsigned int)TRANSFORM_THREADS_MAX - curThreads);
+
+		uint8_t expected = curThreads + availWorkers;
+		m_curNumWorkers.fetch_add(availWorkers, std::memory_order_acq_rel);
+		if (!m_curNumWorkers.compare_exchange_strong(expected, curThreads + availWorkers)) {
+			if (expected >= TRANSFORM_THREADS_MAX)
+				return { 0, 0 };
+		}
+
+		auto threadRange = Range<uint32_t>{ curThreads, static_cast<uint32_t>(expected) - curThreads };
+		uint32_t offset = static_cast<uint32_t>(
+			std::ceil(static_cast<float>(entCount / static_cast<float>(threadRange.count)))
+			);
+
+
+		for (uint32_t i = 0; i < threadRange.count; ++i) {
+			uint32_t start = i * offset;
+			uint32_t count = (i == threadRange.count - 1 && entCount % offset != 0)
+				? entCount % offset
+				: offset;
+
+			auto threadId = threadRange[i];
+			m_workerEntities[threadId].reserve(count);
+			m_workerEntities[threadId].clear();
+			for (size_t e = start; e < start + count; ++e) {
+				m_workerEntities[threadRange[i]].push_back(entities[e]);
+			}
+		}
+		
+		
+		return threadRange;
+	}
+public:
 	INLINE void run(BoundingSystem& boundSys) {
 
-		//TEST MT
-		static constexpr size_t workerDiv = (TRANSFORM_THREADS_MAX * (TRANSFORM_THREADS_MAX / 2));
 		m_boundSysPtr = &boundSys;
-		m_curNumWorkers = static_cast<uint8_t>(
-			std::clamp(m_roots.size() / workerDiv,
+		m_curNumWorkers.store(0, std::memory_order_release);
+		auto startRange = _setupWorkerThreadRange(m_roots.data(), m_roots.size());
+
+		for (size_t i = startRange.start(); i < startRange.end(); ++i) {
+			m_startSemas[i]->release();
+		}
+
+		for (size_t i = startRange.start(); i < startRange.end(); ++i) {
+			m_doneSemas[i]->acquire();
+		}
+
+		return;
+
+
+		//TEST MT
+		//static constexpr size_t workerDiv = (TRANSFORM_THREADS_MAX * (TRANSFORM_THREADS_MAX / 2));
+		m_boundSysPtr = &boundSys;
+		auto startWorkers = static_cast<uint8_t>(
+			std::clamp(m_roots.size() / _workerDiv,
 					   static_cast <size_t>(1),
 					   static_cast<size_t>(TRANSFORM_THREADS_MAX)));
 
 		uint32_t offset = static_cast<uint32_t>(
-				std::ceil(static_cast<float>(m_roots.size() / static_cast<float>(m_curNumWorkers)))
+				std::ceil(static_cast<float>(m_roots.size() / static_cast<float>(startWorkers)))
 			);
-		for (uint32_t i = 0; i < m_curNumWorkers; ++i) {
+
+		m_curNumWorkers.store(startWorkers, std::memory_order_acq_rel);
+		for (uint32_t i = 0; i < startWorkers; ++i) {
 			uint32_t start = i * offset;
-			uint32_t count = (i == m_curNumWorkers - 1 && m_roots.size() % offset != 0)
+			uint32_t count = (i == startWorkers - 1 && m_roots.size() % offset != 0)
 				? m_roots.size() % offset
 				: offset;
 			m_workerRanges[i] = { start, count };
 			m_startSemas[i]->release();
 		}
 
-		for (size_t i = 0; i < m_curNumWorkers; ++i) {
+		for (size_t i = 0; i < startWorkers; ++i) {
 			m_doneSemas[i]->acquire();
 		}
 	}
@@ -293,6 +592,8 @@ public:
 		if (valueInPtr) {
 			auto parent = static_cast<entt::entity*>(valueInPtr);
 			setParent(entity, parent);
+		} else {
+			_checkEntityIsRoot(entity);
 		}
 	}
 
@@ -330,14 +631,15 @@ public:
 				return;
 			}
 
-			auto newId = entt::to_integral(newParent);
-			if (newId >= m_childrenOf.size()) {
-				m_childrenOf.resize(newId + 1);
+			auto newParentId = entt::to_integral(newParent);
+			if (newParentId >= m_childrenOf.size()) {
+				m_childrenOf.resize(newParentId + 1);
 			}
 
 			m_parentOf[id] = newParent;
-			m_childrenOf[newId].push_back(entity);
+			m_childrenOf[newParentId].push_back(entity);
 			_checkEntityIsRoot(newParent);
+			_checkEntityIsRoot(entity);
 
 		} else {
 			m_parentOf[id] = entt::null;

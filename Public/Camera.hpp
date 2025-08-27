@@ -148,7 +148,7 @@ public:
         transform().rotate(eulerDegreesDelta);
     }
     INLINE void rotateLocal(const glm::vec3& eulerDegreesDelta) {
-        transform().rotateLocal(eulerDegreesDelta);
+        transform().rotateLocalWorldYaw(eulerDegreesDelta);
     }
 
     INLINE float getFOV() const { return m_camData.vFov; }

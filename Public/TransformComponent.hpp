@@ -2,9 +2,9 @@
 #define TRANSFORM_COMPONENT_HPP
 
 
-#include <glm/glm.hpp>
-#include <glm/gtx/quaternion.hpp>
-#include "MobaMath.hpp"
+//#include <glm/glm.hpp>
+//#include <glm/gtx/quaternion.hpp>
+//#include "MMath.hpp"
 
 struct TransformComponent
 {

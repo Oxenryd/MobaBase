@@ -28,9 +28,9 @@ struct MeshComponent
 	uint32_t subMeshCount;
 };
 
-struct SubMeshData
+struct alignas (32) SubMeshData
 {
-	entt::entity parent{ entt::null };
+	//entt::entity parent{ entt::null };
 	entt::entity entity{ entt::null };
 	uint32_t vertexOffset{ UINT32_INVALID };
 	uint32_t vertexCount{ UINT32_INVALID };

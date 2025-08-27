@@ -947,7 +947,7 @@ public:
 	std::vector<VkPipeline> pipelines;
 	std::vector<VkPipelineLayout> pipelineLayouts;
 
-	BlendMode currentBlendMode = BlendMode::Opaque;
+	//BlendMode currentBlendMode = BlendMode::Opaque;
 
 	uint32_t renderPassIndex = 0;
 	uint32_t pipelineId = 0;
@@ -2041,6 +2041,12 @@ public:
 			return VK_ERROR_FEATURE_NOT_PRESENT;
 		}
 
+		// for dynamic states
+		VkPhysicalDeviceExtendedDynamicState2FeaturesEXT ext2{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_2_FEATURES_EXT };
+		ext2.extendedDynamicState2 = VK_TRUE;
+		ext2.extendedDynamicState2LogicOp = VK_TRUE;
+		ext2.extendedDynamicState2PatchControlPoints = VK_TRUE;
+
 		// --- Build ENABLE chain (separate structs from the query) ---
 		VkPhysicalDeviceVulkan12Features en12{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES };
 		en12.descriptorIndexing = VK_TRUE;
@@ -2049,6 +2055,7 @@ public:
 		en12.descriptorBindingPartiallyBound = VK_TRUE;
 		en12.descriptorBindingVariableDescriptorCount = VK_TRUE;
 		en12.scalarBlockLayout = VK_TRUE;
+		en12.pNext = &ext2;
 
 		VkPhysicalDeviceVulkan13Features en13{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES };
 		en13.shaderDemoteToHelperInvocation = supp13.shaderDemoteToHelperInvocation; // enable if supported
@@ -2060,7 +2067,6 @@ public:
 		enable.features.samplerAnisotropy = VK_TRUE;
 		enable.features.vertexPipelineStoresAndAtomics = VK_TRUE;
 		enable.features.fragmentStoresAndAtomics = VK_TRUE;
-		// If you also need base features (e.g. samplerAnisotropy): enable.features.samplerAnisotropy = VK_TRUE;
 
 		// --- Extensions: swapchain is enough on 1.2+; DO NOT enable VK_EXT_descriptor_indexing here. ---
 		std::vector<const char*> exts;
@@ -2322,26 +2328,26 @@ public:
 		depthAttachmentRef.attachment = 1;
 		depthAttachmentRef.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 		
-		
-
 		VkSubpassDescription subpass{};
 		subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
 		subpass.colorAttachmentCount = static_cast<uint32_t>(refs.size());
 		subpass.pColorAttachments = refs.data();
 		subpass.pDepthStencilAttachment = &depthAttachmentRef;
 
-		VkRenderPass renderPass;
-		VkRenderPassCreateInfo renderPassInfo{};
-		renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-		renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
-		renderPassInfo.pAttachments = attachments.data();
-		renderPassInfo.subpassCount = 1;
-		renderPassInfo.pSubpasses = &subpass;
+		VkRenderPass basicRenderPass;
+		VkRenderPassCreateInfo basicRenderPassInfo{};
+		basicRenderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+		basicRenderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
+		basicRenderPassInfo.pAttachments = attachments.data();
+		basicRenderPassInfo.subpassCount = 1;
+		basicRenderPassInfo.pSubpasses = &subpass;
 		
+		Vk_CHECK(vkResult, vkCreateRenderPass(m_vkDevice, &basicRenderPassInfo, nullptr, &basicRenderPass));
 
-		Vk_CHECK(vkResult, vkCreateRenderPass(m_vkDevice, &renderPassInfo, nullptr, &renderPass));
+		rendPasses.push_back(basicRenderPass);
 
-		rendPasses.push_back(renderPass);
+
+
 
 		LOG(LogType::Success, "Done.");
 		return VK_SUCCESS;
@@ -2511,7 +2517,10 @@ public:
 		scissor.extent = swapchainExtent;
 		std::vector<VkDynamicState> dynamicStates = {
 			VK_DYNAMIC_STATE_VIEWPORT,
-			VK_DYNAMIC_STATE_SCISSOR
+			VK_DYNAMIC_STATE_SCISSOR,
+			VK_DYNAMIC_STATE_DEPTH_TEST_ENABLE,
+			VK_DYNAMIC_STATE_DEPTH_WRITE_ENABLE,
+			VK_DYNAMIC_STATE_DEPTH_COMPARE_OP
 		};
 
 		VkPipelineViewportStateCreateInfo viewportState{};
@@ -2560,7 +2569,7 @@ public:
 		material.init(pipelineIndex, pipelineLayoutIndex, descriptorSetsList);
 		pipelines.push_back(graphicsPipeline);
 		pipelineLayouts.push_back(pipelineLayout);
-		pipelineHashIndexMap.insert({ remakeKey, pipelineIndex });
+		pipelineHashIndexMap.insert({ remakeKey, static_cast<uint32_t>(pipelineIndex) });
 		LOG(LogType::Success, "Done.");
 		
 

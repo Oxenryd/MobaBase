@@ -21,7 +21,7 @@ void BoundingVolume::setCoarseAABB_local(const AABB& aabb) {
 }
 
 AABB BoundingVolume::getCoarseAABB() const {
-	const BoundingVolumeComponent& boundComp = *this;
+	const BoundingVolumeComponent& boundComp = m_reg->get<BoundingVolumeComponent>(m_entity);
 	auto& transComp = m_reg->get<TransformComponent>(m_entity);
 
 	return Engine::getInstance()->getScene(transComp.sceneIndex)->boundingSystem().aabbs()[boundComp.coarseIndexWorld];

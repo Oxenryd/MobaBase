@@ -423,7 +423,7 @@ struct CameraData
 
 	union
 	{
-		alignas (16) glm::vec4 screenSizes;
+		alignas (16) glm::vec4 screenSizes{};
 		struct
 		{
 			glm::vec2 screenSize;

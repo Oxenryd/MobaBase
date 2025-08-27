@@ -8,7 +8,7 @@
 #include <glm/gtx/quaternion.hpp>
 #include "Bits.hpp"
 
-#include "MobaMath.hpp"
+#include "MMath.hpp"
 #include "ObjectState.hpp"
 #include "GlobalMacros.h"
 #include "TransformComponent.hpp"
@@ -28,6 +28,7 @@ private:
 	entt::entity m_entity;
 
 	TransformComponent& _markDirty(uint8_t what);
+
 
 public:
 	~Transform() = default;
@@ -133,8 +134,12 @@ public:
 	INLINE glm::vec3 up() { return rotation() * DIR_UP; }
 
 	void translate(const glm::vec3& direction);
-	void rotate(const glm::vec3& rotationDelta);
-	void rotateLocal(const glm::vec3& rotDelta);
+	void rotateByVector(const glm::vec3& deltaVec);
+	void rotate(const glm::vec3& deltaEuler);
+	void rotate(const glm::quat& worldDelta);
+	void rotateLocal(const glm::quat& deltaRotLocal);
+	void rotateLocal(const glm::vec3& deltaRotLocal);
+	void rotateLocalWorldYaw(const glm::vec3& rotDelta);
 
 	void rotateAroundWorldAxis(const glm::vec3& axis, float angle);
 	INLINE void lookAt(const glm::vec3& target, const glm::vec3& up = DIR_UP) {
@@ -162,7 +167,9 @@ public:
 	void clearChildren();
 
 	// Static
+	static const glm::mat4x4& localToWorld(ArenaRegistry* registry, entt::entity entity);
 	static glm::vec3& position(ArenaRegistry* registry, entt::entity entity);
+	static glm::vec3 positionInvertY(ArenaRegistry* registry, entt::entity entity);
 	static glm::vec3& scale(ArenaRegistry* registry, entt::entity entity);
 	static glm::quat& rotation(ArenaRegistry* registry, entt::entity entity);
 	INLINE static StateField& state(ArenaRegistry* registry, entt::entity entity) {

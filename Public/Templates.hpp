@@ -16,7 +16,9 @@ private:
     uint32_t m_camIndex{};
     float m_camSpeed = 12.5f;
     std::vector<GameObject> m_goList;
-
+    std::vector<float> m_startScales;
+    std::vector<float> m_radSpeeds;
+    MWork::JobHandle m_transformWork = nullptr;
 
 public:
     GameScene(size_t arenaSize, uint32_t sceneIndex)
@@ -27,28 +29,39 @@ public:
 
     void start() {
        
+        m_camIndex = sceneRender().addCamera();
+        Engine::getInstance()->setMainCamera(m_sceneIndex, m_camIndex);
+
+
         auto dirLight = LightFactory::Directional(glm::vec3{-1, -0.85, -0.25});
         dirLight.positionVS = glm::vec3{0, 20, 0};
         m_skyLight = m_reg.create();
         auto& lightRef = lightSystem().registerLight(dirLight, m_skyLight);
 
+        m_go1 = gameObjectSystem().createGameObject<GameObject>("MerryGoRound");
         
-        size_t numOfObjects = 4096 * 16;
+        size_t numOfObjects = 4096 * 64;
         m_goList.reserve(numOfObjects);
         auto step = MMath::fTAU / numOfObjects;
         const std::string pathObject = std::format("{}{}", ASSETS_DIR, "Sphere/sphere.obj");
         for (size_t i = 0; i < numOfObjects; ++i) {
-            m_goList.emplace_back(gameObjectSystem().createGameObject<GameObject>(std::format("Object_{}", i)));
+            m_goList.emplace_back(gameObjectSystem().createGameObject<GameObject>(std::format("Sphere_{}", i)));
             Mesh objectMesh{};
-            sceneRender().createMeshFromModel(pathObject, &objectMesh, m_goList[i].entity());
+            sceneRender().createMeshFromModel(pathObject, &objectMesh, m_goList.back().entity());
             auto trans = objectMesh.getTransform();
             trans.modifyPosition() = glm::vec3{std::cos(step * i) * 12, std::sin(step * i) * 12, 0};
-            //auto children = trans.getChildrenEntities();
-            //BoundingVolume bVol = BoundingVolume{ &m_reg, children[0] };
-            //bVol.setFlags((BoundingVolumeFlags)0);
+            trans.modifyRotation() = MRandom::nextRotation();
+            auto scale = MRandom::nextFloat(0.3f, 1.6f);
+            m_startScales.push_back(scale);
+            trans.modifyScale() = glm::vec3{ scale ,scale ,scale };
+            m_radSpeeds.push_back(MRandom::nextFloat(1.3f, 8.f));
+            
+
+            m_goList.back().transform().setParent(m_go1);
+            //trans.setParent(m_go1);
         }
 
-        //m_go1 = gameObjectSystem().createGameObject<GameObject>("Room");
+        
         //m_go2 = gameObjectSystem().createGameObject<GameObject>("Box");
         //m_go3 = gameObjectSystem().createGameObject<GameObject>("Box");
 
@@ -86,9 +99,6 @@ public:
         //modelMesh2.getTransform().modifyPosition() = { -12, 0, 0 };
 
         auto& reg = registry();
-
-        m_camIndex = sceneRender().addCamera();
-        Engine::getInstance()->setMainCamera(m_sceneIndex, m_camIndex);
 
         Engine::getInstance()->getInputManager()->onKeyHold.subscribe( [this](KeyCode code) -> void
                        {
@@ -175,14 +185,39 @@ public:
 
         auto addPos = glm::vec3{0.0025f, 0, 0};//glm::vec3{std::cos(m_time), std::sin(m_time), 0};
 
-        for (size_t i = 0; i < m_goList.size(); ++i) {
-            GameObject& go = m_goList[i];
-            auto transform = Transform{ &m_reg, go.entity() };
-            auto& pos = transform.modifyPosition();
+        auto merryTrans = Transform{ &m_reg, m_go1 };
+        auto children = merryTrans.getChildrenEntities();
+        merryTrans.rotate(glm::vec3{ 0.0f, 0.5f, 1.0f } * Timing::deltaTimeF());
 
-            pos += addPos;
-            
-            //pos += glm::vec3{Engine::cosF(), Engine::sinF(), 0};
+        //if (m_transformWork != nullptr && m_transformWork->pending.load() == 0) {
+        //    m_transformWork = MWork
+        //        ::for_range_chunked(0, children.size(), 0, 16, MWork::JobAwaitPoint::Immediate,
+        //                            [&](std::size_t i) {
+        //                                // do work on i; contiguous over [start, start+chunk)
+        //                                // avoid writes to shared small structs to prevent false sharing
+
+        //                                auto transform = Transform{ &m_reg, children[i] };
+
+        //                                transform.rotateLocal(glm::vec3{ 0.0f, 1.0f, 0.0f } *Timing::deltaTimeF());
+        //                                auto& scale = transform.modifyScale();
+
+        //                                auto cos = std::cos(m_radSpeeds[i] * m_time) * m_startScales[i] * 0.66f;
+        //                                auto curScale = m_startScales[i] + cos;
+        //                                scale = glm::vec3{ curScale };
+        //                            });
+        //}
+
+        
+
+        for (size_t i = 0; i < children.size(); ++i) {
+            auto transform = Transform{ &m_reg, children[i]};
+
+            transform.rotateLocal(glm::vec3{0.0f, 1.0f, 0.0f} * Timing::deltaTimeF());
+            auto& scale = transform.modifyScale();
+
+            auto cos = std::cos(m_radSpeeds[i] * m_time) * m_startScales[i] * 0.66f;
+            auto curScale = m_startScales[i] + cos;
+            scale = glm::vec3{ curScale};
         }
     }
 

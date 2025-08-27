@@ -7,7 +7,7 @@
     #endif
 #endif
 
-#include "MobaMath.hpp"
+#include "MMath.hpp"
 
 #include <cstdint>
 #include <glm/glm.hpp>

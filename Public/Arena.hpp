@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <memory>
 #include <vector>
+#include <semaphore>
 
 
 #ifndef GLOBAL_MACROS_H
@@ -324,6 +325,7 @@ private:
     size_t m_size;
     size_t m_offset;
     uint32_t m_arenaId;
+    std::binary_semaphore m_sem{ 1 };
 
     static size_t alignUp(size_t addr, size_t alignment) {
         return (addr + (alignment - 1)) & ~(alignment - 1);
@@ -334,7 +336,10 @@ public:
         : m_size(size), m_offset(0) {
         
         m_heap = memProvider;
-        m_memory = memProvider ? reinterpret_cast<uint8_t*>(m_heap->allocate(size)) : new uint8_t[size];
+        //m_memory = memProvider ? reinterpret_cast<uint8_t*>(m_heap->allocate(size)) : new uint8_t[size];
+        m_memory = memProvider 
+            ? reinterpret_cast<uint8_t*>(m_heap->allocate(size))
+            : reinterpret_cast<uint8_t*>(::operator new[](size, std::align_val_t{64}));
         m_arenaId = memProvider ? m_heap->registerArena() : UINT32_INVALID;
         LOGLINE(LogType::Info, LogMod::Memory, "Creating Arena, Addr: " + std::to_string(reinterpret_cast<size_t>(m_memory)) +
                 ", " + std::to_string(m_size / 1024) + "kB... ");
@@ -376,11 +381,13 @@ public:
 
     ~Arena() {
         destroyAll();
-        delete[] m_memory;
+        //delete[] m_memory;
+        ::operator delete[](m_memory, std::align_val_t{ 64 });
         m_memory = nullptr;
     }
 
     void* allocate(size_t size, size_t alignment = alignof(std::max_align_t)) {
+        m_sem.acquire();
         size_t current = reinterpret_cast<size_t>(m_memory) + m_offset;
         size_t aligned = alignUp(current, alignment);
         size_t offset = aligned - reinterpret_cast<size_t>(m_memory);
@@ -392,6 +399,7 @@ public:
 
         void* ptr = m_memory + offset;
         m_offset = offset + size;
+        m_sem.release();
         return ptr;
     }
 
@@ -420,7 +428,9 @@ public:
     //}
 
     void reset() {
+        m_sem.acquire();
         m_offset = 0;
+        m_sem.release();
     }
 
     size_t used() const { return m_offset; }

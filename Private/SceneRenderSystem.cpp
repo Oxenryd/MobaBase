@@ -1,6 +1,6 @@
 #include "SceneRenderSystem.hpp"
 #include "Engine.h"
-#include "MobaMath.hpp"
+#include "MMath.hpp"
 
 #include <format>
 
@@ -104,15 +104,15 @@ ErrorCode SceneRenderSystem::createMeshFromModel(const std::string& path, Mesh* 
 		entt::entity biggestSubEntity = entt::null;
 		for (size_t i = meshComp.subMeshOffset; i < meshComp.subMeshOffset + meshComp.subMeshCount; ++i) {
 			auto& subMesh = m_subMeshes[i];
-			subMesh.entity = m_reg->create();
-			subMesh.parent = parent;
+			subMesh.entity = parent != entt::null ? parent : m_reg->create();
+			//subMesh.parent = parent;
 			auto& newSubMeshComp = m_reg->emplace<SubMeshComponent>(subMesh.entity, SubMeshComponent{ static_cast<uint32_t>(i) });
 			
 			auto subVerts = std::span<BaseVSIn>(&m_vertices[subMesh.vertexOffset], subMesh.vertexCount);
 
 			Engine::getInstance()->getScene(m_sceneIndex)->transformSystem().registryEmplace(
 				subMesh.entity,
-				parent == entt::null ? nullptr : static_cast<void*>(&subMesh.parent)
+				nullptr//parent == entt::null ? nullptr : static_cast<void*>(&subMesh.parent)
 			);
 
 			AABB box{};

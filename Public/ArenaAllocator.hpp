@@ -69,7 +69,7 @@ public:
     using value_type = T;
     using size_type = std::size_t;
     using difference_type = std::ptrdiff_t;
-    using propagate_on_container_copy_assignment = std::false_type;
+    using propagate_on_container_copy_assignment = std::true_type;
     using propagate_on_container_move_assignment = std::true_type;
     using propagate_on_container_swap = std::false_type;
     using is_always_equal = std::false_type;

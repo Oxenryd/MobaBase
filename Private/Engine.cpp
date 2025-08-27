@@ -34,6 +34,13 @@ Engine::Engine(const std::string& appName, size_t baseSize) :
 }
 
 Engine::~Engine() {
+
+	if (m_workArena) {
+		m_workArena->destroyAll();
+		delete m_workArena;
+		m_workArena = nullptr;
+	}
+
 	for (auto* scene : m_scenes) {
 		delete scene;
 	}
@@ -141,6 +148,7 @@ ErrorCode Engine::_initBaseShaders() {
 	auto* baseVs = getRenderManager()->getShader(SHADER_BASE_VS);
 	auto* basePs = getRenderManager()->getShader(SHADER_BASE_PS);
 	auto& baseMat = Material::createMaterial("BaseMaterialUnlit", *baseVs, *basePs);
+	baseMat.blendModes[0] = BlendMode::Alpha;
 	baseMat.createInstance();
 	m_vkCtx->createPipelineFromMaterial(m_renderMan, baseMat);
 	std::cout << "\n";
@@ -150,6 +158,7 @@ ErrorCode Engine::_initBaseShaders() {
 	auto* shapeVS = getRenderManager()->getShader(SHADER_SHAPERENDERER_VS);
 	auto* shapePS = getRenderManager()->getShader(SHADER_SHAPERENDERER_PS);
 	auto& shapeMat = Material::createMaterial("ShapeRendererMaterial", *shapeVS, *shapePS);
+	shapeMat.blendModes[0] = BlendMode::Alpha;
 	shapeMat.createInstance();
 	m_vkCtx->createPipelineFromMaterial(m_renderMan, shapeMat);
 	std::cout << "\n";
@@ -170,6 +179,15 @@ ErrorCode Engine::_initBaseCallbacks() {
 							 this->m_renderMan->pixelShaders()[0]);
 															  });
 #endif
+	return ErrorCode::OK;
+}
+
+ErrorCode Engine::_initJobSystem() {
+
+	m_workArena = new HeapArena{ 32_MB, true };
+	MWork::init(std::thread::hardware_concurrency(), WORK_QUEUE_CAP, m_workArena);
+
+
 	return ErrorCode::OK;
 }
 
@@ -331,6 +349,9 @@ ErrorCode Engine::init() {
 	
 	EC_CHECK(EC, _initBaseShaders());
 	EC_CHECK(EC, _initBaseCallbacks());
+
+	EC_CHECK(EC, _initJobSystem());
+
 
 	return ErrorCode::OK;
 }

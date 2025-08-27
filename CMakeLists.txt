@@ -167,7 +167,7 @@ add_executable (MobaBase
 	"Public/SystemECS.h"
 	"Public/TransformSystem.hpp"
 	"Public/ObjectState.hpp"
-	"Public/MobaMath.hpp"
+	"Public/MMath.hpp"
 	"Public/EnabledTag.hpp"
 	"Public/GameObjectSystem.hpp"
 	"Public/GameObject.hpp"
@@ -198,6 +198,8 @@ add_executable (MobaBase
 	"Public/TransformComponent.hpp"
 	"Public/GlfwSurface.h"
 	"Public/Range.hpp"
+	"Public/MRandom.hpp"
+	"Public/MWork.hpp"
 
 
 	"Private/Engine.cpp"
@@ -343,6 +345,7 @@ target_compile_definitions(MobaBase PRIVATE
 	SCENE_MAX_SCENES=512
 	RENDER_SCENE_MAX_THREADS=128
 	TRANSFORM_THREADS_MAX=16
+	WORK_QUEUE_CAP=1024
 
 	# Directories
 	SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/\"

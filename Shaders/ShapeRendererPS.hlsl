@@ -17,12 +17,12 @@ struct ShapePSIn
 
 float4 main(ShapePSIn input) : SV_Target
 {
-    float3 color = float3(
-        frac(input.color.r + (input.id * 0.16f)),
-        frac(input.color.g + (input.id * 0.51f)),
-        frac(input.color.b + (input.id * 0.86f))
-    );
+    //float3 color = float3(
+    //    frac(input.color.r + (input.id * 0.16f)),
+    //    frac(input.color.g + (input.id * 0.51f)),
+    //    frac(input.color.b + (input.id * 0.86f))
+    //);
     
-    return float4(color, input.alpha);
+    return float4(input.color, input.alpha);
 
 }

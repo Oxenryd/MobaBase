@@ -63,6 +63,10 @@ void VulkanContext::draw(const DrawContext& ctx) {
 	scissor.extent = swapchainExtent;
 	vkCmdSetScissor(frame.cmdBuffer, 0, 1, &scissor);
 
+	vkCmdSetDepthTestEnable(frame.cmdBuffer, VK_TRUE);
+	vkCmdSetDepthWriteEnable(frame.cmdBuffer, VK_TRUE);
+	vkCmdSetDepthCompareOp(frame.cmdBuffer, VK_COMPARE_OP_LESS_OR_EQUAL);
+
 	// Camera
 	auto mainCam = Engine::getInstance()->mainCamera();
 	auto& camData = mainCam->cameraData();
@@ -476,6 +480,10 @@ void VulkanContext::draw(const DrawContext& ctx) {
 			pipelinesCount++;
 			setCount++;
 			anyAabbsDrawn = true;
+
+			vkCmdSetDepthTestEnable(frame.cmdBuffer, VK_FALSE);
+			vkCmdSetDepthWriteEnable(frame.cmdBuffer, VK_FALSE);
+			//vkCmdSetDepthCompareOp(frame.cmdBuffer, VK_COMPARE_OP_LESS_OR_EQUAL);
 		}
 		
 		if (scene->sceneRender().drawOccluders()) {
@@ -484,7 +492,7 @@ void VulkanContext::draw(const DrawContext& ctx) {
 				AABB worldBox = scene->boundingSystem().aabbs()[bound.coarseIndexWorld];
 				ShapePush shapePush{};
 				shapePush.modelToWorld = Transform::composeTRS(&scene->registry(), entity);
-				shapePush.color = { 1.0f, 0.01f, 0.02f, 0.01f };
+				shapePush.color = { 1.0f, 0.01f, 0.02f, 0.1f };
 				shapePush.rotation = glm::quat();
 				shapePush.aabb = { worldBox.min, worldBox.max };
 				shapePush.drawNumber = shapeDraws++;
@@ -497,12 +505,20 @@ void VulkanContext::draw(const DrawContext& ctx) {
 			}
 		} else if (scene->sceneRender().drawNodes()) {
 
+			float largestNodeVol = 0;
 			for (size_t n = 0; n < scene->bvhSystem().bvh().getNodeCount(0); ++n) {
-				auto& node = scene->bvhSystem().bvh().nodes[0][n];
+				auto& node = scene->bvhSystem().bvh().getCurrentNodes()[n];
 				AABB& box = node.bounds;
+				
+				if (n == 0) {
+					largestNodeVol = box.volume();
+				}
+				float nodeVol = box.volume();
+				float alpha = std::clamp(largestNodeVol / nodeVol * 0.005f, 0.0f, 0.9f);
+
 				ShapePush shapePush{};
 				shapePush.modelToWorld = glm::mat4{ 1 };
-				shapePush.color = { 1.0f, 0.01f, 1.00f, 0.01f };
+				shapePush.color = { 1.0f, 0.01f, 1.0f, alpha };
 				shapePush.rotation = glm::quat();
 				shapePush.aabb = { box.min, box.max };
 				shapePush.drawNumber = shapeDraws++;
@@ -520,8 +536,9 @@ void VulkanContext::draw(const DrawContext& ctx) {
 
 				AABB worldBox = scene->boundingSystem().aabbs()[bound.coarseIndexWorld];
 				ShapePush shapePush{};
-				shapePush.modelToWorld = Transform::composeTRS(&scene->registry(), entity);
-				shapePush.color = { 0.02f, 1.0f, 0.02f, 0.01f };
+				
+				shapePush.modelToWorld = glm::mat4{ 1 };
+				shapePush.color = { 0.02f, 1.0f, 0.02f, 0.1f };
 				shapePush.rotation = glm::quat();
 				shapePush.aabb = { worldBox.min, worldBox.max };
 				shapePush.drawNumber = shapeDraws++;
