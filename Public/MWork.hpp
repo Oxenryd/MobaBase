@@ -26,12 +26,12 @@ namespace MWork
 {
 
     // ----------------- Await points -----------------
-    enum class JobAwaitPoint : uint8_t
+    enum class JobAwaitPoint : uint16_t
     {
-        Immediate = 0,
-        PreDraw = 1,
-        EndFrame = 2,
-        Custom0 = 3, // feel free to add more
+        Immediate,
+        PreDraw,
+        EndFrame,
+        StartNextFrame,
         Count
     };
 
@@ -40,8 +40,8 @@ namespace MWork
     {
         void (*invoke)(void* obj, std::size_t shardIdx, std::size_t shardCount, std::size_t threadIndex) = nullptr;
         void (*destroy)(void* obj, void* arena) = nullptr;
-        void* obj = nullptr;          // points to lambda/functor stored in arena
-        void* arena = nullptr;        // Arena*
+        void* obj = nullptr;
+        void* arena = nullptr;
     };
 
     template <class Fn>
@@ -52,14 +52,14 @@ namespace MWork
         }
         static void dtor(void* p, void* a) {
             auto* fn = static_cast<Fn*>(p);
-            auto* ar = static_cast<HeapArena*>(a);
+            auto* ar = static_cast<FrameArena*>(a);
             fn->~Fn();
             ar->deallocate(fn, sizeof(Fn));
         }
     };
 
     template <class Fn>
-    static inline CallablePayload make_callable(Fn&& f, HeapArena* arena) {
+    static inline CallablePayload make_callable(Fn&& f, FrameArena* arena) {
         using F = std::decay_t<Fn>;
         void* mem = arena->allocate(sizeof(F), alignof(F));
         F* obj = new (mem) F(std::forward<Fn>(f));
@@ -88,7 +88,7 @@ namespace MWork
     // Lightweight handle the caller can wait on (or engine can stash by await point)
     using JobHandle = JobGroup*;
 
-    inline void await(JobHandle h) {
+    inline void wait(JobHandle h) {
         if (!h) return;
         h->done.acquire(); // one-shot
         // destroy callable & free group storage happen in worker that observed pending==0
@@ -149,7 +149,7 @@ namespace MWork
                 }
             }
             data = cell->data;
-            cell->seq.store(pos + m_mask + 1 + 1, std::memory_order_release);
+            cell->seq.store(pos + m_mask + 1, std::memory_order_release);//cell->seq.store(pos + m_mask + 1 + 1, std::memory_order_release);
             return true;
         }
 
@@ -178,7 +178,7 @@ namespace MWork
     class JobSystem
     {
     public:
-        JobSystem(uint32_t threads, std::size_t queueCapacityPow2, HeapArena* arena)
+        JobSystem(uint32_t threads, std::size_t queueCapacityPow2, FrameArena* arena)
             : m_threads(threads),
             m_queue(queueCapacityPow2),
             m_arena(arena),
@@ -194,6 +194,10 @@ namespace MWork
             // Wake everything up so threads can exit.
             m_taskSem.release(std::numeric_limits<int>::max() / 2);
             for (auto& t : m_threads) if (t.joinable()) t.join();
+        }
+
+        void reset() {
+            m_arena->reset();
         }
 
         // ----------------- API: single job -----------------
@@ -216,12 +220,12 @@ namespace MWork
             }
             m_taskSem.release(static_cast<int>(shards));
 
-            if (ap == JobAwaitPoint::Immediate) {
-                await(group);
-            } else {
-                // Defer waiting; engine should call waitAwaitPoint(ap) later.
-                // You can also stash handles per await point if you prefer.
-            }
+            //if (ap == JobAwaitPoint::Immediate) {                                             _____________________________________
+            //    wait(group);
+            //} else {
+            //    // Defer waiting; engine should call waitAwaitPoint(ap) later.
+            //    // You can also stash handles per await point if you prefer.
+            //}
             return group;
         }
 
@@ -262,7 +266,7 @@ namespace MWork
         struct ChunkedRangeFunctor
         {
             State* st;
-            HeapArena* arena;
+            FrameArena* arena;
             Body body;
 
             ~ChunkedRangeFunctor() {
@@ -294,12 +298,6 @@ namespace MWork
                                     JobAwaitPoint ap,
                                     Fn&& body)
         {
-
-            // Allocate State in the *same arena* as the callable so we can free it when the callable dies.
-            void* stMem = m_arena->allocate(sizeof(State), alignof(State));
-            auto* st = new (stMem) State{ begin, end, std::max<std::size_t>(1, chunk) };
-
-
             //using F = std::decay_t<Fn>;
             //auto functor = ChunkedRangeFunctor<F>{ st, m_arena, std::forward<Fn>(body) };
 
@@ -342,6 +340,10 @@ namespace MWork
                 // Submit exactly shardCount shards that each walk their own static block.
                 return job(shardCount, ap, std::move(staticFn));
             }
+
+            // Allocate State in the *same arena* as the callable so we can free it when the callable dies.
+            void* stMem = m_arena->allocate(sizeof(State), alignof(State));
+            auto* st = new (stMem) State{ begin, end, std::max<std::size_t>(1, chunk) };
 
             using F = std::decay_t<Fn>;
             auto functor = ChunkedRangeFunctor<F>{ st, m_arena, std::forward<Fn>(body) };
@@ -386,21 +388,14 @@ namespace MWork
                 const uint32_t prev = g->pending.fetch_sub(1, std::memory_order_acq_rel);
                 if (prev == 1) {
                     // We are last: destroy callable, release waiter, and free group
-                    if (g->payload.destroy) g->payload.destroy(g->payload.obj, g->payload.arena);
+                    if (g->payload.destroy)
+                        g->payload.destroy(g->payload.obj, g->payload.arena);       
                     g->done.release();
                     freeGroup(g);
+                    
                 }
             }
         }
-
-        // Control arena allocation for JobGroup
-        // We assume controlArena provides allocate/deallocate like the callable arena.
-        //struct ControlArenaVTable
-        //{
-        //    void* (*allocate)(std::size_t, std::size_t) = nullptr;
-        //    void  (*deallocate)(void*, std::size_t) = nullptr;
-        //    void* self = nullptr;
-        //} m_ctrl{};
 
         JobGroup* allocGroup(uint32_t shards, JobAwaitPoint ap, const CallablePayload& payload) {
             void* mem = m_arena->allocate(sizeof(JobGroup), alignof(JobGroup));
@@ -412,23 +407,12 @@ namespace MWork
             m_arena->deallocate(g, sizeof(JobGroup));
         }
 
-        //template <class ControlArena>
-        //void bindControlArena(ControlArena* arena) {
-        //    m_arena = arena;
-        //    m_ctrl.allocate = [](void* a, std::size_t sz, std::size_t al) -> void* {
-        //        return static_cast<ControlArena*>(a)->allocate(sz, al);
-        //        };
-        //    m_ctrl.deallocate = [](void* a, void* p, std::size_t sz, std::size_t al) {
-        //        static_cast<ControlArena*>(a)->deallocate(p, sz, al);
-        //        };
-        //}
-
     private:
         std::vector<std::thread> m_threads;
         MpmcQueue<Job>           m_queue;
         std::atomic<bool>        m_shutdown{ false };
         std::counting_semaphore<std::numeric_limits<int>::max()> m_taskSem;
-        HeapArena*               m_arena = nullptr;
+        FrameArena*               m_arena = nullptr;
 
     };
 
@@ -441,14 +425,21 @@ namespace MWork
         }
     }
 
-    template <class ControlArena>
-    inline void init(uint32_t threads, std::size_t queueCapacityPow2, ControlArena* controlArena) {
-        detail::instance() = new JobSystem{ threads, queueCapacityPow2, controlArena };
+    inline void init(uint32_t threads, std::size_t queueCapacityPow2, FrameArena* arena) {
+        detail::instance() = new JobSystem{ threads, queueCapacityPow2, arena };
     }
 
     inline void shutdown() {
         delete detail::instance();
         detail::instance() = nullptr;
+    }
+
+    inline void reset() {
+        detail::instance()->reset();
+    }
+
+    inline void waitAwaitPoint(JobAwaitPoint ap) {
+        detail::instance()->waitAwaitPoint(ap);
     }
 
     // In practice a "parallel for" using 'shards' as the split count.
@@ -468,7 +459,12 @@ namespace MWork
     template <class Fn>
     inline JobHandle for_range_chunked(std::size_t begin, std::size_t end, std::size_t chunk, std::size_t shards,
                                JobAwaitPoint ap, Fn&& body) {
-        return detail::instance()->for_range_chunked(begin, end, chunk, shards, ap, std::forward<Fn>(body));
+        if (ap == JobAwaitPoint::Immediate) {
+            JobHandle result = detail::instance()->for_range_chunked(begin, end, chunk, shards, ap, std::forward<Fn>(body));
+            wait(result);
+            return result;
+        } else
+            return detail::instance()->for_range_chunked(begin, end, chunk, shards, ap, std::forward<Fn>(body));
     }
 
 } // namespace MWork

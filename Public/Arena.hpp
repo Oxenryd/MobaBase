@@ -449,6 +449,63 @@ public:
     }
 };
 
+class FrameArena
+{
+private:
+    uint8_t* m_memory;
+    size_t m_size;
+    std::atomic<size_t> m_offset{ 0 }; // Thread-safe bump pointer
 
+public:
+    FrameArena(size_t size) : m_size(size) {
+        m_memory = reinterpret_cast<uint8_t*>(::operator new[](size, std::align_val_t{ 64 }));//new uint8_t[size];
+        if (!m_memory) throw std::bad_alloc();
+    }
+
+    ~FrameArena() {
+        ::operator delete[](m_memory, std::align_val_t{ 64 });
+    }
+
+    void* allocate(size_t size, size_t alignment = alignof(std::max_align_t)) {
+        size_t current = m_offset.load(std::memory_order_relaxed);
+        size_t aligned, newOffset;
+
+        do {
+            //aligned = alignUp(reinterpret_cast<uintptr_t>(m_memory + current), alignment)
+            //    - reinterpret_cast<uintptr_t>(m_memory);
+            aligned = alignUp(current, alignment);
+            newOffset = aligned + size;
+
+            if (newOffset > m_size) {
+                throw std::bad_alloc();
+                return nullptr; // Out of memory
+            }
+        } while (!m_offset.compare_exchange_weak(current, newOffset, std::memory_order_relaxed));
+
+        return m_memory + aligned;
+    }
+
+    // No individual deallocate - reset entire frame
+    void deallocate(void*, size_t) {
+        // No-op for frame allocator
+    }
+
+    void reset() {
+        m_offset.store(0, std::memory_order_release);
+    }
+
+    size_t used() const {
+        return m_offset.load(std::memory_order_relaxed);
+    }
+
+    float ratioUsed() const {
+        return static_cast<float>(used()) / static_cast<float>(m_size);
+    }
+
+private:
+    static size_t alignUp(uintptr_t addr, size_t alignment) {
+        return (addr + (alignment - 1)) & ~(alignment - 1);
+    }
+};
 
 #endif

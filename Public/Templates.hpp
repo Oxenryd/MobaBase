@@ -18,7 +18,7 @@ private:
     std::vector<GameObject> m_goList;
     std::vector<float> m_startScales;
     std::vector<float> m_radSpeeds;
-    MWork::JobHandle m_transformWork = nullptr;
+    //MWork::JobHandle m_transformWork = nullptr;
 
 public:
     GameScene(size_t arenaSize, uint32_t sceneIndex)
@@ -189,36 +189,34 @@ public:
         auto children = merryTrans.getChildrenEntities();
         merryTrans.rotate(glm::vec3{ 0.0f, 0.5f, 1.0f } * Timing::deltaTimeF());
 
-        //if (m_transformWork != nullptr && m_transformWork->pending.load() == 0) {
-        //    m_transformWork = MWork
-        //        ::for_range_chunked(0, children.size(), 0, 16, MWork::JobAwaitPoint::Immediate,
-        //                            [&](std::size_t i) {
-        //                                // do work on i; contiguous over [start, start+chunk)
-        //                                // avoid writes to shared small structs to prevent false sharing
-
-        //                                auto transform = Transform{ &m_reg, children[i] };
-
-        //                                transform.rotateLocal(glm::vec3{ 0.0f, 1.0f, 0.0f } *Timing::deltaTimeF());
-        //                                auto& scale = transform.modifyScale();
-
-        //                                auto cos = std::cos(m_radSpeeds[i] * m_time) * m_startScales[i] * 0.66f;
-        //                                auto curScale = m_startScales[i] + cos;
-        //                                scale = glm::vec3{ curScale };
-        //                            });
-        //}
-
+        MWork::for_range_chunked(0, children.size(), 0, 16, MWork::JobAwaitPoint::Immediate,
+                                [&](std::size_t i) {
+                                    // do work on i; contiguous over [start, start+chunk)
+                                    // avoid writes to shared small structs to prevent false sharing
+        
+                                    auto transform = Transform{ &m_reg, children[i] };
+        
+                                    transform.rotateLocal(glm::vec3{ 0.0f, 1.0f, 0.0f } *Timing::deltaTimeF());
+                                    auto& scale = transform.modifyScale();
+        
+                                    auto cos = std::cos(m_radSpeeds[i] * m_time) * m_startScales[i] * 0.66f;
+                                    auto curScale = m_startScales[i] + cos;
+                                    scale = glm::vec3{ curScale };
+                                });
+        
+        
         
 
-        for (size_t i = 0; i < children.size(); ++i) {
-            auto transform = Transform{ &m_reg, children[i]};
+        //for (size_t i = 0; i < children.size(); ++i) {
+        //    auto transform = Transform{ &m_reg, children[i]};
 
-            transform.rotateLocal(glm::vec3{0.0f, 1.0f, 0.0f} * Timing::deltaTimeF());
-            auto& scale = transform.modifyScale();
+        //    transform.rotateLocal(glm::vec3{0.0f, 1.0f, 0.0f} * Timing::deltaTimeF());
+        //    auto& scale = transform.modifyScale();
 
-            auto cos = std::cos(m_radSpeeds[i] * m_time) * m_startScales[i] * 0.66f;
-            auto curScale = m_startScales[i] + cos;
-            scale = glm::vec3{ curScale};
-        }
+        //    auto cos = std::cos(m_radSpeeds[i] * m_time) * m_startScales[i] * 0.66f;
+        //    auto curScale = m_startScales[i] + cos;
+        //    scale = glm::vec3{ curScale};
+        //}
     }
 
     void lateUpdate(float dt) {

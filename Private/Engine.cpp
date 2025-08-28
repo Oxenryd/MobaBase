@@ -36,7 +36,7 @@ Engine::Engine(const std::string& appName, size_t baseSize) :
 Engine::~Engine() {
 
 	if (m_workArena) {
-		m_workArena->destroyAll();
+		MWork::shutdown();
 		delete m_workArena;
 		m_workArena = nullptr;
 	}
@@ -184,7 +184,7 @@ ErrorCode Engine::_initBaseCallbacks() {
 
 ErrorCode Engine::_initJobSystem() {
 
-	m_workArena = new HeapArena{ 32_MB, true };
+	m_workArena = new FrameArena{ 32_MB };
 	MWork::init(std::thread::hardware_concurrency(), WORK_QUEUE_CAP, m_workArena);
 
 
@@ -277,6 +277,10 @@ inline void Engine::_run() {
 		//		} break;
 		//	}
 		//}
+
+		//Wait for last frames jobs	before resetting arena
+		MWork::waitAwaitPoint(MWork::JobAwaitPoint::StartNextFrame);
+		MWork::reset();
 
 		m_inputMan->update();
 		_updateEarly(dt);

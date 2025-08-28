@@ -133,7 +133,7 @@ private:
 	WindowSurface* m_wnd = nullptr;;
 	InputManager* m_inputMan = nullptr;;
 	VulkanContext* m_vkCtx = nullptr;;
-	HeapArena* m_workArena = nullptr;
+	FrameArena* m_workArena = nullptr;
 
 
 	GlobalSystem m_globalSystem;
