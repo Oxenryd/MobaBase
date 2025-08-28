@@ -10,7 +10,6 @@ class GameScene : public Scene<GameScene>
 private:
     float m_time = 0;
     uint64_t m_drawHash{ 0 };
-    //std::string m_name1{ "TestObject" };
     GameObject m_go1, m_go2, m_go3;
     entt::entity m_skyLight;
     uint32_t m_camIndex{};
@@ -18,7 +17,6 @@ private:
     std::vector<GameObject> m_goList;
     std::vector<float> m_startScales;
     std::vector<float> m_radSpeeds;
-    //MWork::JobHandle m_transformWork = nullptr;
 
 public:
     GameScene(size_t arenaSize, uint32_t sceneIndex)
@@ -189,11 +187,9 @@ public:
         auto children = merryTrans.getChildrenEntities();
         merryTrans.rotate(glm::vec3{ 0.0f, 0.5f, 1.0f } * Timing::deltaTimeF());
 
-        MWork::for_range_chunked(0, children.size(), 0, 16, MWork::JobAwaitPoint::Immediate,
+        MWork::for_loop(0, children.size(), 16,
                                 [&](std::size_t i) {
-                                    // do work on i; contiguous over [start, start+chunk)
-                                    // avoid writes to shared small structs to prevent false sharing
-        
+
                                     auto transform = Transform{ &m_reg, children[i] };
         
                                     transform.rotateLocal(glm::vec3{ 0.0f, 1.0f, 0.0f } *Timing::deltaTimeF());
@@ -203,20 +199,6 @@ public:
                                     auto curScale = m_startScales[i] + cos;
                                     scale = glm::vec3{ curScale };
                                 });
-        
-        
-        
-
-        //for (size_t i = 0; i < children.size(); ++i) {
-        //    auto transform = Transform{ &m_reg, children[i]};
-
-        //    transform.rotateLocal(glm::vec3{0.0f, 1.0f, 0.0f} * Timing::deltaTimeF());
-        //    auto& scale = transform.modifyScale();
-
-        //    auto cos = std::cos(m_radSpeeds[i] * m_time) * m_startScales[i] * 0.66f;
-        //    auto curScale = m_startScales[i] + cos;
-        //    scale = glm::vec3{ curScale};
-        //}
     }
 
     void lateUpdate(float dt) {

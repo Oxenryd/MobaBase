@@ -467,6 +467,11 @@ namespace MWork
             return detail::instance()->for_range_chunked(begin, end, chunk, shards, ap, std::forward<Fn>(body));
     }
 
+    template <class Fn>
+    inline JobHandle for_loop(std::size_t begin, std::size_t end, std::size_t shards, Fn&& body) {
+        return MWork::for_range_chunked(begin, end, 0, shards, MWork::JobAwaitPoint::Immediate, body);
+    }
+
 } // namespace MWork
 
 #endif
