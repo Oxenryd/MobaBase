@@ -161,12 +161,22 @@ public:
         return m_camData;
     }
 
+    INLINE ZRow getZRow() const {
+        auto trans = transform();
+        ZRow z{};
+        z.n = trans.forward();
+        z.w = -glm::dot(z.n, trans.position());
+        return z;
+    }
 
-    INLINE Frustum& getFrustum(bool normalize = true) {
+    INLINE Frustum& getFrustum() {
 
         return m_cachedFrustum;
     }
+    INLINE Frustum& getFrustum() const {
 
+        return const_cast<Frustum&>(m_cachedFrustum);
+    }
 
     static Camera* getCamera(uint16_t sceneIndex, uint32_t camIndex);
     static Camera* getCamera(const CamIndex& camIndex);

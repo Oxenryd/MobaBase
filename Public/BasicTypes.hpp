@@ -164,6 +164,18 @@ struct ColorRGBA
 	}
 };
 
+struct ZRow
+{
+	union
+	{
+		glm::vec4 raw;
+		struct
+		{
+			glm::vec3 n;
+			float w;
+		};
+	};
+};
 
 struct Ray
 {
@@ -704,5 +716,20 @@ struct BoundingVolumeComponent
 	uint32_t coarseIndexLocal;
 	uint32_t coarseIndexWorld;
 };
+
+
+
+INLINE void aabbViewZRange(const AABB& b, const glm::vec3& n, const float& w,
+						   float& zmin, float& zmax) {
+	const glm::vec3 c = 0.5f * (b.min + b.max);          // center
+	const glm::vec3 e = 0.5f * (b.max - b.min);          // half-extents
+
+	const float zc = glm::dot(n, c) + w;       // center z
+	const glm::vec3 an = glm::abs(n);               // per-axis abs
+	const float ze = glm::dot(an, e);                    // projected extent
+
+	zmin = zc - ze;
+	zmax = zc + ze;
+}
 
 #endif

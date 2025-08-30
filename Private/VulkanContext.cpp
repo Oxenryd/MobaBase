@@ -201,6 +201,7 @@ void VulkanContext::draw(const DrawContext& ctx) {
 	uint32_t setCount = 0;
 	bool firstPass = true;
 	bool hasDrawn = false;
+	size_t stageCursor = 0;
 	for (const auto& cmdScene : drawCmds[currentFrame]) {
 
 		if (cmdScene.second.empty())
@@ -218,7 +219,7 @@ void VulkanContext::draw(const DrawContext& ctx) {
 			VkDeviceSize bufferSize = sizeof(ModelTransform) * scene->transformSystem().modelTransforms().size();
 			VkBufferCreateInfo createInfo{};
 			createInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-			createInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+			createInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 			createInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 			createInfo.size = bufferSize;	
 
@@ -239,7 +240,7 @@ void VulkanContext::draw(const DrawContext& ctx) {
 				allocInfo.allocationSize = bufferMemReq.size;
 				allocInfo.memoryTypeIndex = findMemoryType(
 					bufferMemReq.memoryTypeBits,
-					VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+					VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,//VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
 					m_phyDevice
 				);
 				vkResult = vkAllocateMemory(m_vkDevice, &allocInfo, nullptr, &matDevMem_modelTransforms[currentFrame]);
@@ -262,11 +263,17 @@ void VulkanContext::draw(const DrawContext& ctx) {
 				matrixDataWrite.pBufferInfo = &modelMatricesBufferInfo;
 				vkUpdateDescriptorSets(m_vkDevice, 1, &matrixDataWrite, 0, nullptr);
 			}
-
-			void* data;
-			vkMapMemory(m_vkDevice, matDevMem_modelTransforms[currentFrame], 0, bufferSize, 0, &data);
-			memcpy(data, scene->transformSystem().modelTransforms().data(), (size_t)bufferSize);
-			vkUnmapMemory(m_vkDevice, matDevMem_modelTransforms[currentFrame]);
+			_checkMatStageBuffersRealloc(bufferSize);
+			std::memcpy(static_cast<uint8_t*>(matStagingPtr[currentFrame]) + stageCursor,
+						scene->transformSystem().modelTransforms().data(),
+						bufferSize);
+			VkBufferCopy c{ .srcOffset = stageCursor, .dstOffset = 0, .size = bufferSize };
+			vkCmdCopyBuffer(frame.cmdBuffer, matStagingBuf[currentFrame], matBuf_modelTransforms[currentFrame], 1, &c);
+			stageCursor += bufferSize;
+			//void* data;
+			//vkMapMemory(m_vkDevice, matDevMem_modelTransforms[currentFrame], 0, bufferSize, 0, &data);
+			//memcpy(data, scene->transformSystem().modelTransforms().data(), (size_t)bufferSize);
+			//vkUnmapMemory(m_vkDevice, matDevMem_modelTransforms[currentFrame]);
 		}
 		// instanceData on gpu
 		int test = 0;
@@ -290,7 +297,7 @@ void VulkanContext::draw(const DrawContext& ctx) {
 			VkDeviceSize bufferSize = sizeof(InstanceData) * instDataTemp.size();
 			VkBufferCreateInfo createInfo{};
 			createInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-			createInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+			createInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 			createInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 			createInfo.size = bufferSize;
 			if (bufferSize > lastInstDataTempSize[currentFrame]) {
@@ -310,7 +317,7 @@ void VulkanContext::draw(const DrawContext& ctx) {
 				allocInfo.allocationSize = bufferMemReq.size;
 				allocInfo.memoryTypeIndex = findMemoryType(
 					bufferMemReq.memoryTypeBits,
-					VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+					VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,//VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
 					m_phyDevice
 				);
 				vkResult = vkAllocateMemory(m_vkDevice, &allocInfo, nullptr, &instanceIndexMemory[currentFrame]);
@@ -332,11 +339,17 @@ void VulkanContext::draw(const DrawContext& ctx) {
 				instanceDataWrite.pBufferInfo = &instanceIndexBufferInfo;
 				vkUpdateDescriptorSets(m_vkDevice, 1, &instanceDataWrite, 0, nullptr);
 			}
-
-			void* data;
-			vkMapMemory(m_vkDevice, instanceIndexMemory[currentFrame], 0, bufferSize, 0, &data);
-			memcpy(data, instDataTemp.data(), (size_t)bufferSize);
-			vkUnmapMemory(m_vkDevice, instanceIndexMemory[currentFrame]);
+			_checkMatStageBuffersRealloc(bufferSize);
+			std::memcpy(static_cast<uint8_t*>(matStagingPtr[currentFrame]) + stageCursor,
+						instDataTemp.data(),
+						bufferSize);
+			VkBufferCopy c{ .srcOffset = stageCursor, .dstOffset = 0, .size = bufferSize };
+			vkCmdCopyBuffer(frame.cmdBuffer, matStagingBuf[currentFrame], instanceIndexBuffer[currentFrame], 1, &c);
+			stageCursor += bufferSize;
+			//void* data;
+			//vkMapMemory(m_vkDevice, instanceIndexMemory[currentFrame], 0, bufferSize, 0, &data);
+			//memcpy(data, instDataTemp.data(), (size_t)bufferSize);
+			//vkUnmapMemory(m_vkDevice, instanceIndexMemory[currentFrame]);
 
 		}
 

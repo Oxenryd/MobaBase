@@ -13,6 +13,7 @@
 #include "BasicTypes.hpp"
 #include "ArenaAllocator.hpp"
 #include "BoundingVolume.hpp"
+#include "Camera.hpp"
 
 // BVH Node - designed for cache efficiency
 struct BVHNode //alignas(64)
@@ -36,8 +37,9 @@ struct BVHNode //alignas(64)
 
     uint32_t parentIndex{ UINT32_INVALID };     // For bottom-up updates
     uint8_t flags{ UINT8_INVALID };            // Dirty bit, leaf bit, etc.
-    uint8_t splitAxis{ UINT8_INVALID };;        // X=0, Y=1, Z=2
-    uint8_t primCount{ UINT8_INVALID };;
+    uint8_t splitAxis{ UINT8_INVALID };        // X=0, Y=1, Z=2
+    uint8_t primCount{ UINT8_INVALID };
+    uint8_t depth{ 0 };
     std::array<uint32_t, 6> primIndices;
 
     bool isLeaf() const { return flags & 0x01; }
@@ -107,6 +109,42 @@ struct Frustum;
 class DualBVH
 {
 private:
+
+    struct TestResult { 
+        TestResult(uint8_t state, uint8_t mask) :
+            state{state}, mask{mask} {}
+        union
+        {
+            uint8_t raw;
+            struct
+            {
+                uint8_t state : 2;
+                uint8_t mask : 6;
+            };
+        };        
+    };
+
+    inline TestResult frustumTest_centerExtent(const glm::vec3& c, const glm::vec3& e,
+                                               const FrustumPlane* F) {
+        // For each plane: s = dot(n, c) + d; r = dot(|n|, e).
+        // Outside if s + r < 0, Inside if s - r >= 0, else Intersect.
+        uint8_t mask = 0;
+        bool anyIntersect = false;
+
+        for (int i = 0; i < 6; ++i) {
+            const glm::vec3 n = glm::vec3(F[i].vec);
+            const float d = F[i].vec.w;
+            const float s = glm::dot(n, c) + d;
+            const float r = glm::dot(glm::abs(n), e);
+            if (s + r < 0.0f) return { 0, /*Outside*/0 };
+            if (s - r < 0.0f) { anyIntersect = true; mask |= (1u << i); }
+        }
+        return { mask, anyIntersect ? /*Intersect*/1 : /*Inside*/2 };
+    }
+
+
+
+
     INLINE void _tSafe_insertionSort(uint32_t* primitiveIds, uint32_t primCount, int bestAxis, uint8_t index) {
         uint32_t* first = primitiveIds;
         uint32_t* last = primitiveIds + primCount;
@@ -626,6 +664,8 @@ public:
 
     void frustumCullWithOcclusion(DualBVH::TraversalResult& result, const Frustum& f,
                                              const glm::vec3& cameraPos,
+                                             const glm::vec3& camWorldForward,
+                                             const float& camForwardPosDot,
                                              ArenaRegistry* const registry,
                                              OcclusionMethod method, uint8_t index);
 
@@ -800,6 +840,42 @@ public:
     //    return true;
     //}
 
+    struct BvhJob
+    {
+        uint32_t nodeIndex;
+        bool inside;
+    };
+
+    void _delegateNodes(uint32_t rootIndex, const Frustum& f, uint8_t index) {
+        std::vector<BvhJob> frontier;
+        frontier.reserve(1024);
+
+        std::array<BvhJob, 256> stack;
+        size_t sp = 0;
+        stack[sp++] = { rootIndex , true };
+
+        static constexpr size_t targetDepth = 3;
+        while (sp) {
+            BvhJob job = stack[--sp];
+            if (!job.inside)
+                continue;
+
+            const BVHNode& node = nodes[index][job.nodeIndex];
+
+            auto result = MMath::aabbVisible(node.bounds.min, node.bounds.max, f);
+            if (!result)
+                continue;
+
+            if (node.depth >= targetDepth) {
+                frontier.push_back({job.nodeIndex, result});
+                continue;
+            }
+
+            stack[sp++] = { node.leftChild, true };
+            stack[sp++] = { node.rightChild, true };
+        }
+    }
+
 };
 
 // Usage example system
@@ -837,11 +913,15 @@ public:
 
     // Called from render thread with occlusion culling
     auto performFrustumCullingWithOcclusion(DualBVH::TraversalResult& result,
-                                            const Frustum& f,
-                                            const glm::vec3& cameraPos,
+                                            const Camera* const cam,
                                             ArenaRegistry* const registry,
                                             DualBVH::OcclusionMethod method = DualBVH::OcclusionMethod::SIMPLE_DEPTH) { 
-        return m_bvh.frustumCullWithOcclusion(result, f, cameraPos, registry, method, currentIndex);
+        if (!cam)
+            return;
+
+        auto zRow = cam->getZRow();
+        return m_bvh.frustumCullWithOcclusion(
+            result, cam->getFrustum(), cam->getPosition(), zRow.n, zRow.w, registry, method, currentIndex);
     }
 
     // Called from physics thread (can be concurrent with frustum culling)

@@ -1023,6 +1023,12 @@ public:
 	VkDeviceMemory shapeIndexMemory[VULKAN_FRAMES_IN_FLIGHT] = { nullptr, nullptr };
 
 
+	// Staging buffer
+	size_t matStageCurrentSize = VULKAN_MATSTAGEBUF_SIZE;
+	void* matStagingPtr[VULKAN_FRAMES_IN_FLIGHT] = { nullptr, nullptr };
+	VkBuffer matStagingBuf[VULKAN_FRAMES_IN_FLIGHT] = { nullptr, nullptr };
+	VkDeviceMemory matStagingMem[VULKAN_FRAMES_IN_FLIGHT] = { nullptr, nullptr };
+
 	// Global Material Buffers
 	std::vector<BaseVSIn> vertices;
 	std::vector<uint32_t> indices;
@@ -1127,6 +1133,48 @@ public:
 			instanceDataArena[i] = new Arena{ 128_MB };
 		}
 	}
+
+
+	INLINE VkResult _checkMatStageBuffersRealloc(size_t requestedSize) {
+		if (matStageCurrentSize >= requestedSize)
+			return VK_SUCCESS;
+
+		matStageCurrentSize = requestedSize * 2;
+		VkResult vkResult{};
+		for (size_t i = 0; i < VULKAN_FRAMES_IN_FLIGHT; ++i) {
+
+			vkUnmapMemory(m_vkDevice, matStagingMem[i]);
+
+			vkDestroyBuffer(m_vkDevice, matStagingBuf[i], nullptr);
+
+			if (matStagingMem[i] != VK_NULL_HANDLE)
+				vkFreeMemory(m_vkDevice, matStagingMem[i], nullptr);
+
+			// Staging Buffers
+			VkBufferCreateInfo matStagebufferInfo{};
+			matStagebufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+			matStagebufferInfo.size = matStageCurrentSize;
+			matStagebufferInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+			matStagebufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+			Vk_CHECK(vkResult, vkCreateBuffer(m_vkDevice, &matStagebufferInfo, nullptr, &matStagingBuf[i]));
+
+			VkMemoryRequirements memRequirements;
+			vkGetBufferMemoryRequirements(m_vkDevice, matStagingBuf[i], &memRequirements);
+
+			VkMemoryAllocateInfo matStageAllocInfo{};
+			matStageAllocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+			matStageAllocInfo.allocationSize = memRequirements.size;
+			matStageAllocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits,
+															   VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+															   m_phyDevice);
+
+			Vk_CHECK(vkResult, vkAllocateMemory(m_vkDevice, &matStageAllocInfo, nullptr, &matStagingMem[i]));
+			Vk_CHECK(vkResult, vkBindBufferMemory(m_vkDevice, matStagingBuf[i], matStagingMem[i], 0));
+			vkMapMemory(m_vkDevice, matStagingMem[i], 0, matStageCurrentSize, 0, &matStagingPtr[i]);
+		}
+		return VK_SUCCESS;
+	}
+	
 
 	INLINE void registerNewLight(const GPULight& light) {
 
@@ -1617,6 +1665,28 @@ public:
 
 		for (size_t i = 0; i < VULKAN_FRAMES_IN_FLIGHT; ++i) {
 
+			// Staging Buffers
+			VkBufferCreateInfo matStagebufferInfo{};
+			matStagebufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+			matStagebufferInfo.size = VULKAN_MATSTAGEBUF_SIZE;
+			matStagebufferInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+			matStagebufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+			Vk_CHECK(vkResult, vkCreateBuffer(m_vkDevice, &matStagebufferInfo, nullptr, &matStagingBuf[i]));
+
+			VkMemoryRequirements memRequirements;
+			vkGetBufferMemoryRequirements(m_vkDevice, matStagingBuf[i], &memRequirements);
+
+			VkMemoryAllocateInfo matStageAllocInfo{};
+			matStageAllocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+			matStageAllocInfo.allocationSize = memRequirements.size;
+			matStageAllocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits,
+																 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+																 m_phyDevice);
+
+			Vk_CHECK(vkResult, vkAllocateMemory(m_vkDevice, &matStageAllocInfo, nullptr, &matStagingMem[i]));
+			Vk_CHECK(vkResult, vkBindBufferMemory(m_vkDevice, matStagingBuf[i], matStagingMem[i], 0));
+			vkMapMemory(m_vkDevice, matStagingMem[i], 0, VULKAN_MATSTAGEBUF_SIZE, 0, &matStagingPtr[i]);
+
 			// cameraData
 			VkBufferCreateInfo camDatabufferInfo{};
 			camDatabufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -1625,7 +1695,7 @@ public:
 			camDatabufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 			Vk_CHECK(vkResult, vkCreateBuffer(m_vkDevice, &camDatabufferInfo, nullptr, &camDataBuffer[i]));
 
-			VkMemoryRequirements memRequirements;
+			//VkMemoryRequirements memRequirements;
 			vkGetBufferMemoryRequirements(m_vkDevice, camDataBuffer[i], &memRequirements);
 
 			VkMemoryAllocateInfo globalDataAllocInfo{};

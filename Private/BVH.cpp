@@ -496,6 +496,8 @@ void DualBVH::frustumCullWithOcclusion(
     DualBVH::TraversalResult& result,
     const Frustum& frustum,
     const glm::vec3& cameraPos,
+    const glm::vec3& camForward,
+    const float& camForwardPosDot,
     ArenaRegistry* const registry,
     OcclusionMethod method, uint8_t index) {
 
@@ -530,7 +532,7 @@ void DualBVH::frustumCullWithOcclusion(
              glm::length2(occluderCorners[frameIndex][offset + 6] - cameraPos),
              glm::length2(occluderCorners[frameIndex][offset + 7] - cameraPos),
         };
-        __m256 v = _mm256_loadu_ps(d);
+        __m256 v = _mm256_load_ps(d);
         float mn;
         MMath::hmin8(v, mn);
         float closest = mn;
@@ -571,7 +573,24 @@ void DualBVH::frustumCullWithOcclusion(
     nodeStack[frameIndex].clear();
 
     float rootMinDepth, rootMaxDepth;
-    computeNodeDepthRange(rootIndex[frameIndex], cameraPos, rootMinDepth, rootMaxDepth, frameIndex);
+
+
+
+
+
+
+    //computeNodeDepthRange(rootIndex[frameIndex], cameraPos, rootMinDepth, rootMaxDepth, frameIndex);
+    if (rootIndex[frameIndex] == 0) {
+        rootMinDepth = rootMaxDepth = 0.0f;
+    } else {
+
+        const BVHNode& node = nodes[frameIndex][rootIndex[frameIndex]];
+        const AABB& bounds = node.bounds;
+        aabbViewZRange(bounds, camForward, camForwardPosDot, rootMinDepth, rootMaxDepth);
+    }
+
+
+
     nodeStack[frameIndex].push_back({ rootIndex[frameIndex], rootMinDepth, rootMaxDepth });
 
     while (!nodeStack[frameIndex].empty()) {
@@ -660,12 +679,36 @@ void DualBVH::frustumCullWithOcclusion(
             // Add children to stack with depth ranges
             if (node.leftChild != 0) {
                 float minDepth, maxDepth;
-                computeNodeDepthRange(node.leftChild, cameraPos, minDepth, maxDepth, frameIndex);
+
+
+
+                //computeNodeDepthRange(node.leftChild, cameraPos, minDepth, maxDepth, frameIndex);
+                if (node.leftChild == 0) {
+                    minDepth = maxDepth = 0.0f;
+                } else {
+
+                    //const BVHNode& node = nodes[frameIndex][node.leftChild];
+                    const AABB& bounds = node.bounds;
+                    aabbViewZRange(bounds, camForward, camForwardPosDot, minDepth, maxDepth);
+                }
+
                 nodeStack[frameIndex].push_back({ node.leftChild, minDepth, maxDepth });
             }
             if (node.rightChild != 0) {
                 float minDepth, maxDepth;
-                computeNodeDepthRange(node.rightChild, cameraPos, minDepth, maxDepth, frameIndex);
+
+
+                //computeNodeDepthRange(node.rightChild, cameraPos, minDepth, maxDepth, frameIndex);
+                if (node.rightChild == 0) {
+                    minDepth = maxDepth = 0.0f;
+                } else {
+
+                    //const BVHNode& node = nodes[frameIndex][node.rightChild];
+                    const AABB& bounds = node.bounds;
+                    aabbViewZRange(bounds, camForward, camForwardPosDot, minDepth, maxDepth);
+                }
+
+
                 nodeStack[frameIndex].push_back({ node.rightChild, minDepth, maxDepth });
             }
         }

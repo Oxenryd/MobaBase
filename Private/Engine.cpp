@@ -384,14 +384,11 @@ inline void Engine::_updateLate(double dt) {
 			m_scenes.erase(it);
 			removeIndices.push_back(index);
 		} else {
-			auto viewProj = mainCamera()->viewProjection();
-			auto& f = mainCamera()->getFrustum();
-
 			m_scenes[index]->cullResults.clear();
 
 			m_scenes[index]->
 				bvhSystem().performFrustumCullingWithOcclusion(
-					m_scenes[index]->cullResults, f, mainCamera()->getPosition(), &m_scenes[index]->registry());
+					m_scenes[index]->cullResults, mainCamera(), &m_scenes[index]->registry());
 		}
 	}
 	for (auto& index : removeIndices) {
