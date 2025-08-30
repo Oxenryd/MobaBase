@@ -197,7 +197,8 @@ uint32_t DualBVH::buildRecursive(uint32_t* primitiveIds, uint32_t primCount, uin
 
      node.setLeaf(false);
      node.splitAxis = bestAxis;
-     if (depth < 2) {
+     static const uint32_t maxThreadDepthLevel = static_cast<uint32_t>(std::floor(std::log2(NUM_THREADS)));
+     if (depth < maxThreadDepthLevel) {
 
          auto idL = _getNextThreadId();
          //workerPrimsTemp[idL].resize(leftPrims.size());
@@ -612,6 +613,8 @@ void DualBVH::frustumCullWithOcclusion(
         //}
 
         if (node.isLeaf()) {
+
+
             // Process leaf primitives
             for (uint32_t i = 0; i < node.primCount; ++i) {
                 uint32_t primIndex = node.primIndices[i];//primitiveIndices[frameIndex][node.firstPrimitive + i];
@@ -624,6 +627,7 @@ void DualBVH::frustumCullWithOcclusion(
                     result.nodesCulledByFrustum++;
                     continue;
                 }
+
 
                 if (method != OcclusionMethod::NONE && !activeOccluders.empty()) {
                     float closest = 0.0f;

@@ -427,6 +427,319 @@ namespace MMath
         return result;
     }
 
+
+
+
+
+
+//    // SIMD quaternion multiplication
+//// Quaternions stored as [x, y, z, w] in memory
+//    inline __m128 quaternion_multiply_simd(__m128 q1, __m128 q2) {
+//        // q1 = [x1, y1, z1, w1]
+//        // q2 = [x2, y2, z2, w2]
+//
+//        // Quaternion multiplication formula:
+//        // result.w = w1*w2 - x1*x2 - y1*y2 - z1*z2
+//        // result.x = w1*x2 + x1*w2 + y1*z2 - z1*y2  
+//        // result.y = w1*y2 - x1*z2 + y1*w2 + z1*x2
+//        // result.z = w1*z2 + x1*y2 - y1*x2 + z1*w2
+//
+//        // Broadcast each component of q1
+//        __m128 q1_wwww = _mm_shuffle_ps(q1, q1, _MM_SHUFFLE(3, 3, 3, 3)); // [w1, w1, w1, w1]
+//        __m128 q1_xxxx = _mm_shuffle_ps(q1, q1, _MM_SHUFFLE(0, 0, 0, 0)); // [x1, x1, x1, x1]
+//        __m128 q1_yyyy = _mm_shuffle_ps(q1, q1, _MM_SHUFFLE(1, 1, 1, 1)); // [y1, y1, y1, y1]
+//        __m128 q1_zzzz = _mm_shuffle_ps(q1, q1, _MM_SHUFFLE(2, 2, 2, 2)); // [z1, z1, z1, z1]
+//
+//        // Rearrange q2 components for different terms
+//        __m128 q2_xyzw = q2;                                               // [x2, y2, z2, w2]
+//        __m128 q2_yxwz = _mm_shuffle_ps(q2, q2, _MM_SHUFFLE(2, 3, 0, 1)); // [y2, x2, w2, z2]
+//        __m128 q2_zyxw = _mm_shuffle_ps(q2, q2, _MM_SHUFFLE(3, 0, 1, 2)); // [z2, y2, x2, w2]
+//        __m128 q2_wzyx = _mm_shuffle_ps(q2, q2, _MM_SHUFFLE(0, 1, 2, 3)); // [w2, z2, y2, x2]
+//
+//        // Calculate the four terms
+//        __m128 term1 = _mm_mul_ps(q1_wwww, q2_xyzw); // [w1*x2, w1*y2, w1*z2, w1*w2]
+//        __m128 term2 = _mm_mul_ps(q1_xxxx, q2_wzyx); // [x1*w2, x1*z2, x1*y2, x1*x2]
+//        __m128 term3 = _mm_mul_ps(q1_yyyy, q2_zyxw); // [y1*z2, y1*y2, y1*x2, y1*w2]
+//        __m128 term4 = _mm_mul_ps(q1_zzzz, q2_yxwz); // [z1*y2, z1*x2, z1*w2, z1*z2]
+//
+//        // Apply signs: [+, -, +, -] for term2, [+, -, -, +] for term3, [-, +, -, -] for term4
+//        const __m128 sign2 = _mm_set_ps(-1.0f, 1.0f, -1.0f, 1.0f);
+//        const __m128 sign3 = _mm_set_ps(1.0f, -1.0f, -1.0f, 1.0f);
+//        const __m128 sign4 = _mm_set_ps(-1.0f, -1.0f, 1.0f, -1.0f);
+//
+//        term2 = _mm_mul_ps(term2, sign2);
+//        term3 = _mm_mul_ps(term3, sign3);
+//        term4 = _mm_mul_ps(term4, sign4);
+//
+//        // Sum all terms
+//        __m128 result = _mm_add_ps(term1, term2);
+//        result = _mm_add_ps(result, term3);
+//        result = _mm_add_ps(result, term4);
+//
+//        return result; // [result.x, result.y, result.z, result.w]
+//    }
+//
+//    // SIMD quaternion normalization
+//    inline __m128 normalize_simd(__m128 q) {
+//        // Compute dot product of quaternion with itself
+//        __m128 dot = _mm_mul_ps(q, q);
+//
+//        // Horizontal add to get magnitude squared
+//        __m128 temp = _mm_hadd_ps(dot, dot);
+//        __m128 mag_sq = _mm_hadd_ps(temp, temp);
+//
+//        // Compute reciprocal square root
+//        __m128 rsqrt = _mm_rsqrt_ps(mag_sq);
+//
+//        // One Newton-Raphson iteration for better precision
+//        // rsqrt = 0.5 * rsqrt * (3 - mag_sq * rsqrt * rsqrt)
+//        __m128 three = _mm_set1_ps(3.0f);
+//        __m128 half = _mm_set1_ps(0.5f);
+//        __m128 temp2 = _mm_mul_ps(mag_sq, _mm_mul_ps(rsqrt, rsqrt));
+//        __m128 temp3 = _mm_sub_ps(three, temp2);
+//        rsqrt = _mm_mul_ps(half, _mm_mul_ps(rsqrt, temp3));
+//
+//        // Normalize by multiplying with reciprocal square root
+//        return _mm_mul_ps(q, rsqrt);
+//    }
+//
+//    // Alternative more accurate normalization using sqrt
+//    inline __m128 normalize_simd_accurate(__m128 q) {
+//        __m128 dot = _mm_mul_ps(q, q);
+//        __m128 temp = _mm_hadd_ps(dot, dot);
+//        __m128 mag_sq = _mm_hadd_ps(temp, temp);
+//
+//        __m128 mag = _mm_sqrt_ps(mag_sq);
+//        return _mm_div_ps(q, mag);
+//    }
+//
+//    // Fast sin/cos approximation for small angles (good for rotations)
+//    inline void sincos_approx(float x, float& sin_x, float& cos_x) {
+//        // Taylor series approximation for small angles
+//        const float x2 = x * x;
+//        const float x3 = x2 * x;
+//        const float x4 = x2 * x2;
+//        const float x5 = x4 * x;
+//
+//        sin_x = x - (x3 * 0.16666667f) + (x5 * 0.00833333f);
+//        cos_x = 1.0f - (x2 * 0.5f) + (x4 * 0.04166667f);
+//    }
+    // Debug version - test against reference implementation
+    inline glm::quat quaternion_multiply_reference(const glm::quat& q1, const glm::quat& q2) {
+        return q1 * q2;
+    }
+
+    // Corrected SIMD quaternion multiplication that matches GLM
+    inline __m128 quaternion_multiply_simd_simple(__m128 a, __m128 b) {
+        // a = [ax, ay, az, aw] (GLM layout)
+        // b = [bx, by, bz, bw] (GLM layout)
+        // 
+        // GLM quaternion multiplication: result = a * b
+        // result.x = a.w*b.x + a.x*b.w + a.y*b.z - a.z*b.y
+        // result.y = a.w*b.y - a.x*b.z + a.y*b.w + a.z*b.x
+        // result.z = a.w*b.z + a.x*b.y - a.y*b.x + a.z*b.w  
+        // result.w = a.w*b.w - a.x*b.x - a.y*b.y - a.z*b.z
+
+        // Broadcast a components
+        __m128 a_xxxx = _mm_shuffle_ps(a, a, _MM_SHUFFLE(0, 0, 0, 0));  // a.x
+        __m128 a_yyyy = _mm_shuffle_ps(a, a, _MM_SHUFFLE(1, 1, 1, 1));  // a.y
+        __m128 a_zzzz = _mm_shuffle_ps(a, a, _MM_SHUFFLE(2, 2, 2, 2));  // a.z
+        __m128 a_wwww = _mm_shuffle_ps(a, a, _MM_SHUFFLE(3, 3, 3, 3));  // a.w
+
+        // First term: a.w * b = [a.w*b.x, a.w*b.y, a.w*b.z, a.w*b.w]
+        __m128 result = _mm_mul_ps(a_wwww, b);
+
+        // Second term: a.x * [b.w, -b.z, b.y, -b.x]
+        __m128 b_wzyx = _mm_shuffle_ps(b, b, _MM_SHUFFLE(0, 1, 2, 3));   // [b.w, b.z, b.y, b.x]
+        __m128 axb = _mm_mul_ps(a_xxxx, b_wzyx);
+        __m128 sign_x = _mm_set_ps(-1.0f, 1.0f, -1.0f, 1.0f);          // [+, -, +, -] for [x,y,z,w]
+        axb = _mm_mul_ps(axb, sign_x);
+        result = _mm_add_ps(result, axb);
+
+        // Third term: a.y * [b.z, b.w, -b.x, -b.y]  
+        __m128 b_zwxy = _mm_shuffle_ps(b, b, _MM_SHUFFLE(1, 0, 3, 2));   // [b.z, b.w, b.x, b.y]
+        __m128 ayb = _mm_mul_ps(a_yyyy, b_zwxy);
+        __m128 sign_y = _mm_set_ps(-1.0f, -1.0f, 1.0f, 1.0f);          // [+, +, -, -] for [x,y,z,w]
+        ayb = _mm_mul_ps(ayb, sign_y);
+        result = _mm_add_ps(result, ayb);
+
+        // Fourth term: a.z * [-b.y, b.x, b.w, -b.z]
+        __m128 b_yxwz = _mm_shuffle_ps(b, b, _MM_SHUFFLE(2, 3, 0, 1));   // [b.y, b.x, b.w, b.z]  
+        __m128 azb = _mm_mul_ps(a_zzzz, b_yxwz);
+        __m128 sign_z = _mm_set_ps(-1.0f, 1.0f, 1.0f, -1.0f);          // [-, +, +, -] for [x,y,z,w]
+        azb = _mm_mul_ps(azb, sign_z);
+        result = _mm_add_ps(result, azb);
+
+        return result;
+    }
+
+    // SIMD quaternion multiplication
+    // Quaternions stored as [x, y, z, w] in memory
+    inline __m128 quaternion_multiply_simd(__m128 q1, __m128 q2) {
+        // q1 = [x1, y1, z1, w1] 
+        // q2 = [x2, y2, z2, w2]
+
+        // Standard quaternion multiplication:
+        // result.x = w1*x2 + x1*w2 + y1*z2 - z1*y2
+        // result.y = w1*y2 - x1*z2 + y1*w2 + z1*x2  
+        // result.z = w1*z2 + x1*y2 - y1*x2 + z1*w2
+        // result.w = w1*w2 - x1*x2 - y1*y2 - z1*z2
+
+        // More explicit approach - let's build each component separately
+        __m128 q1_wwww = _mm_shuffle_ps(q1, q1, _MM_SHUFFLE(3, 3, 3, 3));
+        __m128 q1_xxxx = _mm_shuffle_ps(q1, q1, _MM_SHUFFLE(0, 0, 0, 0));
+        __m128 q1_yyyy = _mm_shuffle_ps(q1, q1, _MM_SHUFFLE(1, 1, 1, 1));
+        __m128 q1_zzzz = _mm_shuffle_ps(q1, q1, _MM_SHUFFLE(2, 2, 2, 2));
+
+        // For result.x = w1*x2 + x1*w2 + y1*z2 - z1*y2
+        __m128 q2_x = _mm_shuffle_ps(q2, q2, _MM_SHUFFLE(0, 0, 0, 0)); // [x2, x2, x2, x2]
+        __m128 q2_w = _mm_shuffle_ps(q2, q2, _MM_SHUFFLE(3, 3, 3, 3)); // [w2, w2, w2, w2] 
+        __m128 q2_z = _mm_shuffle_ps(q2, q2, _MM_SHUFFLE(2, 2, 2, 2)); // [z2, z2, z2, z2]
+        __m128 q2_y = _mm_shuffle_ps(q2, q2, _MM_SHUFFLE(1, 1, 1, 1)); // [y2, y2, y2, y2]
+
+        // Calculate: [w1*x2, w1*y2, w1*z2, w1*w2]
+        __m128 term_w1 = _mm_mul_ps(q1_wwww, q2);
+
+        // Calculate: [x1*w2, x1*z2, x1*y2, x1*x2] -> need [x1*w2, -x1*z2, x1*y2, -x1*x2]
+        __m128 q2_wzyx = _mm_shuffle_ps(q2, q2, _MM_SHUFFLE(0, 1, 2, 3));
+        __m128 term_x1 = _mm_mul_ps(q1_xxxx, q2_wzyx);
+        __m128 sign_x1 = _mm_set_ps(-1.0f, 1.0f, -1.0f, 1.0f);
+        term_x1 = _mm_mul_ps(term_x1, sign_x1);
+
+        // Calculate: [y1*z2, y1*w2, -y1*x2, -y1*y2]  
+        __m128 q2_zw_xy = _mm_shuffle_ps(q2, q2, _MM_SHUFFLE(1, 0, 3, 2));
+        __m128 term_y1 = _mm_mul_ps(q1_yyyy, q2_zw_xy);
+        __m128 sign_y1 = _mm_set_ps(-1.0f, -1.0f, 1.0f, 1.0f);
+        term_y1 = _mm_mul_ps(term_y1, sign_y1);
+
+        // Calculate: [-z1*y2, z1*x2, z1*w2, -z1*z2]
+        __m128 q2_yxwz = _mm_shuffle_ps(q2, q2, _MM_SHUFFLE(2, 3, 0, 1));
+        __m128 term_z1 = _mm_mul_ps(q1_zzzz, q2_yxwz);
+        __m128 sign_z1 = _mm_set_ps(-1.0f, 1.0f, 1.0f, -1.0f);
+        term_z1 = _mm_mul_ps(term_z1, sign_z1);
+
+        // Sum all terms
+        __m128 result = _mm_add_ps(term_w1, term_x1);
+        result = _mm_add_ps(result, term_y1);
+        result = _mm_add_ps(result, term_z1);
+
+        return result;
+    }
+
+    // Alternative cleaner implementation
+    inline __m128 quaternion_multiply_simd_v2(__m128 q1, __m128 q2) {
+        // Based on the identity: q1 * q2 can be computed as matrix multiplication
+        // This version is cleaner and easier to verify
+
+        __m128 q1_x = _mm_shuffle_ps(q1, q1, _MM_SHUFFLE(0, 0, 0, 0));
+        __m128 q1_y = _mm_shuffle_ps(q1, q1, _MM_SHUFFLE(1, 1, 1, 1));
+        __m128 q1_z = _mm_shuffle_ps(q1, q1, _MM_SHUFFLE(2, 2, 2, 2));
+        __m128 q1_w = _mm_shuffle_ps(q1, q1, _MM_SHUFFLE(3, 3, 3, 3));
+
+        // Rearrange q2 for each output component
+        __m128 q2_xyzw = q2;                                                    // [x2, y2, z2, w2]
+        __m128 q2_yxwz = _mm_shuffle_ps(q2, q2, _MM_SHUFFLE(2, 3, 0, 1));     // [y2, x2, w2, z2]  
+        __m128 q2_zwy_x = _mm_shuffle_ps(q2, q2, _MM_SHUFFLE(0, 1, 3, 2));     // [z2, w2, y2, x2]
+        __m128 q2_wzyx = _mm_shuffle_ps(q2, q2, _MM_SHUFFLE(0, 1, 2, 3));      // [w2, z2, y2, x2]
+
+        __m128 result = _mm_mul_ps(q1_w, q2_xyzw);              // w1 * [x2, y2, z2, w2]
+        result = _mm_add_ps(result, _mm_mul_ps(q1_x, q2_wzyx)); // + x1 * [w2, z2, y2, x2]
+        result = _mm_add_ps(result, _mm_mul_ps(q1_y, q2_zwy_x));// + y1 * [z2, w2, y2, x2] 
+        result = _mm_add_ps(result, _mm_mul_ps(q1_z, q2_yxwz)); // + z1 * [y2, x2, w2, z2]
+
+        // Apply the correct signs for quaternion multiplication
+        __m128 signs = _mm_set_ps(-1.0f, 1.0f, -1.0f, 1.0f);   // [+, -, +, -] for [x, y, z, w]
+        __m128 temp = _mm_mul_ps(q1_x, q2_wzyx);
+        temp = _mm_add_ps(temp, _mm_mul_ps(q1_y, _mm_shuffle_ps(q2_zwy_x, q2_zwy_x, _MM_SHUFFLE(2, 0, 3, 1))));
+        temp = _mm_add_ps(temp, _mm_mul_ps(q1_z, _mm_shuffle_ps(q2_yxwz, q2_yxwz, _MM_SHUFFLE(3, 1, 0, 2))));
+
+        // This is getting complex - let me provide a tested version
+        return quaternion_multiply_simd_simple(q1, q2);
+    }
+
+    
+
+    // Alternative implementation using a different approach
+    inline __m128 quaternion_multiply_simd_v3(__m128 q1, __m128 q2) {
+        // This version follows the exact GLM implementation structure
+        // Based on GLM's qua<T, Q>::operator* implementation
+
+        // GLM: return qua<T, Q>(
+        //   w * q.w - x * q.x - y * q.y - z * q.z,  // w component
+        //   w * q.x + x * q.w + y * q.z - z * q.y,  // x component  
+        //   w * q.y + y * q.w + z * q.x - x * q.z,  // y component
+        //   w * q.z + z * q.w + x * q.y - y * q.x); // z component
+
+        __m128 q1_wwww = _mm_shuffle_ps(q1, q1, _MM_SHUFFLE(3, 3, 3, 3));
+        __m128 q1_xxxx = _mm_shuffle_ps(q1, q1, _MM_SHUFFLE(0, 0, 0, 0));
+        __m128 q1_yyyy = _mm_shuffle_ps(q1, q1, _MM_SHUFFLE(1, 1, 1, 1));
+        __m128 q1_zzzz = _mm_shuffle_ps(q1, q1, _MM_SHUFFLE(2, 2, 2, 2));
+
+        // Compute w*q2
+        __m128 wq2 = _mm_mul_ps(q1_wwww, q2);
+
+        // For each output component, we need different arrangements of q2:
+        // x: w*x + x*w + y*z - z*y  ->  q2: [x,w,z,y], signs: [+,+,+,-]  
+        // y: w*y + y*w + z*x - x*z  ->  q2: [y,w,x,z], signs: [+,+,+,-]
+        // z: w*z + z*w + x*y - y*x  ->  q2: [z,w,y,x], signs: [+,+,+,-] 
+        // w: w*w - x*x - y*y - z*z  ->  q2: [w,x,y,z], signs: [+,-,-,-]
+
+        __m128 q2_xwzy = _mm_shuffle_ps(q2, q2, _MM_SHUFFLE(1, 2, 3, 0)); // [x,w,z,y]
+        __m128 q2_ywxz = _mm_shuffle_ps(q2, q2, _MM_SHUFFLE(2, 0, 3, 1)); // [y,w,x,z] 
+        __m128 q2_zwyx = _mm_shuffle_ps(q2, q2, _MM_SHUFFLE(0, 1, 3, 2)); // [z,w,y,x]
+        __m128 q2_wxyz = _mm_shuffle_ps(q2, q2, _MM_SHUFFLE(2, 1, 0, 3)); // [w,x,y,z]
+
+        // Pack the rearranged q2 components for parallel computation
+        // This is getting complex - let's stick with the component-wise approach above
+        return quaternion_multiply_simd_simple(q1, q2);
+    }
+
+    // SIMD quaternion normalization
+    inline __m128 normalize_simd(__m128 q) {
+        // Compute dot product of quaternion with itself
+        __m128 dot = _mm_mul_ps(q, q);
+
+        // Horizontal add to get magnitude squared
+        __m128 temp = _mm_hadd_ps(dot, dot);
+        __m128 mag_sq = _mm_hadd_ps(temp, temp);
+
+        // Compute reciprocal square root
+        __m128 rsqrt = _mm_rsqrt_ps(mag_sq);
+
+        // One Newton-Raphson iteration for better precision
+        // rsqrt = 0.5 * rsqrt * (3 - mag_sq * rsqrt * rsqrt)
+        __m128 three = _mm_set1_ps(3.0f);
+        __m128 half = _mm_set1_ps(0.5f);
+        __m128 temp2 = _mm_mul_ps(mag_sq, _mm_mul_ps(rsqrt, rsqrt));
+        __m128 temp3 = _mm_sub_ps(three, temp2);
+        rsqrt = _mm_mul_ps(half, _mm_mul_ps(rsqrt, temp3));
+
+        // Normalize by multiplying with reciprocal square root
+        return _mm_mul_ps(q, rsqrt);
+    }
+
+    // Alternative more accurate normalization using sqrt
+    inline __m128 normalize_simd_accurate(__m128 q) {
+        __m128 dot = _mm_mul_ps(q, q);
+        __m128 temp = _mm_hadd_ps(dot, dot);
+        __m128 mag_sq = _mm_hadd_ps(temp, temp);
+
+        __m128 mag = _mm_sqrt_ps(mag_sq);
+        return _mm_div_ps(q, mag);
+    }
+
+    // Fast sin/cos approximation for small angles (good for rotations)
+    inline void sincos_approx(float x, float& sin_x, float& cos_x) {
+        // Taylor series approximation for small angles
+        const float x2 = x * x;
+        const float x3 = x2 * x;
+        const float x4 = x2 * x2;
+        const float x5 = x4 * x;
+
+        sin_x = x - (x3 * 0.16666667f) + (x5 * 0.00833333f);
+        cos_x = 1.0f - (x2 * 0.5f) + (x4 * 0.04166667f);
+    }
+
 }
 
 

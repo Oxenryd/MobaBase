@@ -29,6 +29,9 @@ private:
 
 	TransformComponent& _markDirty(uint8_t what);
 
+	void _rotateLocalSIMD(const glm::vec3& rotDeltaLocal);
+
+
 
 public:
 	~Transform() = default;

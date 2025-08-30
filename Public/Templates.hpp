@@ -56,7 +56,6 @@ public:
             
 
             m_goList.back().transform().setParent(m_go1);
-            //trans.setParent(m_go1);
         }
 
         

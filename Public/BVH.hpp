@@ -137,7 +137,7 @@ private:
             }
         }
     }
-    static constexpr const unsigned int NUM_THREADS = 6;
+    static constexpr const unsigned int NUM_THREADS = 2;
 public:
     std::array<std::vector<BVHNode>, 2> nodes;
     std::array<std::vector<BVHPrimitive>, 2> primitives;

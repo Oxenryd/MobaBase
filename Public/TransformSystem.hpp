@@ -28,6 +28,9 @@ private:
 	ArenaVector<entt::entity> m_parentOf;
 	ArenaVector<std::vector<entt::entity>> m_childrenOf;
 
+	// RenderSync
+	bool m_systemDirty = false;
+
 	// Component Data
 	ArenaVector<glm::vec3> m_positions;
 	ArenaVector<glm::quat> m_rotations;

@@ -92,6 +92,39 @@ constexpr VkFormat GetVkFormat(TypeBase type) {
 	}
 }
 
+struct BoundedInstanceData
+{
+	BoundedInstanceData() = default;
+	BoundedInstanceData(const BoundedInstanceData& other) :
+		instances{ other.instances.get_allocator() } {
+		instances = std::move(other.instances);
+	}
+	BoundedInstanceData(Arena* arena) :
+		instances{ ArenaAllocator<InstanceData>{arena} } {}
+	ArenaVector<InstanceData> instances;
+	AABB bounds;
+};
+
+struct SceneInstancePair
+{
+	uint16_t sceneIndex;
+	uint32_t instanceIndex;
+
+	bool operator==(const SceneInstancePair& rhs) const {
+		return sceneIndex == rhs.sceneIndex && instanceIndex == rhs.instanceIndex;
+	}
+
+	struct Hash
+	{
+		size_t operator()(const SceneInstancePair& p) const {
+			size_t seed = 0;
+			hash_combine(seed, p.sceneIndex);
+			hash_combine(seed, p.instanceIndex);
+			return seed;
+		}
+	};
+};
+
 struct DescriptorCaps
 {
 	uint32_t maxSetUBOs = 0;
@@ -948,7 +981,7 @@ public:
 	std::vector<VkPipelineLayout> pipelineLayouts;
 
 	//BlendMode currentBlendMode = BlendMode::Opaque;
-
+	Arena* instanceDataArena[VULKAN_FRAMES_IN_FLIGHT] = { nullptr, nullptr };
 	uint32_t renderPassIndex = 0;
 	uint32_t pipelineId = 0;
 	bool isClean = true;
@@ -1057,6 +1090,12 @@ public:
 	const bool& isPendingExit() const { return m_pendingExit; }
 
 	~VulkanContext() {
+
+		for (size_t i = 0; i < VULKAN_FRAMES_IN_FLIGHT; ++i) {
+			delete instanceDataArena[i];
+			instanceDataArena[i] = nullptr;
+		}
+
 		if (!isClean)
 			cleanUp();
 		glfwTerminate();
@@ -1084,6 +1123,9 @@ public:
 	{
 		pendingLightUpdates.reserve(256);
 		rendPasses.reserve(2048);
+		for (size_t i = 0; i < VULKAN_FRAMES_IN_FLIGHT; ++i) {
+			instanceDataArena[i] = new Arena{ 128_MB };
+		}
 	}
 
 	INLINE void registerNewLight(const GPULight& light) {

@@ -43,7 +43,7 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(EnTT)
 
-#Boost
+#Boost sort
 FetchContent_Declare(
   boost_sort
   GIT_REPOSITORY https://github.com/boostorg/sort.git

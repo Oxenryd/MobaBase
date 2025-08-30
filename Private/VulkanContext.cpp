@@ -27,6 +27,8 @@ void VulkanContext::draw(const DrawContext& ctx) {
 
 	auto& frame = frameSync[currentFrame];
 
+	instanceDataArena[currentFrame]->reset();
+
 	// Wait for previous frame fence 
 	vkWaitForFences(m_vkDevice, 1, &frame.inFlight, VK_TRUE, UINT64_MAX);
 	vkResetFences(m_vkDevice, 1, &frame.inFlight);
@@ -121,136 +123,179 @@ void VulkanContext::draw(const DrawContext& ctx) {
 
 
 	// Find the draw commands
-	struct BoundedInstanceData
-	{
-		std::vector<InstanceData> instances;
-		AABB bounds;
-	};
-	static std::vector<MeshDrawCommand> drawCmds;
-	static std::unordered_map<uint32_t, BoundedInstanceData> submeshDrawInstanceData[VULKAN_FRAMES_IN_FLIGHT];
-	static std::vector<ModelTransform> collectedMatrices[VULKAN_FRAMES_IN_FLIGHT];
-	static std::unordered_set<uint32_t> submeshKeysWithMultipleInstances[VULKAN_FRAMES_IN_FLIGHT];
-	collectedMatrices[currentFrame].clear();
+
+	using SceneIndex = uint16_t;
+	//static std::vector<uint16_t> activeSceneIndices[VULKAN_FRAMES_IN_FLIGHT];
+	static std::unordered_map<SceneIndex, std::vector<MeshDrawCommand>> drawCmds[VULKAN_FRAMES_IN_FLIGHT];
+	static std::unordered_map<SceneInstancePair, BoundedInstanceData, SceneInstancePair::Hash> submeshDrawInstanceData[VULKAN_FRAMES_IN_FLIGHT];
+	//static std::vector<ModelTransform> collectedMatrices[VULKAN_FRAMES_IN_FLIGHT];
+	static std::unordered_map<SceneIndex, std::set<uint32_t>> submeshKeysWithMultipleInstances[VULKAN_FRAMES_IN_FLIGHT];
+	//collectedMatrices[currentFrame].clear();
 	submeshDrawInstanceData[currentFrame].clear();
-	drawCmds.clear();
-	submeshKeysWithMultipleInstances[currentFrame].clear();
+	drawCmds[currentFrame].clear();
+	//activeSceneIndices[currentFrame].clear();
+	
+	
 	for (auto& scene : Engine::getInstance()->getActiveScenes()) {
 
-		if (collectedMatrices[currentFrame].capacity() < scene->transformSystem().modelTransforms().size())
-			collectedMatrices[currentFrame].reserve(collectedMatrices[currentFrame].capacity() + scene->transformSystem().modelTransforms().size());
+		auto sceneIndex = scene->sceneIndex();
+		submeshKeysWithMultipleInstances[currentFrame][sceneIndex].clear();
+		//if (collectedMatrices[currentFrame].capacity() < scene->transformSystem().modelTransforms().size())
+		//	collectedMatrices[currentFrame].reserve(collectedMatrices[currentFrame].capacity() + scene->transformSystem().modelTransforms().size());
 
-		collectedMatrices[currentFrame].insert(collectedMatrices[currentFrame].end(),
-								 scene->transformSystem().modelTransforms().begin(),
-								 scene->transformSystem().modelTransforms().end());
+		//collectedMatrices[currentFrame].insert(collectedMatrices[currentFrame].end(),
+		//						 scene->transformSystem().modelTransforms().begin(),
+		//						 scene->transformSystem().modelTransforms().end());
+
+		//activeSceneIndices[currentFrame].push_back(scene->sceneIndex());
 
 		auto& reg = scene->registry();
 		for (auto& entity : scene->cullResults.visibleEntities) {
+			
 			auto newDrawCmd = subMeshEntity_to_drawCommand(scene, reg, entity);
-			auto it = submeshDrawInstanceData[currentFrame].find(newDrawCmd.submeshOffset);
+			const SceneInstancePair mapIndex{ sceneIndex, newDrawCmd.submeshOffset };
+
+			auto it = submeshDrawInstanceData[currentFrame].find(mapIndex);
 			if (it == submeshDrawInstanceData[currentFrame].end()) {
-				drawCmds.push_back(newDrawCmd);
-				submeshDrawInstanceData[currentFrame].insert({ newDrawCmd.submeshOffset, BoundedInstanceData() });
+				drawCmds[currentFrame][sceneIndex].push_back(newDrawCmd);
+				submeshDrawInstanceData[currentFrame].insert({ mapIndex, BoundedInstanceData(instanceDataArena[currentFrame]) });
+				submeshDrawInstanceData[currentFrame][mapIndex].instances.reserve(8192);
 				
 				auto& transComp = scene->registry().get<TransformComponent>(newDrawCmd.subMeshEntity);
 				InstanceData instData{};
 				instData.matInstanceIndex = newDrawCmd.materialIndex;				
 				instData.matrixIndex = transComp.dataIndex;
-				submeshDrawInstanceData[currentFrame][newDrawCmd.submeshOffset].instances.push_back(instData);
+				submeshDrawInstanceData[currentFrame][mapIndex].instances.push_back(instData);
 				BoundingVolume bVol = BoundingVolume{ &scene->registry() , newDrawCmd.subMeshEntity};
-				submeshDrawInstanceData[currentFrame][newDrawCmd.submeshOffset].bounds.merge(bVol.getCoarseAABB());
+				submeshDrawInstanceData[currentFrame][mapIndex].bounds.merge(bVol.getCoarseAABB());
 
 			} else {
 				auto& transComp = scene->registry().get<TransformComponent>(newDrawCmd.subMeshEntity);
 				InstanceData instData{};
 				instData.matInstanceIndex = newDrawCmd.materialIndex;
 				instData.matrixIndex = transComp.dataIndex;
-				submeshDrawInstanceData[currentFrame][newDrawCmd.submeshOffset].instances.push_back(instData);
+				submeshDrawInstanceData[currentFrame][mapIndex].instances.push_back(instData);
 				BoundingVolume bVol = BoundingVolume{ &scene->registry() , newDrawCmd.subMeshEntity };
-				submeshDrawInstanceData[currentFrame][newDrawCmd.submeshOffset].bounds.merge(bVol.getCoarseAABB());
+				submeshDrawInstanceData[currentFrame][mapIndex].bounds.merge(bVol.getCoarseAABB());
 				
-				submeshKeysWithMultipleInstances[currentFrame].insert(it->first);
+				submeshKeysWithMultipleInstances[currentFrame][mapIndex.sceneIndex].insert(mapIndex.instanceIndex);
 			}
 		}
+
+
+
+		std::sort(drawCmds[sceneIndex][currentFrame].begin(), drawCmds[sceneIndex][currentFrame].end());
+
 	}
-	std::sort(drawCmds.begin(), drawCmds.end());
-
-
-	// push matrices to GPU
-	{
-		VkResult vkResult{};
-		VkDeviceSize bufferSize = sizeof(ModelTransform) * collectedMatrices[currentFrame].size();
-		VkBufferCreateInfo createInfo{};
-		createInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-		createInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
-		createInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-		createInfo.size = bufferSize;
-		if (modelTransforms_lastBufferSize[currentFrame] != bufferSize) {
-			vkDestroyBuffer(m_vkDevice, matBuf_modelTransforms[currentFrame], nullptr);
-			modelTransforms_lastBufferSize[currentFrame] = bufferSize;
-
-			if (matDevMem_modelTransforms[currentFrame] != VK_NULL_HANDLE)
-				vkFreeMemory(m_vkDevice, matDevMem_modelTransforms[currentFrame], nullptr);
-
-			vkResult = vkCreateBuffer(m_vkDevice, &createInfo, nullptr, &matBuf_modelTransforms[currentFrame]);
-			VkMemoryRequirements bufferMemReq{};
-			vkGetBufferMemoryRequirements(m_vkDevice, matBuf_modelTransforms[currentFrame], &bufferMemReq);
-			VkMemoryAllocateInfo allocInfo{};
-			allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-			allocInfo.allocationSize = bufferMemReq.size;
-			allocInfo.memoryTypeIndex = findMemoryType(
-				bufferMemReq.memoryTypeBits,
-				VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-				m_phyDevice
-			);
-			vkResult = vkAllocateMemory(m_vkDevice, &allocInfo, nullptr, &matDevMem_modelTransforms[currentFrame]);
-			vkResult = vkBindBufferMemory(m_vkDevice, matBuf_modelTransforms[currentFrame], matDevMem_modelTransforms[currentFrame], 0);
 		
-			VkDescriptorSet matricesSet = bindingToDescriptorSet[{MAT_MODELMATRICES_BIND, MAT_MODELMATRICES_SET, 0}][currentFrame];
-			std::vector<VkWriteDescriptorSet> descriptorWrites;
-			VkDescriptorBufferInfo modelMatricesBufferInfo{};
-			modelMatricesBufferInfo.buffer = matBuf_modelTransforms[currentFrame];
-			modelMatricesBufferInfo.offset = 0;
-			modelMatricesBufferInfo.range = VK_WHOLE_SIZE;
 
-			VkWriteDescriptorSet matrixDataWrite{};
-			matrixDataWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-			matrixDataWrite.dstSet = matricesSet;
-			matrixDataWrite.dstBinding = MAT_MODELMATRICES_BIND;
-			matrixDataWrite.dstArrayElement = 0;
-			matrixDataWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-			matrixDataWrite.descriptorCount = 1;
-			matrixDataWrite.pBufferInfo = &modelMatricesBufferInfo;
-			vkUpdateDescriptorSets(m_vkDevice, 1, &matrixDataWrite, 0, nullptr);
+	// bind vertex buffer
+	VkDeviceSize offsets[] = { 0 };
+	vkCmdBindVertexBuffers(frame.cmdBuffer, 0, 1, &vertexBuffer, offsets);
+	vkCmdBindIndexBuffer(frame.cmdBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT32);
+
+
+	// Check the draw commands and issue binds and draw calls
+	uint32_t drawCount = 0;
+	uint32_t pipelinesCount = 0;
+	uint32_t setCount = 0;
+	bool firstPass = true;
+	bool hasDrawn = false;
+	for (const auto& cmdScene : drawCmds[currentFrame]) {
+
+		if (cmdScene.second.empty())
+			continue;
+
+		auto sceneIndex = cmdScene.first;
+		auto* scene = Engine::getInstance()->getScene(sceneIndex);
 		
-		}
 
-		void* data;
-		vkMapMemory(m_vkDevice, matDevMem_modelTransforms[currentFrame], 0, bufferSize, 0, &data);
-		memcpy(data, collectedMatrices[currentFrame].data(), (size_t)bufferSize);
-		vkUnmapMemory(m_vkDevice, matDevMem_modelTransforms[currentFrame]);
-	}
-
-
-	// update instanceData on gpu
-	static std::vector<InstanceData> instDataTemp[VULKAN_FRAMES_IN_FLIGHT];
-	instDataTemp[currentFrame].clear();
-	for (auto& key : submeshKeysWithMultipleInstances[currentFrame]) {
-
-
-		for (auto& instData : submeshDrawInstanceData[currentFrame][key].instances)
-			instDataTemp[currentFrame].push_back(instData);
-
-
-		// Copy instance data to GPU
+		// upload the data
+		// Matrices
+		static size_t lastMatBufferSize[VULKAN_FRAMES_IN_FLIGHT] = { 0, 0 };
 		{
 			VkResult vkResult{};
-			VkDeviceSize bufferSize = sizeof(InstanceData) * instDataTemp[currentFrame].size();
+			VkDeviceSize bufferSize = sizeof(ModelTransform) * scene->transformSystem().modelTransforms().size();
+			VkBufferCreateInfo createInfo{};
+			createInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+			createInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+			createInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+			createInfo.size = bufferSize;	
+
+			if (lastMatBufferSize[currentFrame] < bufferSize) {
+				lastMatBufferSize[currentFrame] = bufferSize;
+				vkDestroyBuffer(m_vkDevice, matBuf_modelTransforms[currentFrame], nullptr);
+				modelTransforms_lastBufferSize[currentFrame] = bufferSize;
+
+				if (matDevMem_modelTransforms[currentFrame] != VK_NULL_HANDLE)
+					vkFreeMemory(m_vkDevice, matDevMem_modelTransforms[currentFrame], nullptr);
+
+
+				vkResult = vkCreateBuffer(m_vkDevice, &createInfo, nullptr, &matBuf_modelTransforms[currentFrame]);
+				VkMemoryRequirements bufferMemReq{};
+				vkGetBufferMemoryRequirements(m_vkDevice, matBuf_modelTransforms[currentFrame], &bufferMemReq);
+				VkMemoryAllocateInfo allocInfo{};
+				allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+				allocInfo.allocationSize = bufferMemReq.size;
+				allocInfo.memoryTypeIndex = findMemoryType(
+					bufferMemReq.memoryTypeBits,
+					VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+					m_phyDevice
+				);
+				vkResult = vkAllocateMemory(m_vkDevice, &allocInfo, nullptr, &matDevMem_modelTransforms[currentFrame]);
+				vkResult = vkBindBufferMemory(m_vkDevice, matBuf_modelTransforms[currentFrame], matDevMem_modelTransforms[currentFrame], 0);
+
+				VkDescriptorSet matricesSet = bindingToDescriptorSet[{MAT_MODELMATRICES_BIND, MAT_MODELMATRICES_SET, 0}][currentFrame];
+				std::vector<VkWriteDescriptorSet> descriptorWrites;
+				VkDescriptorBufferInfo modelMatricesBufferInfo{};
+				modelMatricesBufferInfo.buffer = matBuf_modelTransforms[currentFrame];
+				modelMatricesBufferInfo.offset = 0;
+				modelMatricesBufferInfo.range = VK_WHOLE_SIZE;
+
+				VkWriteDescriptorSet matrixDataWrite{};
+				matrixDataWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+				matrixDataWrite.dstSet = matricesSet;
+				matrixDataWrite.dstBinding = MAT_MODELMATRICES_BIND;
+				matrixDataWrite.dstArrayElement = 0;
+				matrixDataWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+				matrixDataWrite.descriptorCount = 1;
+				matrixDataWrite.pBufferInfo = &modelMatricesBufferInfo;
+				vkUpdateDescriptorSets(m_vkDevice, 1, &matrixDataWrite, 0, nullptr);
+			}
+
+			void* data;
+			vkMapMemory(m_vkDevice, matDevMem_modelTransforms[currentFrame], 0, bufferSize, 0, &data);
+			memcpy(data, scene->transformSystem().modelTransforms().data(), (size_t)bufferSize);
+			vkUnmapMemory(m_vkDevice, matDevMem_modelTransforms[currentFrame]);
+		}
+		// instanceData on gpu
+		int test = 0;
+		ArenaVector<InstanceData> instDataTemp{ ArenaAllocator<InstanceData>{instanceDataArena[currentFrame]} };
+		instDataTemp.reserve(8192);
+		for (auto& key : submeshKeysWithMultipleInstances[currentFrame][sceneIndex]) {
+			test++;
+			const SceneInstancePair pair{ sceneIndex, key };
+			
+			for (auto& instData : submeshDrawInstanceData[currentFrame][pair].instances) {
+				instDataTemp.push_back(instData);
+			}
+			
+		}
+
+		// Copy instance data to GPU
+		static size_t lastInstDataTempSize[VULKAN_FRAMES_IN_FLIGHT] = { 0, 0 };
+		if (!instDataTemp.empty())
+		{
+			VkResult vkResult{};
+			VkDeviceSize bufferSize = sizeof(InstanceData) * instDataTemp.size();
 			VkBufferCreateInfo createInfo{};
 			createInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
 			createInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
 			createInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 			createInfo.size = bufferSize;
-			if (instancesIndex_lastBufferSize[currentFrame] != bufferSize) {
+			if (bufferSize > lastInstDataTempSize[currentFrame]) {
+				lastInstDataTempSize[currentFrame] = bufferSize;
+
 				vkDestroyBuffer(m_vkDevice, instanceIndexBuffer[currentFrame], nullptr);
 				instancesIndex_lastBufferSize[currentFrame] = bufferSize;
 
@@ -286,166 +331,174 @@ void VulkanContext::draw(const DrawContext& ctx) {
 				instanceDataWrite.descriptorCount = 1;
 				instanceDataWrite.pBufferInfo = &instanceIndexBufferInfo;
 				vkUpdateDescriptorSets(m_vkDevice, 1, &instanceDataWrite, 0, nullptr);
-
 			}
 
 			void* data;
 			vkMapMemory(m_vkDevice, instanceIndexMemory[currentFrame], 0, bufferSize, 0, &data);
-			memcpy(data, instDataTemp[currentFrame].data(), (size_t)bufferSize);
+			memcpy(data, instDataTemp.data(), (size_t)bufferSize);
 			vkUnmapMemory(m_vkDevice, instanceIndexMemory[currentFrame]);
 
 		}
 
-	}
-
-	// Barrier: make compute writes visible to graphics reads
+		// Barrier: make compute writes visible to graphics reads
 #if VK_HEADER_VERSION >= 230  // assuming you have 1.3 / sync2
-	VkMemoryBarrier2 memBarrier{ VK_STRUCTURE_TYPE_MEMORY_BARRIER_2 };
-	memBarrier.srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
-	memBarrier.srcAccessMask = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT; // writes in CS
-	memBarrier.dstStageMask = VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
-	memBarrier.dstAccessMask = VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_UNIFORM_READ_BIT;
+		VkMemoryBarrier2 memBarrier{ VK_STRUCTURE_TYPE_MEMORY_BARRIER_2 };
+		memBarrier.srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
+		memBarrier.srcAccessMask = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT; // writes in CS
+		memBarrier.dstStageMask = VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
+		memBarrier.dstAccessMask = VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_UNIFORM_READ_BIT;
 
-	VkDependencyInfo dep{ VK_STRUCTURE_TYPE_DEPENDENCY_INFO };
-	dep.memoryBarrierCount = 1;
-	dep.pMemoryBarriers = &memBarrier;
+		VkDependencyInfo dep{ VK_STRUCTURE_TYPE_DEPENDENCY_INFO };
+		dep.memoryBarrierCount = 1;
+		dep.pMemoryBarriers = &memBarrier;
 
-	vkCmdPipelineBarrier2(frame.cmdBuffer, &dep);
+		vkCmdPipelineBarrier2(frame.cmdBuffer, &dep);
 #else
-	VkMemoryBarrier mem{};
-	mem.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
-	mem.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-	mem.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_UNIFORM_READ_BIT;
+		VkMemoryBarrier mem{};
+		mem.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+		mem.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+		mem.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_UNIFORM_READ_BIT;
 
-	vkCmdPipelineBarrier(
-		cmd,
-		VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-		VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-		0,
-		1, &mem,
-		0, nullptr,
-		0, nullptr);
+		vkCmdPipelineBarrier(
+			cmd,
+			VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+			VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+			0,
+			1, &mem,
+			0, nullptr,
+			0, nullptr);
 #endif
 
 
-	// Begin Render Pass
-	VkClearValue clearValues[2] = {};
-	clearValues[0].color = { ctx.clearColor[0], ctx.clearColor[1], ctx.clearColor[2], ctx.clearColor[3] };
-	clearValues[1].depthStencil = { 1.0f, 0 };
+		// Begin Scene Render Pass
+		if (firstPass) {
+			VkClearValue clearValues[2] = {};
+			clearValues[0].color = { ctx.clearColor[0], ctx.clearColor[1], ctx.clearColor[2], ctx.clearColor[3] };
+			clearValues[1].depthStencil = { 1.0f, 0 };
 
-	VkRenderPassBeginInfo renderPassInfo{};
-	renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-	renderPassInfo.renderPass = rendPasses[0];//rendPasses[ctx.renderPassIndex];
-	renderPassInfo.framebuffer = swapChainFramebuffers[imageIndex];
-	renderPassInfo.renderArea.offset = { 0, 0 };
-	renderPassInfo.renderArea.extent = swapchainExtent;
-	renderPassInfo.clearValueCount = 2;
-	renderPassInfo.pClearValues = clearValues;
-	vkCmdBeginRenderPass(frame.cmdBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+			VkRenderPassBeginInfo renderPassInfo{};
+			renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+			renderPassInfo.renderPass = rendPasses[0];
+			renderPassInfo.framebuffer = swapChainFramebuffers[imageIndex];
+			renderPassInfo.renderArea.offset = { 0, 0 };
+			renderPassInfo.renderArea.extent = swapchainExtent;
+			renderPassInfo.clearValueCount = 2;
+			renderPassInfo.pClearValues = clearValues;
+			vkCmdBeginRenderPass(frame.cmdBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-	// bind vertex buffer
-	VkDeviceSize offsets[] = { 0 };
-	vkCmdBindVertexBuffers(frame.cmdBuffer, 0, 1, &vertexBuffer, offsets);
-	vkCmdBindIndexBuffer(frame.cmdBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT32);
-
-	uint32_t lastPipelineIndex = UINT32_INVALID - 1;
-	Material* lastMaterial = nullptr;
-	uint32_t lastDescCount = 0;
-	uint32_t lastMatIndex = UINT32_INVALID;
-	VkDescriptorSet lastSets[4]{ nullptr, nullptr, nullptr, nullptr };
-	size_t firstSet = 0;
-	size_t setCount = 0;
-	bool pendingRebind = false;
-
-	// Check the draw commands and issue binds and draw calls
-	uint32_t drawCount = 0;
-	uint32_t pipelinesCount = 0;
-	for (const auto& cmd : drawCmds) {
-		auto instanceSize = submeshDrawInstanceData[currentFrame][cmd.submeshOffset].instances.size();
-		if (instanceSize > 1) {
-			auto& aabb = submeshDrawInstanceData[currentFrame][cmd.submeshOffset].bounds;
-			if (!MMath::aabbVisible(aabb.min, aabb.max, f))
-				continue;	
-		}
-
-		auto* scene = Engine::getInstance()->getScene(cmd.sceneIndex);
-
-		Material* matBase = RenderManager::getInstance()->getMaterial(cmd.materialIndex);
-
-		if (cmd.materialIndex != lastMatIndex) {
-			// Bind pipeline if changed
-			if (matBase->pipelineId != lastPipelineIndex) {
-				vkCmdBindPipeline(frame.cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines[matBase->pipelineId]);
-				lastPipelineIndex = matBase->pipelineId;
-				pipelinesCount++;
-			}
-
-			// check descriptor sets
-			auto& setList = matBase->dependentDescriptorBindings;
-			for (auto& combo : setList) {
-				auto& descSet = bindingToDescriptorSet[combo];
-				if (lastSets[combo.set] != descSet[currentFrame]) {
-					if (!pendingRebind) {
-						firstSet = combo.set;
-						setCount = 0;
-						pendingRebind = true;
-					}
-					lastSets[combo.set] = descSet[currentFrame];
-					setCount++;
-				}
-			}
-
-
-			if (pendingRebind) {
-				vkCmdBindDescriptorSets(frame.cmdBuffer,
-										VK_PIPELINE_BIND_POINT_GRAPHICS,
-										pipelineLayouts[matBase->pipelineLayoutId],
-										firstSet,
-										setCount,
-										lastSets,
-										0, nullptr);
-				pendingRebind = false;
-			}
-			lastMatIndex = cmd.materialIndex;
-		}
-
-		
-		if (instanceSize > 1) {
-			
-			// Push for instanced
-			BaseMatPush push{};
-			push.flags = (uint32_t)BaseMatPushFlags::Instanced;
-			vkCmdPushConstants(frame.cmdBuffer, pipelineLayouts[matBase->pipelineLayoutId], VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
-							   0, sizeof(BaseMatPush), &push);
-
-			auto& submesh = scene->sceneRender().getSubMeshes()[cmd.submeshOffset];
-			auto vertexOffset = submesh.vertexOffset;
-			auto indexOffset = submesh.indexOffset;
-			auto indexCount = submesh.indexCount;
-
-			vkCmdDrawIndexed(frame.cmdBuffer, indexCount, static_cast<uint32_t>(instanceSize), indexOffset, vertexOffset, 0);
-			drawCount++;
-
-
+			firstPass = false;
+			hasDrawn = true;
 		} else {
-			// Push
-			BaseMatPush push{};
-			push.flags = 0;
-			push.matInstanceIndex = cmd.instanceIndex;
-			auto& transComp = scene->registry().get<TransformComponent>(cmd.subMeshEntity);
-			push.modelToWorld = scene->transformSystem().modelTransforms()[transComp.dataIndex];
-			vkCmdPushConstants(frame.cmdBuffer, pipelineLayouts[matBase->pipelineLayoutId], VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
-							   0, sizeof(BaseMatPush), &push);
-
-
-			auto& submesh = scene->sceneRender().getSubMeshes()[cmd.submeshOffset];
-			auto vertexOffset = submesh.vertexOffset;
-			auto indexOffset = submesh.indexOffset;
-			auto indexCount = submesh.indexCount;
-
-			vkCmdDrawIndexed(frame.cmdBuffer, indexCount, 1, indexOffset, vertexOffset, 0);
-			drawCount++;
+			VkRenderPassBeginInfo renderPassInfo{};
+			renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+			renderPassInfo.renderPass = rendPasses[0];
+			renderPassInfo.framebuffer = swapChainFramebuffers[imageIndex];
+			renderPassInfo.renderArea.offset = { 0, 0 };
+			renderPassInfo.renderArea.extent = swapchainExtent;
+			renderPassInfo.clearValueCount = 0;
+			renderPassInfo.pClearValues = nullptr;
+			vkCmdBeginRenderPass(frame.cmdBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 		}
+
+		uint32_t lastPipelineIndex = UINT32_INVALID - 1;
+		Material* lastMaterial = nullptr;
+		uint32_t lastDescCount = 0;
+		uint32_t lastMatIndex = UINT32_INVALID;
+		VkDescriptorSet lastSets[4]{ nullptr, nullptr, nullptr, nullptr };
+		size_t firstSet = 0;
+		bool pendingRebind = false;
+
+		for (auto& cmd : cmdScene.second) {
+			SceneInstancePair pair{ sceneIndex, cmd.submeshOffset };
+			auto instanceSize = submeshDrawInstanceData[currentFrame][pair].instances.size();
+			if (instanceSize > 1) {
+				auto& aabb = submeshDrawInstanceData[currentFrame][pair].bounds;
+				if (!MMath::aabbVisible(aabb.min, aabb.max, f))
+					continue;
+			}
+
+			
+
+			Material* matBase = RenderManager::getInstance()->getMaterial(cmd.materialIndex);
+
+			if (cmd.materialIndex != lastMatIndex) {
+				// Bind pipeline if changed
+				if (matBase->pipelineId != lastPipelineIndex) {
+					vkCmdBindPipeline(frame.cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines[matBase->pipelineId]);
+					lastPipelineIndex = matBase->pipelineId;
+					pipelinesCount++;
+				}
+
+				// check descriptor sets
+				auto& setList = matBase->dependentDescriptorBindings;
+				for (auto& combo : setList) {
+					auto& descSet = bindingToDescriptorSet[combo];
+					if (lastSets[combo.set] != descSet[currentFrame]) {
+						if (!pendingRebind) {
+							firstSet = combo.set;
+							setCount = 0;
+							pendingRebind = true;
+						}
+						lastSets[combo.set] = descSet[currentFrame];
+						setCount++;
+					}
+				}
+
+
+				if (pendingRebind) {
+					vkCmdBindDescriptorSets(frame.cmdBuffer,
+											VK_PIPELINE_BIND_POINT_GRAPHICS,
+											pipelineLayouts[matBase->pipelineLayoutId],
+											firstSet,
+											setCount,
+											lastSets,
+											0, nullptr);
+					pendingRebind = false;
+				}
+				lastMatIndex = cmd.materialIndex;
+			}
+
+
+			if (instanceSize > 1) {
+
+				// Push for instanced
+				BaseMatPush push{};
+				push.flags = (uint32_t)BaseMatPushFlags::Instanced;
+				vkCmdPushConstants(frame.cmdBuffer, pipelineLayouts[matBase->pipelineLayoutId], VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+								   0, sizeof(BaseMatPush), &push);
+
+				auto& submesh = scene->sceneRender().getSubMeshes()[cmd.submeshOffset];
+				auto vertexOffset = submesh.vertexOffset;
+				auto indexOffset = submesh.indexOffset;
+				auto indexCount = submesh.indexCount;
+
+				vkCmdDrawIndexed(frame.cmdBuffer, indexCount, static_cast<uint32_t>(instanceSize), indexOffset, vertexOffset, 0);
+				drawCount++;
+
+
+			} else {
+				// Push
+				BaseMatPush push{};
+				push.flags = 0;
+				push.matInstanceIndex = cmd.instanceIndex;
+				auto& transComp = scene->registry().get<TransformComponent>(cmd.subMeshEntity);
+				push.modelToWorld = scene->transformSystem().modelTransforms()[transComp.dataIndex];
+				vkCmdPushConstants(frame.cmdBuffer, pipelineLayouts[matBase->pipelineLayoutId], VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+								   0, sizeof(BaseMatPush), &push);
+
+
+				auto& submesh = scene->sceneRender().getSubMeshes()[cmd.submeshOffset];
+				auto vertexOffset = submesh.vertexOffset;
+				auto indexOffset = submesh.indexOffset;
+				auto indexCount = submesh.indexCount;
+
+				vkCmdDrawIndexed(frame.cmdBuffer, indexCount, 1, indexOffset, vertexOffset, 0);
+				drawCount++;
+			}
+		}
+
+		// End Render Pass
+		vkCmdEndRenderPass(frame.cmdBuffer);
 	}
 
 
@@ -484,6 +537,17 @@ void VulkanContext::draw(const DrawContext& ctx) {
 			vkCmdSetDepthTestEnable(frame.cmdBuffer, VK_FALSE);
 			vkCmdSetDepthWriteEnable(frame.cmdBuffer, VK_FALSE);
 			//vkCmdSetDepthCompareOp(frame.cmdBuffer, VK_COMPARE_OP_LESS_OR_EQUAL);
+
+			VkRenderPassBeginInfo renderPassInfo{};
+			renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+			renderPassInfo.renderPass = rendPasses[0];
+			renderPassInfo.framebuffer = swapChainFramebuffers[imageIndex];
+			renderPassInfo.renderArea.offset = { 0, 0 };
+			renderPassInfo.renderArea.extent = swapchainExtent;
+			renderPassInfo.clearValueCount = 0;
+			renderPassInfo.pClearValues = nullptr;
+			vkCmdBeginRenderPass(frame.cmdBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+			hasDrawn = true;
 		}
 		
 		if (scene->sceneRender().drawOccluders()) {
@@ -551,18 +615,38 @@ void VulkanContext::draw(const DrawContext& ctx) {
 			}
 		}
 	}
+	// End Render Pass for debugs
+	if (anyAabbsDrawn)
+		vkCmdEndRenderPass(frame.cmdBuffer);
 
+	// Just clear screen if nothing has been rendered
+	if (!hasDrawn) {
+		VkClearValue clearValues[2] = {};
+		clearValues[0].color = { ctx.clearColor[0], ctx.clearColor[1], ctx.clearColor[2], ctx.clearColor[3] };
+		clearValues[1].depthStencil = { 1.0f, 0 };
 
-	m_lastDrawcallCount = drawCount;
-	m_lastPipelineSwitches = pipelinesCount;
+		VkRenderPassBeginInfo renderPassInfo{};
+		renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+		renderPassInfo.renderPass = rendPasses[0];
+		renderPassInfo.framebuffer = swapChainFramebuffers[imageIndex];
+		renderPassInfo.renderArea.offset = { 0, 0 };
+		renderPassInfo.renderArea.extent = swapchainExtent;
+		renderPassInfo.clearValueCount = 2;
+		renderPassInfo.pClearValues = clearValues;
+		vkCmdBeginRenderPass(frame.cmdBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-	// End Render Pass
-	vkCmdEndRenderPass(frame.cmdBuffer);
+		vkCmdEndRenderPass(frame.cmdBuffer);
+	}
+
 
 	// End command buffer
 	if (vkEndCommandBuffer(frame.cmdBuffer) != VK_SUCCESS) {
 		throw std::runtime_error("failed to record command buffer!");
 	}
+
+	m_lastDrawcallCount = drawCount;
+	m_lastPipelineSwitches = pipelinesCount;
+
 
 	VkSubmitInfo submitInfo{};
 	submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -588,6 +672,8 @@ void VulkanContext::draw(const DrawContext& ctx) {
 		throw std::runtime_error("failed to submit draw command buffer!");
 	}
 
+
+		
 	// Present frame
 	VkPresentInfoKHR presentInfo{};
 	presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;

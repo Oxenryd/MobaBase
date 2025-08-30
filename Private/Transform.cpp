@@ -173,31 +173,130 @@ void Transform::rotateLocal(const glm::quat& rotDeltaLocal) {
 	rotation = glm::normalize(rotation * dq);           // post-multiply = LOCAL space
 }
 
-void Transform::rotateLocal(const glm::vec3& rotDeltaLocal) {
+void Transform::_rotateLocalSIMD(const glm::vec3& rotDeltaLocal) {
+
+
 	auto& comp = _markDirty(ROTATION);
 	auto& rotation = Engine::getInstance()
 		->getScene(comp.sceneIndex)
 		->transformSystem().rotations()[comp.dataIndex];
 
-	rotation = glm::normalize(rotation);
+	// Early exit for tiny rotations
+	const float magSq = glm::dot(rotDeltaLocal, rotDeltaLocal);
+	if (magSq < 1e-8f) return;
 
-	// Local basis from current orientation
-	const glm::vec3 right = rotation * DIR_RIGHT;
-	const glm::vec3 up = rotation * DIR_UP;
-	const glm::vec3 forward = rotation * DIR_FORWARD;
+	// Load current quaternion [x, y, z, w]
+	__m128 q_current = _mm_load_ps(&rotation.x);
 
-	const float pitch = rotDeltaLocal.x; // about local right
-	const float yaw = rotDeltaLocal.y; // about local up
-	const float roll = rotDeltaLocal.z; // about local forward
+	const float pitch = rotDeltaLocal.x * 0.5f;
+	const float yaw = rotDeltaLocal.y * 0.5f;
+	const float roll = rotDeltaLocal.z * 0.5f;
 
-	const glm::quat qPitch = glm::angleAxis(pitch, right);
-	const glm::quat qYaw = glm::angleAxis(yaw, up);
-	const glm::quat qRoll = glm::angleAxis(roll, forward);
+	// Compute sin/cos for half angles
+	float cp, sp, cy, sy, cr, sr;
+	if (magSq < 0.1f) {
+		MMath::sincos_approx(pitch, sp, cp);
+		MMath::sincos_approx(yaw, sy, cy);
+		MMath::sincos_approx(roll, sr, cr);
+	} else {
+		cp = cosf(pitch); sp = sinf(pitch);
+		cy = cosf(yaw);   sy = sinf(yaw);
+		cr = cosf(roll);  sr = sinf(roll);
+	}
 
-	// choose order; here: yaw -> pitch -> roll in LOCAL frame
-	const glm::quat qLocal = qYaw * qPitch * qRoll;
+	// Create local rotation quaternion [x, y, z, w] (GLM layout)
+	__m128 q_local = _mm_set_ps(
+		cr * cp * cy + sr * sp * sy,  // w
+		sr * cp * cy - cr * sp * sy,  // z
+		cr * cp * sy + sr * sp * cy,  // y
+		cr * sp * cy - sr * cp * sy   // x
+	);
 
-	rotation = glm::normalize(rotation * qLocal); // LOCAL: post-multiply
+	// Multiply quaternions: rotation * q_local (post-multiply for local rotation)
+	__m128 result = MMath::quaternion_multiply_simd_simple(q_current, q_local);
+
+	// Normalize result
+	result = MMath::normalize_simd(result);
+
+	// Store back
+	_mm_store_ps(&rotation.x, result);
+
+	//auto& comp = _markDirty(ROTATION);
+	//auto& rotation = Engine::getInstance()
+	//	->getScene(comp.sceneIndex)
+	//	->transformSystem().rotations()[comp.dataIndex];
+
+	//// Early exit for tiny rotations
+	//const float magSq = glm::dot(rotDeltaLocal, rotDeltaLocal);
+	//if (magSq < 1e-8f) return;
+
+	//// Load current quaternion [x, y, z, w]
+	//__m128 q_current = _mm_load_ps(&rotation.x);
+
+	//const float pitch = rotDeltaLocal.x * 0.5f;
+	//const float yaw = rotDeltaLocal.y * 0.5f;
+	//const float roll = rotDeltaLocal.z * 0.5f;
+
+	//// Compute sin/cos for half angles
+	//float cp, sp, cy, sy, cr, sr;
+
+	//// For small angles, use fast approximation
+	//if (magSq < 0.1f) {
+	//	MMath::sincos_approx(pitch, sp, cp);
+	//	MMath::sincos_approx(yaw, sy, cy);
+	//	MMath::sincos_approx(roll, sr, cr);
+	//} else {
+	//	cp = cosf(pitch); sp = sinf(pitch);
+	//	cy = cosf(yaw);   sy = sinf(yaw);
+	//	cr = cosf(roll);  sr = sinf(roll);
+	//}
+
+	//// Create local rotation quaternion (YPR order)
+	//__m128 q_local = _mm_set_ps(
+	//	cr * cp * cy + sr * sp * sy,  // w
+	//	sr * cp * cy - cr * sp * sy,  // z
+	//	cr * cp * sy + sr * sp * cy,  // y
+	//	cr * sp * cy - sr * cp * sy   // x
+	//);
+
+	//// Multiply quaternions
+	//__m128 result = MMath::quaternion_multiply_simd(q_current, q_local);
+
+	//// Normalize result
+	//result = MMath::normalize_simd(result);
+
+	//// Store back
+	//_mm_store_ps(&rotation.x, result);
+}
+
+void Transform::rotateLocal(const glm::vec3& rotDeltaLocal) {
+
+	return _rotateLocalSIMD(rotDeltaLocal);
+
+	//auto& comp = _markDirty(ROTATION);
+	//auto& rotation = Engine::getInstance()
+	//	->getScene(comp.sceneIndex)
+	//	->transformSystem().rotations()[comp.dataIndex];
+
+	//rotation = glm::normalize(rotation);
+
+	//// Local basis from current orientation
+	//const glm::vec3 right = rotation * DIR_RIGHT;
+	//const glm::vec3 up = rotation * DIR_UP;
+	//const glm::vec3 forward = rotation * DIR_FORWARD;
+
+	//const float pitch = rotDeltaLocal.x; // about local right
+	//const float yaw = rotDeltaLocal.y; // about local up
+	//const float roll = rotDeltaLocal.z; // about local forward
+
+	//const glm::quat qPitch = glm::angleAxis(pitch, right);
+	//const glm::quat qYaw = glm::angleAxis(yaw, up);
+	//const glm::quat qRoll = glm::angleAxis(roll, forward);
+
+	//// choose order; here: yaw -> pitch -> roll in LOCAL frame
+	//const glm::quat qLocal = qYaw * qPitch * qRoll;
+
+	//rotation = glm::normalize(rotation * qLocal); // LOCAL: post-multiply
 }
 
 void Transform::rotateAroundWorldAxis(const glm::vec3& axis, float angle) {

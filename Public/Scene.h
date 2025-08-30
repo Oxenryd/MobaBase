@@ -111,7 +111,7 @@ public:
     LightSystem& lightSystem() { return m_lightSys; }
     BVHSystem& bvhSystem() { return m_bvhSys; }
     void setUnload() { m_pendingUnload = true; }
-    uint32_t sceneIndex() const { return m_sceneIndex; }
+    uint16_t sceneIndex() const { return m_sceneIndex; }
     bool pendingUnload() const { return m_pendingUnload; }
 
     DualBVH::TraversalResult cullResults;
