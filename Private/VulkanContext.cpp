@@ -113,6 +113,7 @@ void VulkanContext::draw(const DrawContext& ctx) {
 	static std::unordered_map<SceneIndex, std::vector<MeshDrawCommand>> drawCmds[VULKAN_FRAMES_IN_FLIGHT];
 	static std::unordered_map<SceneInstancePair, BoundedInstanceData, SceneInstancePair::Hash> submeshDrawInstanceData[VULKAN_FRAMES_IN_FLIGHT];
 	static std::unordered_map<SceneIndex, std::set<uint32_t>> submeshKeysWithMultipleInstances[VULKAN_FRAMES_IN_FLIGHT];
+	submeshKeysWithMultipleInstances[currentFrame].clear();
 	submeshDrawInstanceData[currentFrame].clear();
 	drawCmds[currentFrame].clear();
 	
