@@ -7,9 +7,12 @@
 #include <glm/gtx/quaternion.hpp>
 #include <span>
 #include "HlslTypes.h"
-#include "GlobalMacros.h"
 #include "Frustum.hpp"
+#include "Range.hpp"
 //#include "BasicTypes.hpp"
+
+
+
 
 
 
@@ -26,6 +29,28 @@ namespace MMath
 
     static const glm::mat4x4& identityMat4() { 
         return IDENTITY_MAT;
+    }
+
+    template <std::integral U, std::integral V, std::integral W, std::integral Z, std::integral X>
+    INLINE size_t getChunkSetRange(W threadCount, X size, Z currentThreadIndex, U& start, V& count) {
+        size_t offset = static_cast<size_t>(
+            std::ceil(static_cast<float>(size / static_cast<float>(threadCount)))
+            );
+        start = currentThreadIndex * offset;
+        count = (currentThreadIndex == threadCount - 1 && size % offset != 0)
+            ? size % offset
+            : offset;
+
+        return offset;
+    }
+
+    template <std::integral U, std::integral V, std::integral W, std::integral Z, std::integral X>
+    INLINE auto getRange(W threadCount, X size, Z currentThreadIndex, U& start, V& count) {
+        Range<X> r{};
+
+        getChunkSetRange(threadCount, size, currentThreadIndex, r.offset, r.count);
+
+        return r;
     }
 
 
@@ -254,7 +279,7 @@ namespace MMath
 
     //INLINE static bool obbVisible(const OBB& obb, const Frustum& frustum) {
     //    glm::vec3 center = (obb.frontTopLeft + obb.backBottomRight) * 0.5f;
-    //    glm::vec3 extents = glm::abs(obb.backBottomRight - obb.frontTopLeft) * 0.5f;
+    //    glm::vec3 extent = glm::abs(obb.backBottomRight - obb.frontTopLeft) * 0.5f;
 
     //    // Build orientation axes
     //    glm::mat3 rot = glm::mat3_cast(obb.rotation);
@@ -263,11 +288,11 @@ namespace MMath
     //    };
     //    for (int i = 0; i < 6; ++i) {
     //        const auto& plane = frustum.planes[i];
-    //        // Project the OBB's half-extents onto the plane normal
+    //        // Project the OBB's half-extent onto the plane normal
     //        float r =
-    //            extents.x * std::abs(glm::dot(plane.normal, axes[0])) +
-    //            extents.y * std::abs(glm::dot(plane.normal, axes[1])) +
-    //            extents.z * std::abs(glm::dot(plane.normal, axes[2]));
+    //            extent.x * std::abs(glm::dot(plane.normal, axes[0])) +
+    //            extent.y * std::abs(glm::dot(plane.normal, axes[1])) +
+    //            extent.z * std::abs(glm::dot(plane.normal, axes[2]));
 
     //        float dist = glm::dot(plane.normal, center) + plane.d;
     //        if (dist < -r)

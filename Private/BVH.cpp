@@ -2,6 +2,7 @@
 #include "BoundingVolume.hpp"
 #include "Transform.hpp"
 #include "Frustum.hpp"
+#include "MWork.hpp"
 
 void DualBVH::_recursiveWorker(DualBVH* _this, uint8_t threadId) {
     auto id = static_cast<size_t>(threadId);
@@ -107,8 +108,8 @@ void DualBVH::rebuildPrimitives(ArenaRegistry& registry, uint8_t index) {
     }
 
     if (primitives.empty()) {
-        nodeCount[index] = 0;
-        rootIndex[index] = 0;
+        nodeCount[index].store(0);
+        rootIndex[index].store(0);
         return;
     }
 
@@ -132,7 +133,10 @@ uint32_t DualBVH::buildRecursive(uint32_t* primitiveIds, uint32_t primCount, uin
 
 
      node.parentIndex = parent;
-     node.bounds = computeBounds(primitiveIds, primCount, index);
+     auto bounds = computeBounds(primitiveIds, primCount, index);
+     node.center = bounds.center();
+     node.extent = bounds.extent();
+     node.depth = depth;
      node.setDirty(false);
 
      // Leaf node condition
@@ -197,7 +201,7 @@ uint32_t DualBVH::buildRecursive(uint32_t* primitiveIds, uint32_t primCount, uin
 
      node.setLeaf(false);
      node.splitAxis = bestAxis;
-     static const uint32_t maxThreadDepthLevel = static_cast<uint32_t>(std::floor(std::log2(NUM_THREADS)));
+     static const uint32_t maxThreadDepthLevel = static_cast<uint32_t>(std::floor(std::log2(NUM_BUILD_THREADS)));
      if (depth < maxThreadDepthLevel) {
 
          auto idL = _getNextThreadId();
@@ -407,8 +411,8 @@ void DualBVH::buildNodes(ArenaRegistry& registry, uint8_t index) {
 
     primitiveIndices[index].resize(primitives[index].size());
     nodes[index].resize(primitives[index].size() * 2);  // Worst case
-    nodeCount[index] = 0;
-    indicesCount[index] = 0;
+    nodeCount[index].store(0);
+    indicesCount[index].store(0);
     rootIndex[index] = buildRecursive(allPrimitives.data(), allPrimitives.size(), 0, 0, index);
 
     //dirtyCount = 0;
@@ -512,10 +516,12 @@ void DualBVH::frustumCullWithOcclusion(
     if (isEmpty(frameIndex))
         return;
     
+    cullArenas[frameIndex][NUM_RUN_THREADS]->reset();
 
-    // Collect potential occluders first (front-to-back)
-    std::vector<OccluderData> potentialOccluders;
-    for (auto& [index, offset, depth] : occluderIndices[frameIndex]) {
+    // Find occluders
+    FrameArenaVector<OccluderData> potentialOccluders{ FrameArenaAllocator<OccluderData>{cullArenas[frameIndex][NUM_RUN_THREADS]} };
+
+    for (const auto& [index, offset, depth] : occluderIndices[frameIndex]) {
 
         auto& prim = primitives[frameIndex][index];
         AABB worldBounds = prim.bounds.getCoarseAABB();
@@ -536,15 +542,10 @@ void DualBVH::frustumCullWithOcclusion(
         float mn;
         MMath::hmin8(v, mn);
         float closest = mn;
-        //auto closest = FLT_MAX;
-        //for (auto& vert : verts) {
-        //    auto sqrLen = glm::length2(vert - cameraPos);
-        //    if (sqrLen < closest)
-        //        closest = sqrLen;
-        //}
 
-        potentialOccluders.push_back({prim.entity, closest, offset, index});
+        potentialOccluders.push_back({ prim.entity, closest, offset, index });
     }
+
     //collectOccluders(cameraPos, frustum, potentialOccluders);
     //for (const auto& occluder : potentialOccluders) {
     //    result.activeOccluders.push_back(occluder.entity);
@@ -560,159 +561,243 @@ void DualBVH::frustumCullWithOcclusion(
     // Build active occluder set (simplified - you'd want more sophisticated occlusion volumes)
     std::vector<OccIndexCornerIndexDepthTuple> activeOccluders;
     for (const auto& occluder : potentialOccluders) {                           //////////////////// TODO TODO TODO TODO!!!
-            activeOccluders.push_back({ occluder.primIndex, occluder.cornersOffset, occluder.depth });
-            result.activeOccluders.push_back(occluder.entity);
-            // Limit number of active occluders for performance
-            if (result.activeOccluders.size() >= 8) break;
-        
+        activeOccluders.push_back({ occluder.primIndex, occluder.cornersOffset, occluder.depth });
+        result.activeOccluders.push_back(occluder.entity);
+        // Limit number of active occluders for performance
+        if (activeOccluders.size() >= 12) break;
+
     }
 
-    // Traverse with occlusion
-    //std::vector<TraversalNode> nodeStack;
-    //nodeStack.reserve(64);
-    nodeStack[frameIndex].clear();
+    // Set up MT
+    static std::vector<Job> frontier[2];
+    frontier[frameIndex].reserve(1024);
+    frontier[frameIndex].clear();
 
-    float rootMinDepth, rootMaxDepth;
+    static std::array<Job, 256> stack[2];
+    size_t sp = 0;
+    stack[frameIndex][sp++] = { rootIndex[frameIndex] , 0xf3, 1 };
 
+    static constexpr size_t targetDepth = 3;
+    while (sp) {
+        Job j = stack[frameIndex][--sp];
 
-
-
-
-
-    //computeNodeDepthRange(rootIndex[frameIndex], cameraPos, rootMinDepth, rootMaxDepth, frameIndex);
-    if (rootIndex[frameIndex] == 0) {
-        rootMinDepth = rootMaxDepth = 0.0f;
-    } else {
-
-        const BVHNode& node = nodes[frameIndex][rootIndex[frameIndex]];
-        const AABB& bounds = node.bounds;
-        aabbViewZRange(bounds, camForward, camForwardPosDot, rootMinDepth, rootMaxDepth);
-    }
+        const BVHNode& node = nodes[frameIndex][j.nodeIndex];
 
 
+        // classify quickly using mask from parent
+        auto res = frustumTest_centerExtent(node.center, node.extent, frustum.planes);
+        if (res.state == /*Outside*/0)
+            continue;
 
-    nodeStack[frameIndex].push_back({ rootIndex[frameIndex], rootMinDepth, rootMaxDepth });
-
-    while (!nodeStack[frameIndex].empty()) {
-        TraversalNode current = nodeStack[frameIndex].back();
-        nodeStack[frameIndex].pop_back();
-
-        const BVHNode& node = nodes[frameIndex][current.nodeIndex];
-        result.nodesVisited++;
-
-        // Frustum test first (cheapest)
-        if (!MMath::aabbVisible(node.bounds.min, node.bounds.max, frustum)) {
-            result.nodesCulledByFrustum++;
+        if (node.depth >= targetDepth) {
+            frontier[frameIndex].push_back({ j.nodeIndex, res.mask, res.state });
             continue;
         }
 
-        //// Occlusion test
-        //if (method != OcclusionMethod::NONE && !activeOccluders.empty()) {
-        //    if (!node.bounds.contains(cameraPos)) {
-        //        auto corners = node.bounds.getVertices();
-        //        float d[8] = {
-        //            glm::length2(corners[0] - cameraPos),
-        //            glm::length2(corners[1] - cameraPos),
-        //            glm::length2(corners[2] - cameraPos),
-        //            glm::length2(corners[3] - cameraPos),
-        //            glm::length2(corners[4] - cameraPos),
-        //            glm::length2(corners[5] - cameraPos),
-        //            glm::length2(corners[6] - cameraPos),
-        //            glm::length2(corners[7] - cameraPos),
-        //        };
-        //        __m256 v = _mm256_loadu_ps(d);
-        //        float mn;
-        //        MMath::hmin8(v, mn);
-        //        if (isOccludedRaycast(node.bounds, activeOccluders, cameraPos, mn)) {
-        //            result.nodesCulledByOcclusion++;
-        //            continue;
-        //        }
-        //        
-        //    }
-        //}
-
-        if (node.isLeaf()) {
-
-
-            // Process leaf primitives
-            for (uint32_t i = 0; i < node.primCount; ++i) {
-                uint32_t primIndex = node.primIndices[i];//primitiveIndices[frameIndex][node.firstPrimitive + i];
-                const BVHPrimitive& prim = primitives[frameIndex][primIndex];
-
-                // Fine-grained occlusion test for individual primitives
-                bool occluded = false;
-                AABB primWorldBounds = prim.bounds.getCoarseAABB();
-                if (!MMath::aabbVisible(primWorldBounds.min, primWorldBounds.max, frustum)) {
-                    result.nodesCulledByFrustum++;
-                    continue;
-                }
-
-
-                if (method != OcclusionMethod::NONE && !activeOccluders.empty()) {
-                    float closest = 0.0f;
-                    BoundingVolume primBounds{ registry, prim.entity };
-                    auto primVerts = primBounds.getCoarseAABB().getVertices();
-                    float d[8] = {
-                        glm::length2(primVerts[0] - cameraPos),
-                        glm::length2(primVerts[1] - cameraPos),
-                        glm::length2(primVerts[2] - cameraPos),
-                        glm::length2(primVerts[3] - cameraPos),
-                        glm::length2(primVerts[4] - cameraPos),
-                        glm::length2(primVerts[5] - cameraPos),
-                        glm::length2(primVerts[6] - cameraPos),
-                        glm::length2(primVerts[7] - cameraPos),
-                    };
-                    __m256 v = _mm256_loadu_ps(d);
-                    float mn;
-                    MMath::hmin8(v, mn);
-
-                    occluded = isOccludedRaycast(primWorldBounds, activeOccluders, cameraPos, mn, frameIndex) &&
-                        !primWorldBounds.contains(cameraPos);
-                }
-
-                if (!occluded) {
-                    result.visibleEntities.push_back(prim.entity);
-                }
-                result.primitivesVisited++;
-            }
-        } else {
-            // Add children to stack with depth ranges
-            if (node.leftChild != 0) {
-                float minDepth, maxDepth;
-
-
-
-                //computeNodeDepthRange(node.leftChild, cameraPos, minDepth, maxDepth, frameIndex);
-                if (node.leftChild == 0) {
-                    minDepth = maxDepth = 0.0f;
-                } else {
-
-                    //const BVHNode& node = nodes[frameIndex][node.leftChild];
-                    const AABB& bounds = node.bounds;
-                    aabbViewZRange(bounds, camForward, camForwardPosDot, minDepth, maxDepth);
-                }
-
-                nodeStack[frameIndex].push_back({ node.leftChild, minDepth, maxDepth });
-            }
-            if (node.rightChild != 0) {
-                float minDepth, maxDepth;
-
-
-                //computeNodeDepthRange(node.rightChild, cameraPos, minDepth, maxDepth, frameIndex);
-                if (node.rightChild == 0) {
-                    minDepth = maxDepth = 0.0f;
-                } else {
-
-                    //const BVHNode& node = nodes[frameIndex][node.rightChild];
-                    const AABB& bounds = node.bounds;
-                    aabbViewZRange(bounds, camForward, camForwardPosDot, minDepth, maxDepth);
-                }
-
-
-                nodeStack[frameIndex].push_back({ node.rightChild, minDepth, maxDepth });
-            }
+        if (res.state == /*Inside*/2) {
+            // whole subtree accepted: push once with state=Inside
+            frontier[frameIndex].push_back({ j.nodeIndex, 0, /*Inside*/2 });
+            continue;
         }
+
+        // Intersect: descend
+        stack[frameIndex][sp++] = { node.leftChild, res.mask, /*Intersect*/1 };
+        stack[frameIndex][sp++] = { node.rightChild, res.mask, /*Intersect*/1 };
     }
+
+    static constexpr size_t T = NUM_RUN_THREADS;
+    static std::vector<TraversalResult> tlsResults[] = { std::vector<TraversalResult>(T), std::vector<TraversalResult>(T) };
+    for (auto& result : tlsResults[frameIndex])
+        result.clear();
+
+    static std::atomic<uint32_t> tIndex[2];
+    tIndex[frameIndex].store(0, std::memory_order_release);
+    MWork::for_loop(0, frontier[frameIndex].size(), T,
+                    [&](size_t i) {
+
+                        auto thisTIndex = tIndex[frameIndex].fetch_add(1, std::memory_order_acq_rel);
+
+                        //runSems[frameIndex][thisTIndex]->acquire();
+
+                        cullArenas[frameIndex][thisTIndex]->reset();
+                        auto& out = tlsResults[frameIndex][thisTIndex];
+                        out.activeOccluders.reserve(1024);
+                        out.nodesCulledByFrustum = 0;
+                        out.nodesCulledByOcclusion = 0;
+                        out.nodesVisited = 0;
+                        out.visibleEntities.reserve(4096);
+                        out.visibleEntities.clear();
+                        out.primitivesVisited = 0;
+
+
+                        // Traverse with occlusion
+                        FrameArenaVector<TraversalNode> nodeStack{ FrameArenaAllocator<TraversalNode>{cullArenas[frameIndex][thisTIndex]} };
+                        nodeStack.reserve(256);
+                        nodeStack.clear();
+
+                        float rootMinDepth, rootMaxDepth;
+
+                        uint32_t thisNodeIndex = frontier[frameIndex][i].nodeIndex;
+
+                        //computeNodeDepthRange(rootIndex[frameIndex], cameraPos, rootMinDepth, rootMaxDepth, frameIndex);
+                        if (thisNodeIndex == 0) {
+                            rootMinDepth = rootMaxDepth = 0.0f;
+                        } else {
+
+                            const BVHNode& node = nodes[frameIndex][thisNodeIndex];
+                            const AABB& bounds = node.bounds();
+                            aabbViewZRange(bounds, camForward, camForwardPosDot, rootMinDepth, rootMaxDepth);
+                        }
+
+
+
+                        nodeStack.push_back({ thisNodeIndex, rootMinDepth, rootMaxDepth });
+
+                        while (!nodeStack.empty()) {
+                            TraversalNode current = nodeStack.back();
+                            nodeStack.pop_back();
+
+                            const BVHNode& node = nodes[frameIndex][current.nodeIndex];
+                            out.nodesVisited++;
+
+                            // Frustum test first (cheapest)
+                            if (!MMath::aabbVisible(node.min(), node.max(), frustum)) {
+                                out.nodesCulledByFrustum++;
+                                continue;
+                            }
+
+                            //// Occlusion test
+                            //if (method != OcclusionMethod::NONE && !activeOccluders.empty()) {
+                            //    if (!node.bounds.contains(cameraPos)) {
+                            //        auto corners = node.bounds.getVertices();
+                            //        float d[8] = {
+                            //            glm::length2(corners[0] - cameraPos),
+                            //            glm::length2(corners[1] - cameraPos),
+                            //            glm::length2(corners[2] - cameraPos),
+                            //            glm::length2(corners[3] - cameraPos),
+                            //            glm::length2(corners[4] - cameraPos),
+                            //            glm::length2(corners[5] - cameraPos),
+                            //            glm::length2(corners[6] - cameraPos),
+                            //            glm::length2(corners[7] - cameraPos),
+                            //        };
+                            //        __m256 v = _mm256_loadu_ps(d);
+                            //        float mn;
+                            //        MMath::hmin8(v, mn);
+                            //        if (isOccludedRaycast(node.bounds, activeOccluders, cameraPos, mn)) {
+                            //            result.nodesCulledByOcclusion++;
+                            //            continue;
+                            //        }
+                            //        
+                            //    }
+                            //}
+
+                            if (node.isLeaf()) {
+
+
+                                // Process leaf primitives
+                                for (uint32_t j = 0; j < node.primCount; ++j) {
+                                    uint32_t primIndex = node.primIndices[j];//primitiveIndices[frameIndex][node.firstPrimitive + i];
+                                    const BVHPrimitive& prim = primitives[frameIndex][primIndex];
+
+                                    // Fine-grained occlusion test for individual primitives
+                                    bool occluded = false;
+                                    AABB primWorldBounds = prim.bounds.getCoarseAABB();
+                                    if (!MMath::aabbVisible(primWorldBounds.min, primWorldBounds.max, frustum)) {
+                                        out.nodesCulledByFrustum++;
+                                        continue;
+                                    }
+
+
+                                    if (method != OcclusionMethod::NONE && !out.activeOccluders.empty()) {
+                                        float closest = 0.0f;
+                                        BoundingVolume primBounds{ registry, prim.entity };
+                                        auto primVerts = primBounds.getCoarseAABB().getVertices();
+                                        float d[8] = {
+                                            glm::length2(primVerts[0] - cameraPos),
+                                            glm::length2(primVerts[1] - cameraPos),
+                                            glm::length2(primVerts[2] - cameraPos),
+                                            glm::length2(primVerts[3] - cameraPos),
+                                            glm::length2(primVerts[4] - cameraPos),
+                                            glm::length2(primVerts[5] - cameraPos),
+                                            glm::length2(primVerts[6] - cameraPos),
+                                            glm::length2(primVerts[7] - cameraPos),
+                                        };
+                                        __m256 v = _mm256_loadu_ps(d);
+                                        float mn;
+                                        MMath::hmin8(v, mn);
+
+                                        occluded = isOccludedRaycast(primWorldBounds, activeOccluders, cameraPos, mn, frameIndex) &&
+                                            !primWorldBounds.contains(cameraPos);
+                                    }
+
+                                    if (!occluded) {
+                                        out.visibleEntities.push_back(prim.entity);
+                                    }
+                                    out.primitivesVisited++;
+                                }
+                            } else {
+                                // Add children to stack with depth ranges
+                                if (node.leftChild != 0) {
+                                    float minDepth, maxDepth;
+
+
+
+                                    //computeNodeDepthRange(node.leftChild, cameraPos, minDepth, maxDepth, frameIndex);
+                                    if (node.leftChild == 0) {
+                                        minDepth = maxDepth = 0.0f;
+                                    } else {
+
+                                        //const BVHNode& node = nodes[frameIndex][node.leftChild];
+                                        const AABB& bounds = node.bounds();
+                                        aabbViewZRange(bounds, camForward, camForwardPosDot, minDepth, maxDepth);
+                                    }
+
+                                    nodeStack.push_back({ node.leftChild, minDepth, maxDepth });
+                                }
+                                if (node.rightChild != 0) {
+                                    float minDepth, maxDepth;
+
+
+                                    //computeNodeDepthRange(node.rightChild, cameraPos, minDepth, maxDepth, frameIndex);
+                                    if (node.rightChild == 0) {
+                                        minDepth = maxDepth = 0.0f;
+                                    } else {
+
+                                        //const BVHNode& node = nodes[frameIndex][node.rightChild];
+                                        const AABB& bounds = node.bounds();
+                                        aabbViewZRange(bounds, camForward, camForwardPosDot, minDepth, maxDepth);
+                                    }
+
+
+                                    nodeStack.push_back({ node.rightChild, minDepth, maxDepth });
+                                }
+                            }
+                        }
+
+                        //runSems[frameIndex][thisTIndex]->release();
+                    });
+
+    result.visibleEntities.clear();
+    size_t totalVis = 0;
+    size_t totalActiveOcc = 0;
+    for (size_t i = 0; i < T; ++i) {       
+        auto& v = tlsResults[frameIndex][i];
+        totalVis += v.visibleEntities.size();
+        totalActiveOcc += v.activeOccluders.size();
+        result.nodesCulledByFrustum += v.nodesCulledByFrustum;
+        result.nodesCulledByOcclusion += v.nodesCulledByOcclusion;
+        result.nodesVisited += v.nodesVisited;
+        result.primitivesVisited += v.primitivesVisited;
+    }
+    result.visibleEntities.reserve(totalVis);
+    result.activeOccluders.reserve(totalActiveOcc);
+    for (size_t i = 0; i < T; ++i) {
+        auto& v = tlsResults[frameIndex][i];
+        result.visibleEntities.insert(result.visibleEntities.end(), v.visibleEntities.begin(), v.visibleEntities.end());
+        result.activeOccluders.insert(result.activeOccluders.end(), v.activeOccluders.begin(), v.activeOccluders.end());
+    }
+
+    
 
     return; //result;
 }
@@ -731,7 +816,7 @@ DualBVH::TraversalResult DualBVH::broadPhaseCollision(uint8_t index) const {
 
         result.nodesVisited++;
 
-        if (!a.bounds.intersects(b.bounds)) return;
+        if (!a.bounds().intersects(b.bounds())) return;
 
         if (a.isLeaf() && b.isLeaf()) {
             // Test all primitive pairs

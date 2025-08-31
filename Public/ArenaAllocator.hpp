@@ -6,6 +6,7 @@
 
 class Arena;
 class HeapArena;
+class FrameArena;
 
 #ifndef ARENA_HPP
     #include "Arena.hpp"
@@ -140,10 +141,93 @@ private:
     template<typename U> friend class ArenaAllocator;
 };
 
+template<typename T>
+class FrameArenaAllocator
+{
+public:
+    using value_type = T;
+    using size_type = std::size_t;
+    using difference_type = std::ptrdiff_t;
+    using propagate_on_container_copy_assignment = std::true_type;
+    using propagate_on_container_move_assignment = std::true_type;
+    using propagate_on_container_swap = std::false_type;
+    using is_always_equal = std::false_type;
+
+    template<typename U>
+    struct rebind
+    {
+        using other = FrameArenaAllocator<U>;
+    };
+
+    FrameArenaAllocator() noexcept : m_provider(static_cast<FrameArena*>(nullptr)) {}
+
+
+    FrameArenaAllocator(FrameArena* const memProvider) noexcept
+        : m_provider(memProvider) {}
+
+    template<typename U>
+    FrameArenaAllocator(const FrameArenaAllocator<U>& other) noexcept
+        : m_provider(other.m_provider) {}
+
+    // Add copy constructor and assignment operator
+    FrameArenaAllocator(const FrameArenaAllocator&) = default;
+    FrameArenaAllocator& operator=(const FrameArenaAllocator&) = default;
+
+    // Add move constructor and assignment operator
+    FrameArenaAllocator(FrameArenaAllocator&&) = default;
+    FrameArenaAllocator& operator=(FrameArenaAllocator&&) = default;
+
+    ~FrameArenaAllocator() = default;
+
+    T* allocate(std::size_t n) {
+        assert(m_provider && "ArenaAllocator requires a valid Arena pointer");
+        void* ptr = m_provider->allocate(n * sizeof(T), alignof(T));
+        if (!ptr) throw std::bad_alloc();
+        return static_cast<T*>(ptr);
+    }
+
+    void deallocate(T* p, std::size_t n) noexcept {
+        assert(m_provider && "ArenaAllocator requires a valid Arena pointer");
+        m_provider->deallocate(p, n * sizeof(T)); // Adjust based on your HeapArena interface
+    }
+
+    // Add construct and destroy methods (optional but can help)
+    template<typename U, typename... Args>
+    void construct(U* p, Args&&... args) {
+        new(p) U(std::forward<Args>(args)...);
+    }
+
+    template<typename U>
+    void destroy(U* p) {
+        p->~U();
+    }
+
+    template<typename U>
+    bool operator==(const FrameArenaAllocator<U>& rhs) const noexcept {
+        return m_provider == rhs.m_provider;
+    }
+
+    template<typename U>
+    bool operator!=(const FrameArenaAllocator<U>& rhs) const noexcept {
+        return !(*this == rhs);
+    }
+
+    FrameArena* getMemoryProvider() const noexcept { return m_provider; }
+
+private:
+    FrameArena* m_provider;
+    template<typename U> friend class FrameArenaAllocator;
+};
+
+
+
 using ArenaRegistry = entt::basic_registry<entt::entity, ArenaAllocator<entt::entity>>;
 
 template <typename T>
 using ArenaVector = std::vector<T, ArenaAllocator<T>>;
+
+template <typename T>
+using FrameArenaVector = std::vector<T, FrameArenaAllocator<T>>;
 
 template <typename Key, typename Value>
 using ArenaUMap = std::unordered_map<

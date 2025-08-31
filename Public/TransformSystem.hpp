@@ -540,31 +540,31 @@ public:
 		return;
 
 
-		//TEST MT
-		//static constexpr size_t workerDiv = (TRANSFORM_THREADS_MAX * (TRANSFORM_THREADS_MAX / 2));
-		m_boundSysPtr = &boundSys;
-		auto startWorkers = static_cast<uint8_t>(
-			std::clamp(m_roots.size() / _workerDiv,
-					   static_cast <size_t>(1),
-					   static_cast<size_t>(TRANSFORM_THREADS_MAX)));
+		////TEST MT
+		////static constexpr size_t workerDiv = (TRANSFORM_THREADS_MAX * (TRANSFORM_THREADS_MAX / 2));
+		//m_boundSysPtr = &boundSys;
+		//auto startWorkers = static_cast<uint8_t>(
+		//	std::clamp(m_roots.size() / _workerDiv,
+		//			   static_cast <size_t>(1),
+		//			   static_cast<size_t>(TRANSFORM_THREADS_MAX)));
 
-		uint32_t offset = static_cast<uint32_t>(
-				std::ceil(static_cast<float>(m_roots.size() / static_cast<float>(startWorkers)))
-			);
+		//uint32_t offset = static_cast<uint32_t>(
+		//		std::ceil(static_cast<float>(m_roots.size() / static_cast<float>(startWorkers)))
+		//	);
 
-		m_curNumWorkers.store(startWorkers, std::memory_order_acq_rel);
-		for (uint32_t i = 0; i < startWorkers; ++i) {
-			uint32_t start = i * offset;
-			uint32_t count = (i == startWorkers - 1 && m_roots.size() % offset != 0)
-				? m_roots.size() % offset
-				: offset;
-			m_workerRanges[i] = { start, count };
-			m_startSemas[i]->release();
-		}
+		//m_curNumWorkers.store(startWorkers, std::memory_order_acq_rel);
+		//for (uint32_t i = 0; i < startWorkers; ++i) {
+		//	uint32_t start = i * offset;
+		//	uint32_t count = (i == startWorkers - 1 && m_roots.size() % offset != 0)
+		//		? m_roots.size() % offset
+		//		: offset;
+		//	m_workerRanges[i] = { start, count };
+		//	m_startSemas[i]->release();
+		//}
 
-		for (size_t i = 0; i < startWorkers; ++i) {
-			m_doneSemas[i]->acquire();
-		}
+		//for (size_t i = 0; i < startWorkers; ++i) {
+		//	m_doneSemas[i]->acquire();
+		//}
 	}
 
 

@@ -106,48 +106,21 @@ void VulkanContext::draw(const DrawContext& ctx) {
 	vkCmdDispatch(frame.cmdBuffer, VULKAN_LIGHT_CLUSTERS_X, VULKAN_LIGHT_CLUSTERS_Y, VULKAN_LIGHT_CLUSTERS_Z);
 
 
-	//// In updateLightsData(), after vkBindBufferMemory
-	//void* mappedData2 = nullptr;
-	//vkMapMemory(m_vkDevice, lightsMemory[currentFrame], 0, sizeof(GPULight) * lightsData.size(), 0, &mappedData2);
-	//memcpy(mappedData2, lightsData.data(), sizeof(GPULight) * lightsData.size());
-	//vkUnmapMemory(m_vkDevice, lightsMemory[currentFrame]);
-	//// DEBUG: Verify the data
-	//GPULight* uploadedLights = (GPULight*)mappedData2;
-	//for (size_t j = 0; j < lightsData.size(); j++) {
-	//	printf("Light %zu: type=%d, pos=(%f,%f,%f) flags:%zu\n", j, uploadedLights[j].type,
-	//		   uploadedLights[j].positionVS.x, uploadedLights[j].positionVS.y, uploadedLights[j].positionVS.z,
-	//		   uploadedLights[j].flags);
-	//}
-
-
-
 
 	// Find the draw commands
 
 	using SceneIndex = uint16_t;
-	//static std::vector<uint16_t> activeSceneIndices[VULKAN_FRAMES_IN_FLIGHT];
 	static std::unordered_map<SceneIndex, std::vector<MeshDrawCommand>> drawCmds[VULKAN_FRAMES_IN_FLIGHT];
 	static std::unordered_map<SceneInstancePair, BoundedInstanceData, SceneInstancePair::Hash> submeshDrawInstanceData[VULKAN_FRAMES_IN_FLIGHT];
-	//static std::vector<ModelTransform> collectedMatrices[VULKAN_FRAMES_IN_FLIGHT];
 	static std::unordered_map<SceneIndex, std::set<uint32_t>> submeshKeysWithMultipleInstances[VULKAN_FRAMES_IN_FLIGHT];
-	//collectedMatrices[currentFrame].clear();
 	submeshDrawInstanceData[currentFrame].clear();
 	drawCmds[currentFrame].clear();
-	//activeSceneIndices[currentFrame].clear();
 	
 	
 	for (auto& scene : Engine::getInstance()->getActiveScenes()) {
 
 		auto sceneIndex = scene->sceneIndex();
 		submeshKeysWithMultipleInstances[currentFrame][sceneIndex].clear();
-		//if (collectedMatrices[currentFrame].capacity() < scene->transformSystem().modelTransforms().size())
-		//	collectedMatrices[currentFrame].reserve(collectedMatrices[currentFrame].capacity() + scene->transformSystem().modelTransforms().size());
-
-		//collectedMatrices[currentFrame].insert(collectedMatrices[currentFrame].end(),
-		//						 scene->transformSystem().modelTransforms().begin(),
-		//						 scene->transformSystem().modelTransforms().end());
-
-		//activeSceneIndices[currentFrame].push_back(scene->sceneIndex());
 
 		auto& reg = scene->registry();
 		for (auto& entity : scene->cullResults.visibleEntities) {
@@ -270,10 +243,7 @@ void VulkanContext::draw(const DrawContext& ctx) {
 			VkBufferCopy c{ .srcOffset = stageCursor, .dstOffset = 0, .size = bufferSize };
 			vkCmdCopyBuffer(frame.cmdBuffer, matStagingBuf[currentFrame], matBuf_modelTransforms[currentFrame], 1, &c);
 			stageCursor += bufferSize;
-			//void* data;
-			//vkMapMemory(m_vkDevice, matDevMem_modelTransforms[currentFrame], 0, bufferSize, 0, &data);
-			//memcpy(data, scene->transformSystem().modelTransforms().data(), (size_t)bufferSize);
-			//vkUnmapMemory(m_vkDevice, matDevMem_modelTransforms[currentFrame]);
+
 		}
 		// instanceData on gpu
 		int test = 0;
@@ -346,15 +316,11 @@ void VulkanContext::draw(const DrawContext& ctx) {
 			VkBufferCopy c{ .srcOffset = stageCursor, .dstOffset = 0, .size = bufferSize };
 			vkCmdCopyBuffer(frame.cmdBuffer, matStagingBuf[currentFrame], instanceIndexBuffer[currentFrame], 1, &c);
 			stageCursor += bufferSize;
-			//void* data;
-			//vkMapMemory(m_vkDevice, instanceIndexMemory[currentFrame], 0, bufferSize, 0, &data);
-			//memcpy(data, instDataTemp.data(), (size_t)bufferSize);
-			//vkUnmapMemory(m_vkDevice, instanceIndexMemory[currentFrame]);
 
 		}
 
-		// Barrier: make compute writes visible to graphics reads
-#if VK_HEADER_VERSION >= 230  // assuming you have 1.3 / sync2
+		// Barrier
+#if VK_HEADER_VERSION >= 230  // assuming 1.3 / sync2
 		VkMemoryBarrier2 memBarrier{ VK_STRUCTURE_TYPE_MEMORY_BARRIER_2 };
 		memBarrier.srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
 		memBarrier.srcAccessMask = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT; // writes in CS
@@ -551,14 +517,18 @@ void VulkanContext::draw(const DrawContext& ctx) {
 			vkCmdSetDepthWriteEnable(frame.cmdBuffer, VK_FALSE);
 			//vkCmdSetDepthCompareOp(frame.cmdBuffer, VK_COMPARE_OP_LESS_OR_EQUAL);
 
+
+			VkClearValue clearValues[2] = {};
+			clearValues[0].color = { ctx.clearColor[0], ctx.clearColor[1], ctx.clearColor[2], 0.0f };
+			clearValues[1].depthStencil = { 1.0f, 0 };
 			VkRenderPassBeginInfo renderPassInfo{};
 			renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
 			renderPassInfo.renderPass = rendPasses[0];
 			renderPassInfo.framebuffer = swapChainFramebuffers[imageIndex];
 			renderPassInfo.renderArea.offset = { 0, 0 };
 			renderPassInfo.renderArea.extent = swapchainExtent;
-			renderPassInfo.clearValueCount = 0;
-			renderPassInfo.pClearValues = nullptr;
+			renderPassInfo.clearValueCount = 2;
+			renderPassInfo.pClearValues = clearValues;
 			vkCmdBeginRenderPass(frame.cmdBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 			hasDrawn = true;
 		}
@@ -583,9 +553,9 @@ void VulkanContext::draw(const DrawContext& ctx) {
 		} else if (scene->sceneRender().drawNodes()) {
 
 			float largestNodeVol = 0;
-			for (size_t n = 0; n < scene->bvhSystem().bvh().getNodeCount(0); ++n) {
+			for (size_t n = 0; n < scene->bvhSystem().bvh().getNodeCount(); ++n) {
 				auto& node = scene->bvhSystem().bvh().getCurrentNodes()[n];
-				AABB& box = node.bounds;
+				AABB box = node.bounds();
 				
 				if (n == 0) {
 					largestNodeVol = box.volume();

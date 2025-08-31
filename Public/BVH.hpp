@@ -18,7 +18,10 @@
 // BVH Node - designed for cache efficiency
 struct BVHNode //alignas(64)
 {
-    AABB bounds{};
+    //AABB bounds{};
+
+    glm::vec3 center;
+    glm::vec3 extent;
 
     // Using bit packing for efficiency
     union
@@ -46,6 +49,16 @@ struct BVHNode //alignas(64)
     bool isDirty() const { return flags & 0x02; }
     void setLeaf(bool leaf) { flags = leaf ? (flags | 0x01) : (flags & ~0x01); }
     void setDirty(bool dirty) { flags = dirty ? (flags | 0x02) : (flags & ~0x02); }
+
+    INLINE glm::vec3 min() const {
+        return center - 0.5f * extent;
+    }
+    INLINE glm::vec3 max() const {
+        return center + 0.5f * extent;
+    }
+    INLINE AABB bounds() const {
+        return AABB{ min(), max() };
+    }
 };
 
 // Primitive reference for BVH
@@ -111,7 +124,7 @@ class DualBVH
 private:
 
     struct TestResult { 
-        TestResult(uint8_t state, uint8_t mask) :
+        TestResult(uint8_t mask, uint8_t state) :
             state{state}, mask{mask} {}
         union
         {
@@ -136,10 +149,31 @@ private:
             const float d = F[i].vec.w;
             const float s = glm::dot(n, c) + d;
             const float r = glm::dot(glm::abs(n), e);
+            if (s + r < 0.0f)
+                return { 0, /*Outside*/0 };
+            if (s - r < 0.0f) {
+                anyIntersect = true; mask |= (1u << i);
+            }
+        }
+
+        return { mask, anyIntersect ? /*Intersect*/(uint8_t)1 : /*Inside*/(uint8_t)2 };
+    }
+    inline TestResult frustumTest_centerExtent_masked(const glm::vec3& c, const glm::vec3& e,
+                                               const FrustumPlane* F, uint8_t planeMask) {
+        // For each plane: s = dot(n, c) + d; r = dot(|n|, e).
+        // Outside if s + r < 0, Inside if s - r >= 0, else Intersect.
+        uint8_t mask = 0;
+        bool anyIntersect = false;
+
+        for (int i = 0; i < 6; ++i) {
+            const glm::vec3 n = glm::vec3(F[i].vec);
+            const float d = F[i].vec.w;
+            const float s = glm::dot(n, c) + d;
+            const float r = glm::dot(glm::abs(n), e);
             if (s + r < 0.0f) return { 0, /*Outside*/0 };
             if (s - r < 0.0f) { anyIntersect = true; mask |= (1u << i); }
         }
-        return { mask, anyIntersect ? /*Intersect*/1 : /*Inside*/2 };
+        return { mask, anyIntersect ? /*Intersect*/(uint8_t)1 : /*Inside*/(uint8_t)2 };
     }
 
 
@@ -175,7 +209,11 @@ private:
             }
         }
     }
-    static constexpr const unsigned int NUM_THREADS = 2;
+    static constexpr const unsigned int NUM_BUILD_THREADS = 6;
+    static constexpr const unsigned int NUM_RUN_THREADS = 16;
+    std::array<FrameArena*, NUM_RUN_THREADS + 1> cullArenas[2]{ nullptr, nullptr };
+    std::array<std::binary_semaphore*, NUM_RUN_THREADS> runSems[2]{ nullptr, nullptr };
+
 public:
     std::array<std::vector<BVHNode>, 2> nodes;
     std::array<std::vector<BVHPrimitive>, 2> primitives;
@@ -195,7 +233,7 @@ public:
     static constexpr uint32_t MAX_LEAF_PRIMITIVES = 4;
     static constexpr float REBUILD_THRESHOLD = 0.3f; // 30% of objects moved
 
-    std::array<uint32_t, 2> rootIndex;
+    std::array<std::atomic<uint32_t>, 2> rootIndex;
     //std::array<uint32_t, 2> nodeCount;
     std::atomic<uint32_t> nodeCount[2];
     std::atomic<uint32_t> indicesCount[2];
@@ -227,15 +265,15 @@ public:
 
     };
     bool workersRunning = true;
-    //std::barrier<> barrier{ NUM_THREADS + 1 };
+    //std::barrier<> barrier{ NUM_BUILD_THREADS + 1 };
     std::atomic<uint8_t> nextThId;
-    std::array<std::thread*, NUM_THREADS> workers;
-    std::array<WorkerPkg*, NUM_THREADS> workerPkgs;
-    std::array<std::atomic<bool>, NUM_THREADS> workPkgCondition;
-    std::array<std::binary_semaphore*, NUM_THREADS> startSemas;
-    std::array<std::binary_semaphore*, NUM_THREADS> doneSemas;
-    //std::array<std::vector<uint32_t>, NUM_THREADS> workerPrimsTemp;
-    std::array<std::atomic<uint32_t>, NUM_THREADS> workerResults;
+    std::array<std::thread*, NUM_BUILD_THREADS> workers;
+    std::array<WorkerPkg*, NUM_BUILD_THREADS> workerPkgs;
+    std::array<std::atomic<bool>, NUM_BUILD_THREADS> workPkgCondition;
+    std::array<std::binary_semaphore*, NUM_BUILD_THREADS> startSemas;
+    std::array<std::binary_semaphore*, NUM_BUILD_THREADS> doneSemas;
+    //std::array<std::vector<uint32_t>, NUM_BUILD_THREADS> workerPrimsTemp;
+    std::array<std::atomic<uint32_t>, NUM_BUILD_THREADS> workerResults;
 
 
     static void _recursiveWorker(DualBVH* _this, uint8_t threadId);
@@ -332,7 +370,7 @@ public:
     bool threadRunning() const { return _threadRunning; }
 
     uint8_t curFrameIndex = UINT8_INVALID;
-    std::array<std::vector<TraversalNode>, 2> nodeStack;
+    //std::array<std::vector<TraversalNode>, 2> nodeStack;
     std::thread* rebuildThread;
     std::atomic<uint8_t> _threadIndexToUse = UINT8_INVALID;
     std::binary_semaphore _threadStart{ 0 };
@@ -563,28 +601,28 @@ public:
         return projectedOccluder.intersects(object);
     }
 
-    void computeNodeDepthRange(uint32_t nodeIndex, const glm::vec3& cameraPos,
-                               float& minDepth, float& maxDepth, uint8_t index) {
-        if (nodeIndex == 0) {
-            minDepth = maxDepth = 0.0f;
-            return;
-        }
+    //void computeNodeDepthRange(uint32_t nodeIndex, const glm::vec3& cameraPos,
+    //                           float& minDepth, float& maxDepth, uint8_t index) {
+    //    if (nodeIndex == 0) {
+    //        minDepth = maxDepth = 0.0f;
+    //        return;
+    //    }
 
-        const BVHNode& node = nodes[index][nodeIndex];
-        const AABB& bounds = node.bounds;
+    //    const BVHNode& node = nodes[index][nodeIndex];
+    //    const AABB& bounds = node.bounds;
 
-        // Compute distance to all 8 corners of the AABB
-        auto corners = bounds.getVertices();
+    //    // Compute distance to all 8 corners of the AABB
+    //    auto corners = bounds.getVertices();
 
-        minDepth = FLT_MAX;
-        maxDepth = -FLT_MAX;
+    //    minDepth = FLT_MAX;
+    //    maxDepth = -FLT_MAX;
 
-        for (int i = 0; i < 8; ++i) {
-            float depth = glm::length2(corners[i] - cameraPos);
-            minDepth = std::min(minDepth, depth);
-            maxDepth = std::max(maxDepth, depth);
-        }
-    }
+    //    for (int i = 0; i < 8; ++i) {
+    //        float depth = glm::length2(corners[i] - cameraPos);
+    //        minDepth = std::min(minDepth, depth);
+    //        maxDepth = std::max(maxDepth, depth);
+    //    }
+    //}
 
 
     ~DualBVH() {
@@ -597,7 +635,7 @@ public:
         _frameArena = nullptr;
 
         workersRunning = false;
-        for (size_t i = 0; i < NUM_THREADS; ++i) {
+        for (size_t i = 0; i < NUM_BUILD_THREADS; ++i) {
             startSemas[i]->release();
             workers[i]->join();
             delete workers[i];
@@ -615,6 +653,20 @@ public:
             workerPkgs[i] = nullptr;
         }
 
+        for (size_t i = 0; i < NUM_RUN_THREADS; ++i) {
+            delete cullArenas[0][i];
+            cullArenas[0][i] = nullptr;
+            delete cullArenas[1][i];
+            cullArenas[1][i] = nullptr;
+            
+            delete runSems[0][i];
+            runSems[0][i] = nullptr;
+            delete runSems[1][i];
+            runSems[1][i] = nullptr;
+        }
+        delete cullArenas[0][NUM_RUN_THREADS];
+        cullArenas[1][NUM_RUN_THREADS] = nullptr;
+
     }
     explicit DualBVH(ArenaRegistry& registry, const BuildSettings& settings = {}) : settings(settings) {
         for (size_t i = 0; i < 2; ++i) {
@@ -623,9 +675,9 @@ public:
             //primitiveIndices[i].reserve(512);
             occluderIndices[i].reserve(256);
             occluderCorners[i].reserve(1024);
-            nodeStack[i].reserve(64);
-            rootIndex[i] = 0;
-            nodeCount[i] = 0;
+            //nodeStack[i].reserve(64);
+            rootIndex[i].store(0);
+            nodeCount[i].store(0);
         }
 
         _frameArena = new Arena(32_MB);
@@ -637,7 +689,7 @@ public:
             std::ref(registry) };
 
         workersRunning = true;
-        for (size_t i = 0; i < NUM_THREADS; ++i) {
+        for (size_t i = 0; i < NUM_BUILD_THREADS; ++i) {
             startSemas[i] = new std::binary_semaphore{ 0 };
             doneSemas[i] = new std::binary_semaphore{ 0 };
             //workPkgSemas[i] = new std::binary_semaphore{ 0 };
@@ -648,6 +700,14 @@ public:
             workPkgCondition[i] = false;
         }
 
+        for (size_t i = 0; i < NUM_RUN_THREADS; ++i) {
+            cullArenas[0][i] = new FrameArena{ 768_KB };
+            cullArenas[1][i] = new FrameArena{ 768_KB };
+            runSems[0][i] = new std::binary_semaphore{ 1 };
+            runSems[1][i] = new std::binary_semaphore{ 1 };
+        }
+        cullArenas[0][NUM_RUN_THREADS] = new FrameArena{ 768_KB };
+        cullArenas[1][NUM_RUN_THREADS] = new FrameArena{ 768_KB };
     }
 
     // Construction
@@ -761,8 +821,8 @@ public:
     //}
 
     // Thread-safe accessors
-    std::vector<BVHNode>& getCurrentNodes() { return nodes[_threadIndexToUse]; }
-    uint32_t getNodeCount(uint8_t index) const { return nodeCount[index]; }
+    std::vector<BVHNode>& getCurrentNodes() { return nodes[_threadIndexToUse.load()]; }
+    uint32_t getNodeCount() const { return nodeCount[_threadIndexToUse.load()]; }
     uint32_t getPrimitiveCount(uint8_t index) const { return primitives[index].size(); }
     bool isEmpty(uint8_t index) const { return primitives[index].empty(); }
 
@@ -840,42 +900,7 @@ public:
     //    return true;
     //}
 
-    struct BvhJob
-    {
-        uint32_t nodeIndex;
-        bool inside;
-    };
-
-    void _delegateNodes(uint32_t rootIndex, const Frustum& f, uint8_t index) {
-        std::vector<BvhJob> frontier;
-        frontier.reserve(1024);
-
-        std::array<BvhJob, 256> stack;
-        size_t sp = 0;
-        stack[sp++] = { rootIndex , true };
-
-        static constexpr size_t targetDepth = 3;
-        while (sp) {
-            BvhJob job = stack[--sp];
-            if (!job.inside)
-                continue;
-
-            const BVHNode& node = nodes[index][job.nodeIndex];
-
-            auto result = MMath::aabbVisible(node.bounds.min, node.bounds.max, f);
-            if (!result)
-                continue;
-
-            if (node.depth >= targetDepth) {
-                frontier.push_back({job.nodeIndex, result});
-                continue;
-            }
-
-            stack[sp++] = { node.leftChild, true };
-            stack[sp++] = { node.rightChild, true };
-        }
-    }
-
+    struct Job { uint32_t nodeIndex; uint8_t planeMask; uint8_t state; };
 };
 
 // Usage example system

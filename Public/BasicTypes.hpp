@@ -469,6 +469,9 @@ public:
 	INLINE glm::vec3 size() const {
 		return max - min;
 	}
+	INLINE glm::vec3 extent() const {
+		return max - min;
+	}
 	INLINE float surfaceArea() const {
 		glm::vec3 extent = max - min;
 		return 2.0f * (extent.x * extent.y + extent.x * extent.z + extent.y * extent.z);
@@ -517,7 +520,7 @@ struct BoundingVolumeComponent
 		coarseIndexLocal{ UINT32_INVALID },
 		coarseIndexWorld{ UINT32_INVALID }
 	{
-		flags = (uint32_t)BoundingVolumeFlags::Occluder | (uint32_t)BoundingVolumeFlags::Occludee;
+		flags = (uint32_t)BoundingVolumeFlags::Occludee;
 	}
 
 	BoundingVolumeComponent(const uint32_t coarseIndexLocal, const uint32_t coarseIndexWorld) :
@@ -525,7 +528,7 @@ struct BoundingVolumeComponent
 		coarseIndexLocal{coarseIndexLocal},
 		coarseIndexWorld{ coarseIndexWorld }
 	{
-		flags = (uint32_t)BoundingVolumeFlags::Occluder | (uint32_t)BoundingVolumeFlags::Occludee;
+		flags = (uint32_t)BoundingVolumeFlags::Occludee;
 	}
 
 	//BoundingVolumeComponent(const uint32_t coarseIndex, const BoundingShape firstShape, const uint32_t firstFineIndex) :
@@ -722,7 +725,7 @@ struct BoundingVolumeComponent
 INLINE void aabbViewZRange(const AABB& b, const glm::vec3& n, const float& w,
 						   float& zmin, float& zmax) {
 	const glm::vec3 c = 0.5f * (b.min + b.max);          // center
-	const glm::vec3 e = 0.5f * (b.max - b.min);          // half-extents
+	const glm::vec3 e = 0.5f * (b.max - b.min);          // half-extent
 
 	const float zc = glm::dot(n, c) + w;       // center z
 	const glm::vec3 an = glm::abs(n);               // per-axis abs
