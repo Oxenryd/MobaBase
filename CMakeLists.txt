@@ -200,6 +200,7 @@ add_executable (MobaBase
 	"Public/Range.hpp"
 	"Public/MRandom.hpp"
 	"Public/MWork.hpp"
+	"Public/Profiler.hpp"
 
 
 	"Private/Engine.cpp"
@@ -258,6 +259,7 @@ target_compile_definitions(MobaBase PRIVATE
 	DEBUGGING
 	# $<$<CONFIG:Debug>:LOGGING>
 	LOGGING
+	PROFILER
 	#IGPU_PRIO	
 	SHADER_HOTRELOAD
 
@@ -342,11 +344,13 @@ target_compile_definitions(MobaBase PRIVATE
 	ECS_BASE_COMPONENTS_RESERVATION_COUNT=2048
 	
 	# System
+	ENGINE_NAME=\"MobaEng\"
 	LAYERS_FIELD_TYPE=uint32_t
 	SCENE_MAX_SCENES=512
 	RENDER_SCENE_MAX_THREADS=128
 	TRANSFORM_THREADS_MAX=16
 	WORK_QUEUE_CAP=1024
+	PROFILE_PATH=\"${CMAKE_SOURCE_DIR}/trace.json\"
 
 	# Directories
 	SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/\"

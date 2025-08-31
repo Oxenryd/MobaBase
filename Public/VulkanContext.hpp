@@ -94,6 +94,10 @@ constexpr VkFormat GetVkFormat(TypeBase type) {
 
 struct BoundedInstanceData
 {
+	~BoundedInstanceData() {
+		instances.clear();
+		//reinterpret_cast<Arena*>(&instances.get_allocator())->destroyAll();
+	}
 	BoundedInstanceData() = default;
 	BoundedInstanceData(const BoundedInstanceData& other) :
 		instances{ other.instances.get_allocator() } {

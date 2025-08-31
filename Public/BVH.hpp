@@ -646,11 +646,9 @@ public:
             delete doneSemas[i];
             doneSemas[i] = nullptr;
 
-            //delete workPkgSemas[i];
-            //workPkgSemas[i] = nullptr;
-
-            delete workerPkgs[i];
-            workerPkgs[i] = nullptr;
+            //if (workerPkgs[i])
+            //    delete workerPkgs[i];
+            //workerPkgs[i] = nullptr;
         }
 
         for (size_t i = 0; i < NUM_RUN_THREADS; ++i) {
@@ -672,10 +670,8 @@ public:
         for (size_t i = 0; i < 2; ++i) {
             nodes[i].reserve(1024);  // Pre-allocate for better performance
             primitives[i].reserve(512);
-            //primitiveIndices[i].reserve(512);
             occluderIndices[i].reserve(256);
             occluderCorners[i].reserve(1024);
-            //nodeStack[i].reserve(64);
             rootIndex[i].store(0);
             nodeCount[i].store(0);
         }
@@ -692,7 +688,6 @@ public:
         for (size_t i = 0; i < NUM_BUILD_THREADS; ++i) {
             startSemas[i] = new std::binary_semaphore{ 0 };
             doneSemas[i] = new std::binary_semaphore{ 0 };
-            //workPkgSemas[i] = new std::binary_semaphore{ 0 };
             workers[i] = new std::thread{ DualBVH::_recursiveWorker, this, static_cast<uint8_t>(i) };
             workerResults[i] = 0;
             workerPkgs[i] = nullptr;

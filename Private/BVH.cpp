@@ -3,22 +3,27 @@
 #include "Transform.hpp"
 #include "Frustum.hpp"
 #include "MWork.hpp"
+#include "Profiler.hpp"
 
 void DualBVH::_recursiveWorker(DualBVH* _this, uint8_t threadId) {
     auto id = static_cast<size_t>(threadId);
     while (true) {
         
         _this->startSemas[id]->acquire();
-        if (!_this->workersRunning)
-            return;
 
-        while (_this->workPkgCondition[id] == false) {}
+        {
+            PROFILE_SCOPE("BVH_BuildWorker");
+            if (!_this->workersRunning)
+                return;
 
-        //_this->workPkgSemas[id]->acquire();
-        WorkerPkg& pkg = *_this->workerPkgs[id];
-        auto result = _this->buildRecursive(pkg.primitiveIds.data(), pkg.primCount, pkg.depth, pkg.parent, pkg.index);
-        _this->workerResults[id].store(result, std::memory_order_release);
-        _this->workPkgCondition[id].store(false);
+            while (_this->workPkgCondition[id] == false) {}
+
+            //_this->workPkgSemas[id]->acquire();
+            WorkerPkg& pkg = *_this->workerPkgs[id];
+            auto result = _this->buildRecursive(pkg.primitiveIds.data(), pkg.primCount, pkg.depth, pkg.parent, pkg.index);
+            _this->workerResults[id].store(result, std::memory_order_release);
+            _this->workPkgCondition[id].store(false);
+        }
         _this->doneSemas[id]->release();
     }
 }
@@ -43,33 +48,38 @@ void DualBVH::_buildThreadMethod(DualBVH* _this, ArenaRegistry& registry) {
 
 
         _this->_threadStart.acquire();
-        if (!_this->_threadRunning) {
-            return;
-        }
-        
-        uint8_t index;
-        uint8_t readIndex = _this->_threadIndexToUse.load(std::memory_order_acquire);
-        if (readIndex == UINT8_INVALID)
-            index = 0;
-        else {
-            index = (readIndex + 1) % 2;
-        }
 
-        auto view = registry.view<BoundingVolumeComponent>();
-        for (auto entity : view) {
-
-            
-            auto it = _this->entityToPrimitive[index].find(entity);
-            if (it == _this->entityToPrimitive[index].end()) {
-
-                _this->rebuildPrimitives(registry, index);
-                break;
+        {
+            PROFILE_SCOPE("BVH_BuildSink");
+            if (!_this->_threadRunning) {
+                return;
             }
-        }
-        _this->buildNodes(registry, index);
 
-        
-        _this->_threadIndexToUse.store(index, std::memory_order_release);
+            uint8_t index;
+            uint8_t readIndex = _this->_threadIndexToUse.load(std::memory_order_acquire);
+            if (readIndex == UINT8_INVALID)
+                index = 0;
+            else {
+                index = (readIndex + 1) % 2;
+            }
+
+            auto view = registry.view<BoundingVolumeComponent>();
+            for (auto entity : view) {
+
+
+                auto it = _this->entityToPrimitive[index].find(entity);
+                if (it == _this->entityToPrimitive[index].end()) {
+
+                    _this->rebuildPrimitives(registry, index);
+                    break;
+                }
+            }
+            _this->buildNodes(registry, index);
+
+
+            _this->_threadIndexToUse.store(index, std::memory_order_release);
+
+        }
         _this->_threadDone.release();
     }
 }

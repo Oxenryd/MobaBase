@@ -1,6 +1,8 @@
 #include "Engine.h"
 #include "RenderManager.h"
 #include "GameObjectSystem.hpp"
+#include "Profiler.hpp"
+
 #include <immintrin.h>
 
 thread_local std::unordered_map<uint16_t, size_t> SceneRenderSystem::s_threadIndex;
@@ -232,6 +234,10 @@ inline void Engine::_run() {
 	m_baseTimers.startTimer(m_fpsCountTimer);
 
 	while (m_status != EngineStatus::PendingStop) {
+
+		PROFILE_SCOPE("Frame");
+		PROFILE_FRAME_MARK(m_totalFrames);
+
 		auto dt = _tickDt();
 		m_fixedAccu += dt;
 		m_totalTime += dt;
@@ -239,9 +245,12 @@ inline void Engine::_run() {
 		m_baseSinD = std::sin(m_totalTime);
 		m_baseCosF = static_cast<float>(m_baseCosD);
 		m_baseCosF = static_cast<float>(m_baseSinD);
-		while (m_fixedAccu >= m_targetFixedDeltaTime) {
-			_updateFixed();
-			m_fixedAccu -= m_targetFixedDeltaTime;
+		{
+			PROFILE_SCOPE("FixedDelta");
+			while (m_fixedAccu >= m_targetFixedDeltaTime) {
+				_updateFixed();
+				m_fixedAccu -= m_targetFixedDeltaTime;
+			}
 		}
 
 		//// Scene transit
@@ -279,14 +288,28 @@ inline void Engine::_run() {
 		//}
 
 		//Wait for last frames jobs	before resetting arena
-		MWork::waitAwaitPoint(MWork::JobAwaitPoint::StartNextFrame);
-		MWork::reset();
+		{
+			PROFILE_SCOPE("MWork_WaitPoint_NextFrame");
+			MWork::waitAwaitPoint(MWork::JobAwaitPoint::StartNextFrame);
+			MWork::reset();
+		}
 
-		m_inputMan->update();
+		{
+			PROFILE_SCOPE("Input");
+			m_inputMan->update();
+		}
+
+
 		_updateEarly(dt);
-		_updateLate(dt);
 
-		m_baseTimers.update(dt);
+
+		_updateLate(dt);
+		
+
+		{
+			PROFILE_SCOPE("Timers");
+			m_baseTimers.update(dt);
+		}
 
 		
 
@@ -294,9 +317,20 @@ inline void Engine::_run() {
 		VulkanContext::DrawContext drawCtx{};	
 		drawCtx.frameCount = m_totalFrames;
 
-		m_vkCtx->preDraw(getRenderManager());
-		m_vkCtx->draw(drawCtx);
-		m_vkCtx->postDraw();
+		{
+			PROFILE_SCOPE("PreDraw");
+			m_vkCtx->preDraw(getRenderManager());
+		}
+
+		{
+			PROFILE_SCOPE("Draw");
+			m_vkCtx->draw(drawCtx);
+		}
+
+		{
+			PROFILE_SCOPE("PostDraw");
+			m_vkCtx->postDraw();
+		}
 		m_framesSinceLastFpsRead++;
 		m_totalFrames++;
 		std::this_thread::yield();
@@ -309,6 +343,8 @@ inline void Engine::_run() {
 	m_scenes.clear();
 
 	m_wnd->destroyWindow();
+
+	PROFILE_END_SESSION();
 
 	m_status = EngineStatus::Stopped;
 	onStopped.notify(this);
@@ -356,27 +392,45 @@ ErrorCode Engine::init() {
 
 	EC_CHECK(EC, _initJobSystem());
 
+#ifdef PROFILER
+	LOGLINE(LogType::Info, LogMod::Engine, "Starting Profiler... ");
+
+	PROFILE_BEGIN_SESSION(ENGINE_NAME, PROFILE_PATH);
+
+	LOG(LogType::Success, "Done.");
+#endif
 
 	return ErrorCode::OK;
 }
 
 inline void Engine::_updateEarly(double dt) {
+	PROFILE_SCOPE("EarlyUpdate");
 	onEarlyUpdateEnter.notify(this);
 	for (auto& index : m_activeSceneIndices) {
 		if (m_scenes[index]->isFirstFrame())
 			m_scenes[index]->startDispatch();
 
-		m_scenes[index]->updateDispatch(dt);
-		m_scenes[index]->bvhSystem().updateBVH(m_scenes[index]->m_reg, m_totalFrames, m_updateDeltaTime, 0.01667f);
+		{
+			PROFILE_SCOPE("Scene_EarlyUpdate");
+			m_scenes[index]->updateDispatch(dt);
+		}
+		{
+			PROFILE_SCOPE("Scene_BVH_Update");
+			m_scenes[index]->bvhSystem().updateBVH(m_scenes[index]->m_reg, m_totalFrames, m_updateDeltaTime, 0.01667f);
+		}
 	}
 	onEarlyUpdateExit.notify(this);
 }
 
 inline void Engine::_updateLate(double dt) {
+	PROFILE_SCOPE("LateUpdate");
 	onLateUpdateEnter.notify(this);
 	std::vector<uint32_t> removeIndices;
 	for (auto& index : m_activeSceneIndices) {
-		m_scenes[index]->lateUpdateDispatch(dt);
+		{
+			PROFILE_SCOPE("Scene_LateUpdate");
+			m_scenes[index]->lateUpdateDispatch(dt);
+		}
 		if (m_scenes[index]->pendingUnload()) {
 			m_scenes[index]->unloadDispatch();
 			delete m_scenes[index];
@@ -384,6 +438,7 @@ inline void Engine::_updateLate(double dt) {
 			m_scenes.erase(it);
 			removeIndices.push_back(index);
 		} else {
+			PROFILE_SCOPE("Scene_BVH_OcclusionPass");
 			m_scenes[index]->cullResults.clear();
 
 			m_scenes[index]->

@@ -25,6 +25,9 @@
 #define SIZE_INVALID static_cast<size_t>(0xffffffffffffffff)
 #define SIZE_SAFEMAX static_cast<size_t>(0xfffffffffffffffe)
 
+#define CONCAT_IMPL(x, y) x##y
+#define CONCAT(x, y) CONCAT_IMPL(x, y)
+
 constexpr std::size_t operator"" _KB(unsigned long long val) {
     return val * 1024ULL;
 }
