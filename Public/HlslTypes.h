@@ -476,7 +476,7 @@ struct alignas (16) BaseMaterialInstance
 	glm::vec3	ambient{1, 1, 1};
 	float		ambientIntensity{ 1 };
     
-	glm::vec3	baseColor{ 1, 0, 1 };
+	glm::vec3	baseColor{ 1, 1, 1 };
 	float		albedoStrength{ 1 };
     
 	glm::vec3	specular{ 0, 0, 0 };

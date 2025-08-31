@@ -29,6 +29,8 @@ public:
        
         m_camIndex = sceneRender().addCamera();
         Engine::getInstance()->setMainCamera(m_sceneIndex, m_camIndex);
+        auto camTrans = Engine::getInstance()->mainCamera()->transform();
+        camTrans.modifyPosition() = glm::vec3{0,3, 30};
 
 
         auto dirLight = LightFactory::Directional(glm::vec3{-1, -0.85, -0.25});

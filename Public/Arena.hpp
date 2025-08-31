@@ -454,7 +454,7 @@ class FrameArena
 private:
     uint8_t* m_memory;
     size_t m_size;
-    std::atomic<size_t> m_offset{ 0 }; // Thread-safe bump pointer
+    size_t m_offset{ 0 }; // Thread-safe bump pointer
 
 public:
     FrameArena(size_t size) : m_size(size) {
@@ -467,10 +467,10 @@ public:
     }
 
     void* allocate(size_t size, size_t alignment = alignof(std::max_align_t)) {
-        size_t current = m_offset.load(std::memory_order_relaxed);
+        size_t current = m_offset; // .load(std::memory_order_relaxed);
         size_t aligned, newOffset;
 
-        do {
+        //do {
             //aligned = alignUp(reinterpret_cast<uintptr_t>(m_memory + current), alignment)
             //    - reinterpret_cast<uintptr_t>(m_memory);
             aligned = alignUp(current, alignment);
@@ -480,7 +480,8 @@ public:
                 throw std::bad_alloc();
                 return nullptr; // Out of memory
             }
-        } while (!m_offset.compare_exchange_weak(current, newOffset, std::memory_order_relaxed));
+            m_offset = newOffset;
+        //} while (!m_offset.compare_exchange_weak(current, newOffset, std::memory_order_relaxed));
 
         return m_memory + aligned;
     }
@@ -491,11 +492,11 @@ public:
     }
 
     void reset() {
-        m_offset.store(0, std::memory_order_release);
+        m_offset = 0;// .store(0, std::memory_order_release);
     }
 
     size_t used() const {
-        return m_offset.load(std::memory_order_relaxed);
+        return m_offset;//.load(std::memory_order_relaxed);
     }
 
     float ratioUsed() const {

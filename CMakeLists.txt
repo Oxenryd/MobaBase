@@ -201,6 +201,7 @@ add_executable (MobaBase
 	"Public/MRandom.hpp"
 	"Public/MWork.hpp"
 	"Public/Profiler.hpp"
+	"Public/Robin_Hood.h"
 
 
 	"Private/Engine.cpp"
@@ -272,6 +273,7 @@ target_compile_definitions(MobaBase PRIVATE
 	VULKAN_MAX_RUNTIMEARRAY_INSTANCES=1048576
 	VULKAN_MAX_TEXTURE_SSBO=512
 	VULKAN_MATSTAGEBUF_SIZE=128_MB
+	VULKAN_STAGE_BUFFERS=2
 
 	VULKAN_INSTANCE_INDEX_STAGE_SIZE=16777216
 

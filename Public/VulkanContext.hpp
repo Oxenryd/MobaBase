@@ -35,11 +35,15 @@
 #include "DrawCommand.hpp"
 #include "WindowSurface.h"
 #include "Log.hpp"
+#include "Robin_Hood.h"
+
 
 #include "Material.hpp"
 #include "RenderManager.h"
 #include "RenderTarget.hpp"
 #include "HlslTypes.h"
+#include "DrawCommand.hpp"
+
 #include <variant>
 
 #define Vk_FAILED(ec) ((ec) != VK_SUCCESS)
@@ -459,11 +463,16 @@ public:
 	};
 
 private:
-	uint8_t c_dummyPixel[4] = { 128, 128, 128, 255 };
+	uint8_t c_dummyPixel[4] = { 255, 255, 255, 255 };
 	bool m_pendingExit = false;
 	uint32_t m_lastDrawcallCount = 0;
 	uint32_t m_lastPipelineSwitches = 0;
 	std::thread m_renderThread;
+	FrameArena*  m_mapArenas[VULKAN_FRAMES_IN_FLIGHT];
+	std::vector<std::vector<MeshDrawCommand>> drawCmds[VULKAN_FRAMES_IN_FLIGHT];
+	std::vector<robin_hood::unordered_flat_set<uint32_t>> submeshKeysWithMultipleInstances[VULKAN_FRAMES_IN_FLIGHT];
+	std::vector<robin_hood::unordered_flat_map<uint32_t, BoundedInstanceData>> submeshDrawInstanceData[VULKAN_FRAMES_IN_FLIGHT];
+	
 
 	struct QueueFamilyIndices
 	{
@@ -1028,7 +1037,7 @@ public:
 
 
 	// Staging buffer
-	size_t matStageCurrentSize = VULKAN_MATSTAGEBUF_SIZE;
+	size_t matStageCurrentSize[VULKAN_FRAMES_IN_FLIGHT];// = VULKAN_MATSTAGEBUF_SIZE;
 	void* matStagingPtr[VULKAN_FRAMES_IN_FLIGHT] = { nullptr, nullptr };
 	VkBuffer matStagingBuf[VULKAN_FRAMES_IN_FLIGHT] = { nullptr, nullptr };
 	VkDeviceMemory matStagingMem[VULKAN_FRAMES_IN_FLIGHT] = { nullptr, nullptr };
@@ -1104,6 +1113,12 @@ public:
 		for (size_t i = 0; i < VULKAN_FRAMES_IN_FLIGHT; ++i) {
 			delete instanceDataArena[i];
 			instanceDataArena[i] = nullptr;
+
+			delete m_mapArenas[i];
+			m_mapArenas[i] = nullptr;
+
+			//delete drawCmds[i];
+			//drawCmds[i] = nullptr;
 		}
 
 		if (!isClean)
@@ -1135,47 +1150,72 @@ public:
 		rendPasses.reserve(2048);
 		for (size_t i = 0; i < VULKAN_FRAMES_IN_FLIGHT; ++i) {
 			instanceDataArena[i] = new Arena{ 128_MB };
+			m_mapArenas[i] = new FrameArena{ 32_MB };
+
+			//drawCmds[i] = new FrameArenaVector<MeshDrawCommand>{ FrameArenaAllocator<MeshDrawCommand>{m_mapArenas[i]} };
 		}
 	}
-
-
-	INLINE VkResult _checkMatStageBuffersRealloc(size_t requestedSize) {
-		if (matStageCurrentSize >= requestedSize)
+	INLINE VkResult _appendStageBuffer(uint8_t fit, size_t requestedSize ) {
+		VkResult vkResult{};
+		if (matStageCurrentSize[fit] >= requestedSize)
 			return VK_SUCCESS;
 
-		matStageCurrentSize = requestedSize * 2;
+
+
+	}
+
+	INLINE VkResult _checkStageRealloc(uint8_t fit, size_t requestedSize) {
+		if (matStageCurrentSize[fit] >= requestedSize)
+			return VK_SUCCESS;
 		VkResult vkResult{};
-		for (size_t i = 0; i < VULKAN_FRAMES_IN_FLIGHT; ++i) {
 
-			vkUnmapMemory(m_vkDevice, matStagingMem[i]);
+		auto newSize = requestedSize * 2;
+		
 
-			vkDestroyBuffer(m_vkDevice, matStagingBuf[i], nullptr);
+		static std::vector<uint8_t> tempBytes[VULKAN_FRAMES_IN_FLIGHT];
+		tempBytes[fit].reserve(matStageCurrentSize[fit]);
+		tempBytes[fit].clear();
+		std::memcpy(static_cast<uint8_t*>(tempBytes[fit].data()),
+					static_cast<uint8_t*>(matStagingPtr[fit]),
+					matStageCurrentSize[fit]);
 
-			if (matStagingMem[i] != VK_NULL_HANDLE)
-				vkFreeMemory(m_vkDevice, matStagingMem[i], nullptr);
+		
+		vkUnmapMemory(m_vkDevice, matStagingMem[fit]);
 
-			// Staging Buffers
-			VkBufferCreateInfo matStagebufferInfo{};
-			matStagebufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-			matStagebufferInfo.size = matStageCurrentSize;
-			matStagebufferInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-			matStagebufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-			Vk_CHECK(vkResult, vkCreateBuffer(m_vkDevice, &matStagebufferInfo, nullptr, &matStagingBuf[i]));
+		vkDestroyBuffer(m_vkDevice, matStagingBuf[fit], nullptr);
 
-			VkMemoryRequirements memRequirements;
-			vkGetBufferMemoryRequirements(m_vkDevice, matStagingBuf[i], &memRequirements);
+		if (matStagingMem[fit] != VK_NULL_HANDLE)
+			vkFreeMemory(m_vkDevice, matStagingMem[fit], nullptr);
 
-			VkMemoryAllocateInfo matStageAllocInfo{};
-			matStageAllocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-			matStageAllocInfo.allocationSize = memRequirements.size;
-			matStageAllocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits,
-															   VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-															   m_phyDevice);
+		// Staging Buffers
+		VkBufferCreateInfo matStagebufferInfo{};
+		matStagebufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+		matStagebufferInfo.size = newSize;
+		matStagebufferInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+		matStagebufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+		Vk_CHECK(vkResult, vkCreateBuffer(m_vkDevice, &matStagebufferInfo, nullptr, &matStagingBuf[fit]));
 
-			Vk_CHECK(vkResult, vkAllocateMemory(m_vkDevice, &matStageAllocInfo, nullptr, &matStagingMem[i]));
-			Vk_CHECK(vkResult, vkBindBufferMemory(m_vkDevice, matStagingBuf[i], matStagingMem[i], 0));
-			vkMapMemory(m_vkDevice, matStagingMem[i], 0, matStageCurrentSize, 0, &matStagingPtr[i]);
-		}
+		VkMemoryRequirements memRequirements;
+		vkGetBufferMemoryRequirements(m_vkDevice, matStagingBuf[fit], &memRequirements);
+
+		VkMemoryAllocateInfo matStageAllocInfo{};
+		matStageAllocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+		matStageAllocInfo.allocationSize = memRequirements.size;
+		matStageAllocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits,
+														   VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+														   m_phyDevice);
+
+		Vk_CHECK(vkResult, vkAllocateMemory(m_vkDevice, &matStageAllocInfo, nullptr, &matStagingMem[fit]));
+		Vk_CHECK(vkResult, vkBindBufferMemory(m_vkDevice, matStagingBuf[fit], matStagingMem[fit], 0));
+		vkMapMemory(m_vkDevice, matStagingMem[fit], 0, newSize, 0, &matStagingPtr[fit]);
+		
+		
+		std::memcpy(static_cast<uint8_t*>(matStagingPtr[fit]),
+					static_cast<uint8_t*>(tempBytes[fit].data()),
+					matStageCurrentSize[fit]);
+
+		matStageCurrentSize[fit] = newSize;
+
 		return VK_SUCCESS;
 	}
 	
@@ -1670,9 +1710,11 @@ public:
 		for (size_t i = 0; i < VULKAN_FRAMES_IN_FLIGHT; ++i) {
 
 			// Staging Buffers
+			matStageCurrentSize[i] = VULKAN_MATSTAGEBUF_SIZE;
+
 			VkBufferCreateInfo matStagebufferInfo{};
 			matStagebufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-			matStagebufferInfo.size = VULKAN_MATSTAGEBUF_SIZE;
+			matStagebufferInfo.size = matStageCurrentSize[i];
 			matStagebufferInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 			matStagebufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 			Vk_CHECK(vkResult, vkCreateBuffer(m_vkDevice, &matStagebufferInfo, nullptr, &matStagingBuf[i]));
@@ -1689,7 +1731,7 @@ public:
 
 			Vk_CHECK(vkResult, vkAllocateMemory(m_vkDevice, &matStageAllocInfo, nullptr, &matStagingMem[i]));
 			Vk_CHECK(vkResult, vkBindBufferMemory(m_vkDevice, matStagingBuf[i], matStagingMem[i], 0));
-			vkMapMemory(m_vkDevice, matStagingMem[i], 0, VULKAN_MATSTAGEBUF_SIZE, 0, &matStagingPtr[i]);
+			vkMapMemory(m_vkDevice, matStagingMem[i], 0, matStageCurrentSize[i], 0, &matStagingPtr[i]);
 
 			// cameraData
 			VkBufferCreateInfo camDatabufferInfo{};
