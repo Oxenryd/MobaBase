@@ -83,7 +83,7 @@ public:
         m_reg.storage<EnabledTag>().reserve(ECS_BASE_COMPONENTS_RESERVATION_COUNT);
         m_reg.storage<BoundingVolumeComponent>().reserve(ECS_BASE_COMPONENTS_RESERVATION_COUNT);
         m_reg.storage<MeshComponent>().reserve(ECS_BASE_COMPONENTS_RESERVATION_COUNT);
-        m_reg.group<TransformComponent, BoundingVolumeComponent>();
+        m_reg.group<TransformComponent, BoundingVolumeComponent, EnabledTag>();
        // m_reg.storage<SubMeshComponent>().reserve(ECS_BASE_COMPONENTS_RESERVATION_COUNT);
 
         cullResults.visibleEntities.reserve(1024);
@@ -155,8 +155,8 @@ public:
             static_cast<Derived&>(*this).update(dt);
             static_cast<Derived&>(*this).m_firstFrame = false;
         }
-        m_transformSys.run(m_boundingSys);
-        m_gameObjectSys.run();
+        //m_transformSys.run(m_boundingSys);
+        //m_gameObjectSys.run();
     }
 
     void lateUpdateDispatch(double dt) override {

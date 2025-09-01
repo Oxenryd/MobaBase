@@ -181,6 +181,50 @@ public:
 	static glm::mat4x4 composeTRS(ArenaRegistry* registry, entt::entity entity);
 	static std::span<entt::entity> getChildrenEntities(ArenaRegistry* registry, entt::entity ofEntity);
 	static std::optional<Transform> getParentTransform(ArenaRegistry* registry, entt::entity ofEntity);
+
+
+	static void rotateLocal(glm::quat& rotation, const glm::vec3& rotDeltaLocal) {
+		// Early exit for tiny rotations
+		const float magSq = glm::dot(rotDeltaLocal, rotDeltaLocal);
+		if (magSq < 1e-8f) return;
+
+		// Load current quaternion [x, y, z, w]
+		__m128 q_current = _mm_load_ps(&rotation.x);
+
+		const float pitch = rotDeltaLocal.x * 0.5f;
+		const float yaw = rotDeltaLocal.y * 0.5f;
+		const float roll = rotDeltaLocal.z * 0.5f;
+
+		// Compute sin/cos for half angles
+		float cp, sp, cy, sy, cr, sr;
+		if (magSq < 0.1f) {
+			MMath::sincos_approx(pitch, sp, cp);
+			MMath::sincos_approx(yaw, sy, cy);
+			MMath::sincos_approx(roll, sr, cr);
+		} else {
+			cp = cosf(pitch); sp = sinf(pitch);
+			cy = cosf(yaw);   sy = sinf(yaw);
+			cr = cosf(roll);  sr = sinf(roll);
+		}
+
+		// Create local rotation quaternion [x, y, z, w] (GLM layout)
+		__m128 q_local = _mm_set_ps(
+			cr * cp * cy + sr * sp * sy,  // w
+			sr * cp * cy - cr * sp * sy,  // z
+			cr * cp * sy + sr * sp * cy,  // y
+			cr * sp * cy - sr * cp * sy   // x
+		);
+
+		// Multiply quaternions: rotation * q_local (post-multiply for local rotation)
+		__m128 result = MMath::quaternion_multiply_simd_simple(q_current, q_local);
+
+		// Normalize result
+		result = MMath::normalize_simd(result);
+
+		// Store back
+		_mm_store_ps(&rotation.x, result);
+	}
+
 };
 
 #endif

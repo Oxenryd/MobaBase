@@ -1,6 +1,7 @@
 #ifndef TRANSFORM_COMPONENT_HPP
 #define TRANSFORM_COMPONENT_HPP
 
+#include "ObjectState.hpp"
 
 //#include <glm/glm.hpp>
 //#include <glm/gtx/quaternion.hpp>

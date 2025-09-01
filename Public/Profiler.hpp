@@ -119,7 +119,8 @@ namespace Prof
             bool first = true;
             for (auto tb : all_threads_) {
                 for (auto& e : tb->events) {
-                    if (e.ts_end_us == 0) continue; // still open
+                    if (e.ts_end_us == 0)
+                        continue; // still open
                     if (!first) f << ",\n";
                     first = false;
                     // Chrome trace "B"/"E" pairs are verbose; we can write complete events ("X"):

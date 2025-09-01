@@ -401,3 +401,5 @@ std::optional<Transform> Transform::getParentTransform(ArenaRegistry* registry, 
 	auto result = Engine::getInstance()->getScene(comp->sceneIndex)->transformSystem().getParent(ofEntity);
 	return result != entt::null ? std::optional<Transform>{Transform{ registry, result }} : std::nullopt;
 }
+
+

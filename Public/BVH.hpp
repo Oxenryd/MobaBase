@@ -3,17 +3,23 @@
 
 #include <atomic>
 #include <shared_mutex>
-#include <cstdint>
 #include <numeric>
 #include <glm/glm.hpp>
 #include <entt/entt.hpp>
 #include <semaphore>
 #include <barrier>
 
+#include "EnabledTag.hpp"
 #include "BasicTypes.hpp"
 #include "ArenaAllocator.hpp"
 #include "BoundingVolume.hpp"
 #include "Camera.hpp"
+
+#define GET_AABB(prim) Engine::getInstance()->getScene(static_cast<size_t>((prim).sceneIndex))->boundingSystem().aabbs()[(prim).aabbIndex];
+
+using TransformGroup =
+decltype(std::declval<ArenaRegistry&>()
+         .group<TransformComponent, BoundingVolumeComponent, EnabledTag>());
 
 // BVH Node - designed for cache efficiency
 struct BVHNode //alignas(64)
@@ -65,29 +71,30 @@ struct BVHNode //alignas(64)
 struct BVHPrimitive
 {
     entt::entity entity;
+    AABB bounds;
+    //uint32_t aabbIndex;
+    //uint16_t sceneIndex;
+    //AABB bounds;
     //uint32_t frameUpdated;  // Last frame this was updated
-    BoundingVolume bounds;
+    //BoundingVolume bounds;
     //uint32_t local_BIndex;
     //uint32_t world_BIndex;
     //AABB localBounds;
     //AABB worldBounds;       // Cached transformed bounds
     
     BVHPrimitive() : 
-        entity{entt::null},
-        //frameUpdated{UINT32_INVALID},
-        bounds{}
+        entity{ entt::null }, bounds{}//aabbIndex{UINT32_INVALID}, sceneIndex{UINT16_INVALID}
     {}
     BVHPrimitive(const BVHPrimitive& other) :
-        entity{other.entity},
-        //frameUpdated{other.frameUpdated},
-        bounds{other.bounds}
+        entity{ other.entity }, bounds{ other.bounds }//sceneIndex{other.sceneIndex}, aabbIndex{other.aabbIndex}
     {}
     BVHPrimitive& operator=(const BVHPrimitive& rhs) {
         if (this == &rhs) return *this;
 
         entity = rhs.entity;
-        //frameUpdated = rhs.frameUpdated;
         bounds = rhs.bounds;
+        //sceneIndex = rhs.sceneIndex;
+        //aabbIndex = rhs.aabbIndex;
 
         return *this;
     }
@@ -95,19 +102,21 @@ struct BVHPrimitive
     BVHPrimitive& operator=(BVHPrimitive&& rhs) noexcept {
         if (this == &rhs) return *this;
 
-        entity = rhs.entity;
-        //frameUpdated = rhs.frameUpdated;
-        bounds = rhs.bounds;
-
         rhs.entity = entt::null;
-        //rhs.frameUpdated = UINT32_INVALID;
-        rhs.bounds = BoundingVolume{};
+
+        entity = rhs.entity;
+        bounds = rhs.bounds;
+        //sceneIndex = rhs.sceneIndex;
+        //aabbIndex = rhs.aabbIndex;
 
         return *this;
     }
 
-    BVHPrimitive(entt::entity e, const BoundingVolume& boundVol) :
-        entity{ e }, bounds{ boundVol } //frameUpdated{ UINT32_INVALID } 
+    //BVHPrimitive(entt::entity e, uint32_t dataIndex, uint16_t scene) :
+    //    entity{ e }, sceneIndex{ scene }, aabbIndex{ dataIndex } //frameUpdated{ UINT32_INVALID } 
+    //{}
+    BVHPrimitive(entt::entity e, const AABB& aabb) :
+        entity{e}, bounds{aabb}
     {}
 
     //BVHPrimitive(entt::entity e, const AABB& bounds)
@@ -179,40 +188,13 @@ private:
 
 
 
-    INLINE void _tSafe_insertionSort(uint32_t* primitiveIds, uint32_t primCount, int bestAxis, uint8_t index) {
-        uint32_t* first = primitiveIds;
-        uint32_t* last = primitiveIds + primCount;
-        if (last - first <= 1) {
-            // nothing to do
-        } else {
-            const uint32_t axis = static_cast<uint32_t>(bestAxis);
-            auto& prims = primitives[index]; // local alias to avoid capturing outer state repeatedly
-
-            for (uint32_t* it = first + 1; it < last; ++it) {
-                const uint32_t id = *it;
-                // key to insert: center value along axis
-                const float keyVal = prims[id].bounds.getCoarseAABB().center()[axis];
-
-                uint32_t* jt = it;
-                // shift larger elements one step to the right
-                while (jt > first) {
-                    const uint32_t prevId = *(jt - 1);
-                    const float    prevVal = prims[prevId].bounds.getCoarseAABB().center()[axis];
-
-                    // Stable insertion: stop when !(key < prev)
-                    if (!(keyVal < prevVal)) break;
-
-                    *jt = prevId;   // move prev one step to the right
-                    --jt;
-                }
-                *jt = id;           // place key
-            }
-        }
-    }
+    INLINE void _tSafe_insertionSort(uint32_t* primitiveIds, uint32_t primCount, int bestAxis, uint8_t index);
     static constexpr const unsigned int NUM_BUILD_THREADS = 6;
     static constexpr const unsigned int NUM_RUN_THREADS = 16;
     std::array<FrameArena*, NUM_RUN_THREADS + 1> cullArenas[2]{ nullptr, nullptr };
     std::array<std::binary_semaphore*, NUM_RUN_THREADS> runSems[2]{ nullptr, nullptr };
+    std::atomic<TransformGroup*> m_groupPtr = nullptr;
+    ArenaRegistry& m_reg;
 
 public:
     std::array<std::vector<BVHNode>, 2> nodes;
@@ -264,18 +246,21 @@ public:
         uint8_t index{ UINT8_INVALID };
 
     };
-    bool workersRunning = true;
-    //std::barrier<> barrier{ NUM_BUILD_THREADS + 1 };
+    std::atomic<bool> workersRunning = true;
+    std::atomic<bool> hasBuiltPrimitivesOnce[2] = {false, false};
     std::atomic<uint8_t> nextThId;
     std::array<std::thread*, NUM_BUILD_THREADS> workers;
     std::array<WorkerPkg*, NUM_BUILD_THREADS> workerPkgs;
     std::array<std::atomic<bool>, NUM_BUILD_THREADS> workPkgCondition;
     std::array<std::binary_semaphore*, NUM_BUILD_THREADS> startSemas;
+    std::binary_semaphore rebuildStartSema{ 0 };
+    std::binary_semaphore rebuildDoneSema{ 1 };
+    std::thread* rebuildThreads = nullptr;
     std::array<std::binary_semaphore*, NUM_BUILD_THREADS> doneSemas;
     //std::array<std::vector<uint32_t>, NUM_BUILD_THREADS> workerPrimsTemp;
     std::array<std::atomic<uint32_t>, NUM_BUILD_THREADS> workerResults;
 
-
+    static void _updatePrimitives(DualBVH* _this);
     static void _recursiveWorker(DualBVH* _this, uint8_t threadId);
 
     uint8_t _getNextThreadId() {
@@ -355,7 +340,6 @@ public:
             nextThId.store(0, std::memory_order_release);
             outIndex = _getIndexToUseThisFrame();
             _threadStart.release();
-            return;
         }
     }
     bool hasValidHierarchy() const {
@@ -367,7 +351,7 @@ public:
     std::array<std::vector<OccIndexCornerIndexDepthTuple>, 2> occluderIndices;
     std::array<std::vector<glm::vec3>, 2> occluderCorners;
 
-    bool threadRunning() const { return _threadRunning; }
+    //bool threadRunning() const { return _threadRunning; }
 
     uint8_t curFrameIndex = UINT8_INVALID;
     //std::array<std::vector<TraversalNode>, 2> nodeStack;
@@ -376,7 +360,7 @@ public:
     std::binary_semaphore _threadStart{ 0 };
     std::binary_semaphore _threadDone{ 1 };
     Arena* _frameArena = nullptr;
-    bool _threadRunning = true;
+    //bool _threadRunning = true;
 
     // Building methods
     uint8_t _getIndexToUseThisFrame();
@@ -385,24 +369,13 @@ public:
     uint32_t buildRecursive(uint32_t* primitiveIds, uint32_t primCount, uint32_t depth, uint32_t parent, uint8_t index);
 
     uint32_t findBestSplit(const uint32_t* primitiveIds, uint32_t primCount, int& bestAxis, float& bestPos, uint8_t index);
-    AABB computeBounds(const uint32_t* primitiveIds, uint32_t primCount, uint8_t index) {
-        if (primCount == 0) {
-            return AABB();
-        }
-
-        AABB bounds = primitives[index][primitiveIds[0]].bounds.getCoarseAABB();
-        for (size_t i = 1; i < primCount; ++i) {
-            bounds = bounds.merge(primitives[index][primitiveIds[i]].bounds.getCoarseAABB());
-        }
-
-        return bounds;
-    }
+    AABB computeBounds(const uint32_t* primitiveIds, uint32_t primCount, uint8_t index);
 
     // Update methods
     void updatePrimitive(uint32_t primIndex, const glm::mat4x4& transform, uint8_t index) {
-        BVHPrimitive& prim = primitives[index][primIndex];
-        AABB primWorldBounds = prim.bounds.getCoarseAABB();
-        AABB newWorldBounds = prim.bounds.getCoarseAABB_local().transformed_noPerspective(transform);
+        //BVHPrimitive& prim = primitives[index][primIndex];
+        //AABB primWorldBounds = prim.bounds;
+        //AABB newWorldBounds = prim.bounds.getCoarseAABB_local().transformed_noPerspective(transform);
 
         //// Check if bounds actually changed significantly
         //if (!boundsChanged(primWorldBounds, newWorldBounds)) {
@@ -410,7 +383,7 @@ public:
         //    return;
         //}
 
-        prim.bounds.setCoarseAABB(newWorldBounds);
+        //prim.bounds.setCoarseAABB(newWorldBounds);
         //prim.frameUpdated = currentFrame;
 
         // Mark nodes as dirty up the hierarchy
@@ -501,54 +474,7 @@ public:
     }
 
     bool isOccludedRaycast(const AABB& bounds, const std::vector<OccIndexCornerIndexDepthTuple>& occluders,
-                    const glm::vec3& cameraPos, float objectDepth, uint8_t index) const {
-
-        // Ray-based occlusion test - much more accurate!
-        auto objectCorners = bounds.getVertices();
-
-        // Test rays from camera to each corner of the object
-        int visibleCorners = 0;
-
-        for (int i = 0; i < 8; ++i) {
-
-            glm::vec3 rayDir = glm::normalize(objectCorners[i] - cameraPos);
-            float rayLength = glm::length2(objectCorners[i] - cameraPos);
-
-            bool rayBlocked = false;
-
-            // Test this ray against all occluders
-            for (const auto& occluder : occluders) {
-                //glm::vec3 occluderCenter = occluder.center();
-                //float occluderDepth = glm::length2(occluderCenter - cameraPos);
-
-                // Only test occluders that are closer than the object
-                if (std::get<2>(occluder) >= objectDepth - 0.1f) continue;
-
-                // Ray-AABB intersection test
-                float tNear, tFar;
-                const AABB& box = primitives[index][std::get<0>(occluder)].bounds.getCoarseAABB();
-                if (rayAABBIntersectWithDistance(cameraPos, rayDir, box, tNear, tFar)) {
-                    // Check if intersection is between camera and object corner
-                    if (tNear > 0.01f && tNear < rayLength - 0.01f) {
-                        rayBlocked = true;
-                        break;
-                    }
-                }
-            }
-
-            if (!rayBlocked) {
-                visibleCorners++;
-                // If any corner is visible, object is not fully occluded
-                // You can adjust this threshold - maybe require 2+ visible corners
-                if (visibleCorners >= 1) {
-                    return false;
-                }
-            }
-        }
-
-        // All corners are blocked - object is occluded
-        return true;
-    }
+                           const glm::vec3& cameraPos, float objectDepth, uint8_t index) const;
 
     bool isOccluded(const AABB& bounds, const std::vector<AABB>& occluders,
                     const glm::vec3& cameraPos, float objectDepth) const {
@@ -626,10 +552,12 @@ public:
 
 
     ~DualBVH() {
-        _threadRunning = false;
+        workersRunning.store(false, std::memory_order_release);
         _threadStart.release();
         rebuildThread->join();
         delete rebuildThread;
+
+        rebuildStartSema.release();
 
         delete _frameArena;
         _frameArena = nullptr;
@@ -665,8 +593,18 @@ public:
         delete cullArenas[0][NUM_RUN_THREADS];
         cullArenas[1][NUM_RUN_THREADS] = nullptr;
 
+        rebuildThreads->join();
+        //rebuildThreads[1]->join();
+        delete rebuildThreads;
+        //delete rebuildThreads[1];
+        rebuildThreads = nullptr;
+        //rebuildThreads[1] = nullptr;
     }
-    explicit DualBVH(ArenaRegistry& registry, const BuildSettings& settings = {}) : settings(settings) {
+    explicit DualBVH(ArenaRegistry& registry, const BuildSettings& settings = {}) :
+        settings(settings), m_reg{registry}
+        //, rebuildStartSema{ std::binary_semaphore{0}, std::binary_semaphore{0} },
+        //rebuildDoneSema{ std::binary_semaphore{1}, std::binary_semaphore{1} }
+    {
         for (size_t i = 0; i < 2; ++i) {
             nodes[i].reserve(1024);  // Pre-allocate for better performance
             primitives[i].reserve(512);
@@ -678,7 +616,7 @@ public:
 
         _frameArena = new Arena(32_MB);
 
-        _threadRunning = true;
+        //_threadRunning = true;
         rebuildThread = new std::thread{
             DualBVH::_buildThreadMethod,
             this,
@@ -703,6 +641,14 @@ public:
         }
         cullArenas[0][NUM_RUN_THREADS] = new FrameArena{ 768_KB };
         cullArenas[1][NUM_RUN_THREADS] = new FrameArena{ 768_KB };
+
+        rebuildThreads = new std::thread{DualBVH::_updatePrimitives, this};
+        //rebuildThreads[1] = new std::thread{ DualBVH::_updatePrimitives, this, 1u };
+    }
+
+    void startRebuild(ArenaRegistry& registry) {
+
+        rebuildStartSema.release();
     }
 
     // Construction

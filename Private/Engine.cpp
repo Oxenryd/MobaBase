@@ -235,6 +235,15 @@ inline void Engine::_run() {
 
 	while (m_status != EngineStatus::PendingStop) {
 
+#ifdef PROFILER
+		if (m_pendingTrace) {
+			m_framesTraced = 0;
+			LOGLINE(LogType::Info, LogMod::Engine, "Starting Profiler... ");
+			PROFILE_BEGIN_SESSION(ENGINE_NAME, PROFILE_PATH);
+			m_pendingTrace = false;
+		}	
+#endif
+
 		PROFILE_SCOPE("Frame");
 		PROFILE_FRAME_MARK(m_totalFrames);
 
@@ -334,6 +343,18 @@ inline void Engine::_run() {
 		m_framesSinceLastFpsRead++;
 		m_totalFrames++;
 		std::this_thread::yield();
+
+
+#ifdef PROFILER
+		if (m_framesTraced != UINT32_INVALID ) {
+			m_framesTraced++;
+			if (m_framesTraced >= m_framesToTrace) {
+				PROFILE_END_SESSION();
+				LOGLINE(LogType::Success, LogMod::Engine, "Trace Complete. ");
+				m_framesTraced = UINT32_INVALID;
+			}
+		}
+#endif
 	}
 
 	for (auto scene : m_scenes) {
@@ -344,7 +365,7 @@ inline void Engine::_run() {
 
 	m_wnd->destroyWindow();
 
-	PROFILE_END_SESSION();
+	
 
 	m_status = EngineStatus::Stopped;
 	onStopped.notify(this);
@@ -392,13 +413,6 @@ ErrorCode Engine::init() {
 
 	EC_CHECK(EC, _initJobSystem());
 
-#ifdef PROFILER
-	LOGLINE(LogType::Info, LogMod::Engine, "Starting Profiler... ");
-
-	PROFILE_BEGIN_SESSION(ENGINE_NAME, PROFILE_PATH);
-
-	LOG(LogType::Success, "Done.");
-#endif
 
 	return ErrorCode::OK;
 }
@@ -414,6 +428,24 @@ inline void Engine::_updateEarly(double dt) {
 			PROFILE_SCOPE("Scene_EarlyUpdate");
 			m_scenes[index]->updateDispatch(dt);
 		}
+
+		{
+			PROFILE_SCOPE("SceneTransforms");
+			m_scenes[index]->m_transformSys.run(m_scenes[index]->m_boundingSys);
+
+		}
+
+		{
+			PROFILE_SCOPE("BoundingSystemUpdate");
+			m_scenes[index]->m_boundingSys.run();
+		}
+
+		{
+			PROFILE_SCOPE("SceneGameObjects");
+			m_scenes[index]->m_gameObjectSys.run();
+		}
+		
+
 		{
 			PROFILE_SCOPE("Scene_BVH_Update");
 			m_scenes[index]->bvhSystem().updateBVH(m_scenes[index]->m_reg, m_totalFrames, m_updateDeltaTime, 0.01667f);
@@ -438,12 +470,15 @@ inline void Engine::_updateLate(double dt) {
 			m_scenes.erase(it);
 			removeIndices.push_back(index);
 		} else {
-			PROFILE_SCOPE("Scene_BVH_OcclusionPass");
-			m_scenes[index]->cullResults.clear();
+			{
+				PROFILE_SCOPE("Scene_BVH_OcclusionPass");
+				m_scenes[index]->cullResults.clear();
 
-			m_scenes[index]->
-				bvhSystem().performFrustumCullingWithOcclusion(
-					m_scenes[index]->cullResults, mainCamera(), &m_scenes[index]->registry());
+				m_scenes[index]->
+					bvhSystem().performFrustumCullingWithOcclusion(
+						m_scenes[index]->cullResults, mainCamera(), &m_scenes[index]->registry());
+			}
+			m_scenes[index]->bvhSystem().bvh().startRebuild(m_scenes[index]->registry());
 		}
 	}
 	for (auto& index : removeIndices) {

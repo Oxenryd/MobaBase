@@ -14,6 +14,7 @@
 #include <semaphore>
 #include <algorithm>
 
+#include "Profiler.hpp"
 #include "ArenaAllocator.hpp"
 
 // ----------------- Arena adapter expectations -----------------
@@ -231,28 +232,29 @@ namespace MWork
 
         // ----------------- API: parallel for over [begin, end) -----------------
         // body(index, threadIndex) is called for each i in [begin,end)
-        template <class Fn>
-        JobHandle for_range(std::size_t begin, std::size_t end, std::size_t shardCount,
-                            JobAwaitPoint ap, Fn&& body) {
-            const std::size_t N = (end > begin) ? (end - begin) : 0;
-            if (N == 0) return nullptr;
+        
+        //template <class Fn>
+        //JobHandle for_range(std::size_t begin, std::size_t end, std::size_t shardCount,
+        //                    JobAwaitPoint ap, Fn&& body) {
+        //    const std::size_t N = (end > begin) ? (end - begin) : 0;
+        //    if (N == 0) return nullptr;
 
-            // Wrap 'body' into shard lambda: compute my subrange and iterate.
-            auto shardFn = [=](std::size_t shardIdx, std::size_t totalShards, std::size_t /*threadIndex*/) {
-                // balanced static partition
-                const std::size_t base = N / totalShards;
-                const std::size_t rem = N % totalShards;
-                const std::size_t myCount = base + (shardIdx < rem ? 1 : 0);
-                const std::size_t offset = base * shardIdx + (shardIdx < rem ? shardIdx : rem);
-                const std::size_t myStart = begin + offset;
-                const std::size_t myStop = myStart + myCount;
-                for (std::size_t i = myStart; i < myStop; ++i) {
-                    body(i, shardIdx); // pass shardIdx as a stable small "threadish" id if you want
-                }
-                };
+        //    // Wrap 'body' into shard lambda: compute my subrange and iterate.
+        //    auto shardFn = [=](std::size_t shardIdx, std::size_t totalShards, std::size_t /*threadIndex*/) {
+        //        // balanced static partition
+        //        const std::size_t base = N / totalShards;
+        //        const std::size_t rem = N % totalShards;
+        //        const std::size_t myCount = base + (shardIdx < rem ? 1 : 0);
+        //        const std::size_t offset = base * shardIdx + (shardIdx < rem ? shardIdx : rem);
+        //        const std::size_t myStart = begin + offset;
+        //        const std::size_t myStop = myStart + myCount;
+        //        for (std::size_t i = myStart; i < myStop; ++i) {
+        //            body(i, shardIdx); // pass shardIdx as a stable small "threadish" id if you want
+        //        }
+        //        };
 
-            return job(shardCount, ap, std::move(shardFn));
-        }
+        //    return job(shardCount, ap, std::move(shardFn));
+        //}
 
         struct State
         {
@@ -304,8 +306,7 @@ namespace MWork
             //// Submit shardCount identical shards that all draw work from the shared State
             //return job(shardCount, ap,
             //           std::move(functor));
-
-
+            
             if (end <= begin || shardCount == 0) return nullptr;
 
             const std::size_t N = end - begin;
@@ -372,27 +373,30 @@ namespace MWork
                 m_taskSem.acquire();
                 if (m_shutdown.load(std::memory_order_acquire)) return;
 
-                Job job;
-                // If there’s a race between acquire and empty queue due to other workers stealing work,
-                // just keep trying until we get one (or observe shutdown).
-                while (!m_queue.dequeue(job)) {
-                    if (m_shutdown.load(std::memory_order_acquire)) return;
-                    // spin a little—queue should be non-empty because a token was released
-                }
+                {
+                    PROFILE_SCOPE("MWork::workerLoop");
+                    Job job;
+                    // If there’s a race between acquire and empty queue due to other workers stealing work,
+                    // just keep trying until we get one (or observe shutdown).
+                    while (!m_queue.dequeue(job)) {
+                        if (m_shutdown.load(std::memory_order_acquire)) return;
+                        // spin a little—queue should be non-empty because a token was released
+                    }
 
-                JobGroup* g = job.group;
-                // Invoke shared callable
-                g->payload.invoke(g->payload.obj, job.shardIndex, job.shardCount, threadIndex);
+                    JobGroup* g = job.group;
+                    // Invoke shared callable
+                    g->payload.invoke(g->payload.obj, job.shardIndex, job.shardCount, threadIndex);
 
-                // Signal completion
-                const uint32_t prev = g->pending.fetch_sub(1, std::memory_order_acq_rel);
-                if (prev == 1) {
-                    // We are last: destroy callable, release waiter, and free group
-                    if (g->payload.destroy)
-                        g->payload.destroy(g->payload.obj, g->payload.arena);       
-                    g->done.release();
-                    freeGroup(g);
-                    
+                    // Signal completion
+                    const uint32_t prev = g->pending.fetch_sub(1, std::memory_order_acq_rel);
+                    if (prev == 1) {
+                        // We are last: destroy callable, release waiter, and free group
+                        if (g->payload.destroy)
+                            g->payload.destroy(g->payload.obj, g->payload.arena);
+                        g->done.release();
+                        freeGroup(g);
+
+                    }
                 }
             }
         }
@@ -469,6 +473,7 @@ namespace MWork
 
     template <class Fn>
     inline JobHandle for_loop(std::size_t begin, std::size_t end, std::size_t shards, Fn&& body) {
+        PROFILE_SCOPE("MWork::for_loop");
         return MWork::for_range_chunked(begin, end, 0, shards, MWork::JobAwaitPoint::Immediate, body);
     }
 

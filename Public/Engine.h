@@ -109,6 +109,10 @@ private:
 	double m_baseCosD;
 	double m_baseSinD;
 	size_t m_requestedSceneIndex = SIZE_INVALID;
+	uint32_t m_nextTraceId = 0;
+	uint32_t m_framesToTrace = 2;
+	uint32_t m_framesTraced = UINT32_INVALID;
+	bool m_pendingTrace = false;
 	
 	size_t m_totalFrames = 0;
 	double m_totalTime = 0.0;
@@ -189,7 +193,7 @@ public:
 		return m_scenes[scene->m_sceneIndex]->registry();
 	}
 
-
+	INLINE void armFrameTrace() { m_pendingTrace = true; }
 	INLINE GlobalSystem& getGlobalSystem() { return m_globalSystem; }
 	INLINE HeapArena& baseArena() { return m_baseArena; }
 	INLINE double deltaTime() const { return m_updateDeltaTime; }

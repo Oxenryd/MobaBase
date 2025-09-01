@@ -3,6 +3,9 @@
 
 #include "SystemECS.h"
 #include "BasicTypes.hpp"
+#include "EnabledTag.hpp"
+
+
 
 constexpr const uint32_t AaBbTriIndices[36]{
 	// Front  (+Z)
@@ -66,6 +69,8 @@ public:
 	virtual void registryRemove(entt::entity, void* valueOut) override {
 		throw std::exception("SystemECS::registryRemove() not implemented.");
 	}
+
+	void run();
 
 	ArenaVector<BSphere>& bSpheres() { return m_bSpheres; }
 	ArenaVector<AABB>& aabbs() { return m_aabbs; }

@@ -75,7 +75,7 @@ void VulkanContext::draw(const DrawContext& ctx) {
 			submeshDrawInstanceData[currentFrame][sceneIndex].clear();
 
 			auto& reg = scene->registry();
-			auto grp = reg.group<TransformComponent, BoundingVolumeComponent>();
+			auto grp = reg.group<TransformComponent, BoundingVolumeComponent, EnabledTag>();
 			for (auto& entity : scene->cullResults.visibleEntities) {
 
 				auto newDrawCmd = subMeshEntity_to_drawCommand(scene, reg, entity);
@@ -676,7 +676,7 @@ void VulkanContext::draw(const DrawContext& ctx) {
 				if (cmdList.empty())
 					continue;
 
-				auto grp = Engine::getInstance()->getActiveScenes()[sceneIndex]->registry().group<TransformComponent, BoundingVolumeComponent>();
+				auto grp = Engine::getInstance()->getActiveScenes()[sceneIndex]->registry().group<TransformComponent, BoundingVolumeComponent, EnabledTag>();
 				for (auto& cmd : cmdList) {
 					auto& instData = submeshDrawInstanceData[currentFrame][sceneIndex][cmd.submeshOffset];
 					auto instanceSize = instData.instances.size();

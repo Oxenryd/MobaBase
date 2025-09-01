@@ -40,7 +40,7 @@ public:
 
         m_go1 = gameObjectSystem().createGameObject<GameObject>("MerryGoRound");
         
-        size_t numOfObjects = 1024;//4096 * 64;
+        size_t numOfObjects = 4096;//4096 * 64;
         m_goList.reserve(numOfObjects);
         auto step = MMath::fTAU / numOfObjects;
         const std::string pathObject = std::format("{}{}", ASSETS_DIR, "Sphere/sphere.obj");
@@ -152,6 +152,11 @@ public:
 
                                           } break;
 
+                                          case KeyCode::T:
+                                          {
+                                              Engine::getInstance()->armFrameTrace();
+                                          } break;
+
                                       }
                                   });
 
@@ -188,19 +193,26 @@ public:
         auto children = merryTrans.getChildrenEntities();
         merryTrans.rotate(glm::vec3{ 0.0f, 0.5f, 1.0f } * Timing::deltaTimeF());
 
-        //auto grp = m_reg.group<TransformComponent>();
-        MWork::for_loop(0, children.size(), 16,
-                                [&](std::size_t i) {
+        auto view = m_reg.view<TransformComponent>();
+        {
+            PROFILE_SCOPE("TRANSFORM_UPDATE");
+            MWork::for_loop(0, children.size(), 16,
+                            [&](std::size_t i) {
 
-                                    auto transform = Transform{ &m_reg, children[i] };
-        
-                                    transform.rotateLocal(glm::vec3{ 0.0f, 1.0f, 0.0f } *Timing::deltaTimeF());
-                                    auto& scale = transform.modifyScale();
-        
-                                    auto cos = std::cos(m_radSpeeds[i] * m_time) * m_startScales[i] * 0.66f;
-                                    auto curScale = m_startScales[i] + cos;
-                                    scale = glm::vec3{ curScale };
-                                });
+                                auto& transComp = view.get<TransformComponent>(children[i]);
+                                auto& rotation = transformSystem().rotations()[transComp.dataIndex];
+                                Transform::rotateLocal(rotation, glm::vec3{ 0.0f, 1.0f, 0.0f } *Timing::deltaTimeF());
+
+                                auto cos = std::cos(m_radSpeeds[i] * m_time) * m_startScales[i] * 0.66f;
+                                auto curScale = m_startScales[i] + cos;
+                                auto& scale = transformSystem().scales()[transComp.dataIndex];
+                                scale = glm::vec3{ curScale };
+
+                                transComp.state.setByEnum(ObjectState::DirtyTransform);
+                                transComp.state.setByEnum(ObjectState::ScaleDirty);
+                                transComp.state.setByEnum(ObjectState::RotationDirty);
+                            });
+        }
     }
 
     void lateUpdate(float dt) {

@@ -933,6 +933,7 @@ public:
 	VkInstance m_vkInstance = nullptr;
 	VkSurfaceKHR m_vkSurface = nullptr;
 	VkPhysicalDevice m_phyDevice = nullptr;
+	VkPhysicalDeviceFeatures m_phyDevFeatures{};
 	VkDevice m_vkDevice = nullptr;
 	VkQueue m_graphicsQueue = nullptr;
 	uint32_t m_graphicsQueueFamilyIndex = static_cast<uint32_t>(-1);
@@ -1892,7 +1893,7 @@ public:
 		VkResult vkResult;
 		LOGLINE(LogType::Info, LogMod::Vulkan, "Creating Descriptor pools... ");
 
-		m_currentCaps = queryDescriptorCaps(m_phyDevice);
+		//m_currentCaps = queryDescriptorCaps(m_phyDevice);
 
 		//std::vector<VkDescriptorPoolSize> poolSizes = {
 		//	{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,     100 },
@@ -2103,7 +2104,7 @@ public:
 						m_phyDevice = device;
 						m_graphicsQueueFamilyIndex = i;
 						deviceName = deviceProperties.deviceName;
-						//deviceFeatures = deviceFeatures;
+						m_phyDevFeatures = deviceFeatures;
 					}
 				}
 			}
@@ -2120,6 +2121,8 @@ public:
 		VkResult vkResult{};
 
 		LOGLINE(LogType::Info, LogMod::Vulkan, "Creating logical device... ");
+
+		m_currentCaps = queryDescriptorCaps(m_phyDevice);
 
 		// --- Queue ---
 		float queuePriority = 1.0f;
@@ -2160,7 +2163,7 @@ public:
 		VkPhysicalDeviceExtendedDynamicState2FeaturesEXT ext2{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_2_FEATURES_EXT };
 		ext2.extendedDynamicState2 = VK_TRUE;
 		ext2.extendedDynamicState2LogicOp = VK_TRUE;
-		ext2.extendedDynamicState2PatchControlPoints = VK_TRUE;
+		//ext2.extendedDynamicState2PatchControlPoints = VK_TRUE;
 
 		// --- Build ENABLE chain (separate structs from the query) ---
 		VkPhysicalDeviceVulkan12Features en12{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES };

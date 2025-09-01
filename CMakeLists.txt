@@ -226,6 +226,7 @@ add_executable (MobaBase
 	"Private/Mesh.cpp"
 	"Private/Light.cpp"
 	"Private/BoundingVolume.cpp"
+	"private/BoundingSystem.cpp"
 	"Private/BVH.cpp")
 
 
