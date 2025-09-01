@@ -55,7 +55,7 @@ void VulkanContext::draw(const DrawContext& ctx) {
 		for (auto& scene : Engine::getInstance()->getActiveScenes()) {
 
 			auto sceneIndex = scene->sceneIndex();
-			
+
 			if (sceneIndex >= drawCmds[currentFrame].size()) {
 				for (size_t i = drawCmds[currentFrame].size(); i < sceneIndex + 1; ++i)
 					drawCmds[currentFrame].push_back({});
@@ -75,6 +75,7 @@ void VulkanContext::draw(const DrawContext& ctx) {
 			submeshDrawInstanceData[currentFrame][sceneIndex].clear();
 
 			auto& reg = scene->registry();
+			auto grp = reg.group<TransformComponent, BoundingVolumeComponent>();
 			for (auto& entity : scene->cullResults.visibleEntities) {
 
 				auto newDrawCmd = subMeshEntity_to_drawCommand(scene, reg, entity);
@@ -88,23 +89,25 @@ void VulkanContext::draw(const DrawContext& ctx) {
 					BoundedInstanceData& instanceData = keyPair.first->second;//submeshDrawInstanceData[currentFrame][sceneIndex][keyPair.second];
 					instanceData.instances.reserve(8192);
 
-					auto& transComp = scene->registry().get<TransformComponent>(newDrawCmd.subMeshEntity);
+					auto& transComp = grp.get<TransformComponent>(newDrawCmd.subMeshEntity);//scene->registry().get<TransformComponent>(newDrawCmd.subMeshEntity);
 					InstanceData instData{};
 					instData.matInstanceIndex = newDrawCmd.materialIndex;
 					instData.matrixIndex = transComp.dataIndex;
 					instanceData.instances.push_back(instData);
-					BoundingVolume bVol = BoundingVolume{ &scene->registry() , newDrawCmd.subMeshEntity };
-					instanceData.bounds.merge(bVol.getCoarseAABB());
+					BoundingVolumeComponent& bVol = grp.get<BoundingVolumeComponent>(newDrawCmd.subMeshEntity);
+					instanceData.bounds.merge(Engine::getInstance()->
+											  getScene(transComp.sceneIndex)->boundingSystem().cachedLocals()[bVol.coarseIndexLocal]);
 
 				} else {
 					BoundedInstanceData& instanceData = it->second;
-					auto& transComp = scene->registry().get<TransformComponent>(newDrawCmd.subMeshEntity);
+					auto& transComp = grp.get<TransformComponent>(newDrawCmd.subMeshEntity);//auto& transComp = scene->registry().get<TransformComponent>(newDrawCmd.subMeshEntity);
 					InstanceData instData{};
 					instData.matInstanceIndex = newDrawCmd.materialIndex;
 					instData.matrixIndex = transComp.dataIndex;
 					instanceData.instances.push_back(instData);
-					BoundingVolume bVol = BoundingVolume{ &scene->registry() , newDrawCmd.subMeshEntity };
-					instanceData.bounds.merge(bVol.getCoarseAABB());
+					BoundingVolumeComponent& bVol = grp.get<BoundingVolumeComponent>(newDrawCmd.subMeshEntity);
+					instanceData.bounds.merge(Engine::getInstance()->
+											  getScene(transComp.sceneIndex)->boundingSystem().cachedLocals()[bVol.coarseIndexLocal]);
 
 					submeshKeysWithMultipleInstances[currentFrame][sceneIndex].insert(newDrawCmd.submeshOffset);
 				}
@@ -169,7 +172,7 @@ void VulkanContext::draw(const DrawContext& ctx) {
 			}
 		}
 
-		
+
 		_checkStageRealloc(currentFrame, totalMatBufSize);
 
 		for (size_t s = 0; s < sceneIndices[currentFrame].size(); ++s) {
@@ -216,7 +219,7 @@ void VulkanContext::draw(const DrawContext& ctx) {
 			m_vkDevice, swapchain,
 			UINT64_MAX, frame.imageAvailable,
 			VK_NULL_HANDLE, &imageIndex);
-	
+
 
 
 		if (acquireResult == VK_ERROR_OUT_OF_DATE_KHR || pendingResize) {
@@ -333,76 +336,71 @@ void VulkanContext::draw(const DrawContext& ctx) {
 
 
 
-	{
-		PROFILE_SCOPE("EarlyLightCompute");
-		// Dispatch light cluster CS
-		vkCmdBindPipeline(frame.cmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, lightCluster_pipeline);
-		vkCmdBindDescriptorSets(frame.cmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE,
-								lightCluster_pipelineLayout, 0, 3, lightCluster_descSets[currentFrame].data(),
-								0, nullptr);
 
-		// Compute proper group counts from clusters and shader local size
-		constexpr uint32_t LOCAL_X = VULKAN_LIGHT_CLUSTER_THREADS_X; // matches [numthreads(…)]
-		constexpr uint32_t LOCAL_Y = VULKAN_LIGHT_CLUSTER_THREADS_Y;
-		constexpr uint32_t LOCAL_Z = VULKAN_LIGHT_CLUSTER_THREADS_Z;
-		auto ceilDiv = [](uint32_t a, uint32_t b) { return (a + b - 1) / b; };
+	// Dispatch light cluster CS
+	vkCmdBindPipeline(frame.cmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, lightCluster_pipeline);
+	vkCmdBindDescriptorSets(frame.cmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE,
+							lightCluster_pipelineLayout, 0, 3, lightCluster_descSets[currentFrame].data(),
+							0, nullptr);
 
-		const uint32_t groupsX = ceilDiv(camData.clustersX, LOCAL_X);
-		const uint32_t groupsY = ceilDiv(camData.clustersY, LOCAL_Y);
-		const uint32_t groupsZ = ceilDiv(camData.clustersZ, LOCAL_Z);
+	// Compute proper group counts from clusters and shader local size
+	constexpr uint32_t LOCAL_X = VULKAN_LIGHT_CLUSTER_THREADS_X; // matches [numthreads(…)]
+	constexpr uint32_t LOCAL_Y = VULKAN_LIGHT_CLUSTER_THREADS_Y;
+	constexpr uint32_t LOCAL_Z = VULKAN_LIGHT_CLUSTER_THREADS_Z;
+	auto ceilDiv = [](uint32_t a, uint32_t b) { return (a + b - 1) / b; };
 
-		vkCmdDispatch(frame.cmdBuffer, VULKAN_LIGHT_CLUSTERS_X, VULKAN_LIGHT_CLUSTERS_Y, VULKAN_LIGHT_CLUSTERS_Z);
+	const uint32_t groupsX = ceilDiv(camData.clustersX, LOCAL_X);
+	const uint32_t groupsY = ceilDiv(camData.clustersY, LOCAL_Y);
+	const uint32_t groupsZ = ceilDiv(camData.clustersZ, LOCAL_Z);
 
-	}
+	vkCmdDispatch(frame.cmdBuffer, VULKAN_LIGHT_CLUSTERS_X, VULKAN_LIGHT_CLUSTERS_Y, VULKAN_LIGHT_CLUSTERS_Z);
+
 
 
 	VkViewport viewport{};
-	{
-		PROFILE_SCOPE("DynamicSetup");
 
-		// Set Dynamic state
 
-		viewport.x = ctx.vPortPos[0];
-		viewport.y = ctx.vPortPos[1];
-		viewport.width = ctx.vPortSize[0] < 0 ? static_cast<float>(swapchainExtent.width) : ctx.vPortSize[0];
-		viewport.height = ctx.vPortSize[1] < 0 ? static_cast<float>(swapchainExtent.height) : ctx.vPortSize[1];
-		viewport.minDepth = ctx.vPortMinDepth;
-		viewport.maxDepth = ctx.vPortMaxDepth;
-		vkCmdSetViewport(frame.cmdBuffer, 0, 1, &viewport);
+	// Set Dynamic state
 
-		VkRect2D scissor{};
-		scissor.offset = { ctx.sciOffset[0], ctx.sciOffset[1] };
-		scissor.extent = swapchainExtent;
-		vkCmdSetScissor(frame.cmdBuffer, 0, 1, &scissor);
+	viewport.x = ctx.vPortPos[0];
+	viewport.y = ctx.vPortPos[1];
+	viewport.width = ctx.vPortSize[0] < 0 ? static_cast<float>(swapchainExtent.width) : ctx.vPortSize[0];
+	viewport.height = ctx.vPortSize[1] < 0 ? static_cast<float>(swapchainExtent.height) : ctx.vPortSize[1];
+	viewport.minDepth = ctx.vPortMinDepth;
+	viewport.maxDepth = ctx.vPortMaxDepth;
+	vkCmdSetViewport(frame.cmdBuffer, 0, 1, &viewport);
 
-		vkCmdSetDepthTestEnable(frame.cmdBuffer, VK_TRUE);
-		vkCmdSetDepthWriteEnable(frame.cmdBuffer, VK_TRUE);
-		vkCmdSetDepthCompareOp(frame.cmdBuffer, VK_COMPARE_OP_LESS_OR_EQUAL);
-	}
+	VkRect2D scissor{};
+	scissor.offset = { ctx.sciOffset[0], ctx.sciOffset[1] };
+	scissor.extent = swapchainExtent;
+	vkCmdSetScissor(frame.cmdBuffer, 0, 1, &scissor);
+
+	vkCmdSetDepthTestEnable(frame.cmdBuffer, VK_TRUE);
+	vkCmdSetDepthWriteEnable(frame.cmdBuffer, VK_TRUE);
+	vkCmdSetDepthCompareOp(frame.cmdBuffer, VK_COMPARE_OP_LESS_OR_EQUAL);
+
 
 	Camera* mainCam = nullptr;
 	Frustum* f = nullptr;
-	{
-		PROFILE_SCOPE("CameraUpdate");
 
-		// Camera
-		mainCam = Engine::getInstance()->mainCamera();
-		auto& camData = mainCam->cameraData();
-		camData.numLights = static_cast<uint32_t>(lightsData.size());
-		camData.screenSize = { viewport.width, viewport.height };
-		camData.invScreenSize = { 1.0f / camData.screenSize.x, 1.0f / camData.screenSize.y };
-		camData.clustersX = VULKAN_LIGHT_CLUSTERS_X;
-		camData.clustersY = VULKAN_LIGHT_CLUSTERS_Y;
-		camData.clustersZ = VULKAN_LIGHT_CLUSTERS_Z;
-		f = &mainCam->getFrustum();
+	// Camera
+	mainCam = Engine::getInstance()->mainCamera();
+	auto& camData = mainCam->cameraData();
+	camData.numLights = static_cast<uint32_t>(lightsData.size());
+	camData.screenSize = { viewport.width, viewport.height };
+	camData.invScreenSize = { 1.0f / camData.screenSize.x, 1.0f / camData.screenSize.y };
+	camData.clustersX = VULKAN_LIGHT_CLUSTERS_X;
+	camData.clustersY = VULKAN_LIGHT_CLUSTERS_Y;
+	camData.clustersZ = VULKAN_LIGHT_CLUSTERS_Z;
+	f = &mainCam->getFrustum();
 
-		// Update CameraData cBuffer
-		void* mappedData = nullptr;
-		vkMapMemory(m_vkDevice, camDataMemory[currentFrame], 0, sizeof(CameraData), 0, &mappedData);
-		memcpy(mappedData, &camData, sizeof(CameraData));
-		vkUnmapMemory(m_vkDevice, camDataMemory[currentFrame]);
+	// Update CameraData cBuffer
+	void* mappedData = nullptr;
+	vkMapMemory(m_vkDevice, camDataMemory[currentFrame], 0, sizeof(CameraData), 0, &mappedData);
+	memcpy(mappedData, &camData, sizeof(CameraData));
+	vkUnmapMemory(m_vkDevice, camDataMemory[currentFrame]);
 
-	}
+
 
 	//for (size_t sI = 0; sI < drawCmds[currentFrame].size(); ++sI) //for (auto& cScene : drawCmds[currentFrame])
 	//{
@@ -548,33 +546,64 @@ void VulkanContext::draw(const DrawContext& ctx) {
 	//	}
 
 
-	
-	{
-		PROFILE_SCOPE("Buffer CPU-GPU");
-		if (totalMatBufSize > 0)
-			vkCmdCopyBuffer(frame.cmdBuffer, matStagingBuf[currentFrame], matBuf_modelTransforms[currentFrame],
-							stagingRegions[currentFrame].size(), stagingRegions[currentFrame].data());
 
-		if (totalInstanceDataBufSize > 0)
-			vkCmdCopyBuffer(frame.cmdBuffer, matStagingBuf[currentFrame], instanceIndexBuffer[currentFrame], 1, &instanceBufferCopy);
-	}
 
-	{
-		PROFILE_SCOPE("CopyBarrier");
+	if (totalMatBufSize > 0)
+		vkCmdCopyBuffer(frame.cmdBuffer, matStagingBuf[currentFrame], matBuf_modelTransforms[currentFrame],
+						stagingRegions[currentFrame].size(), stagingRegions[currentFrame].data());
 
-		// Barrier
+	if (totalInstanceDataBufSize > 0)
+		vkCmdCopyBuffer(frame.cmdBuffer, matStagingBuf[currentFrame], instanceIndexBuffer[currentFrame], 1, &instanceBufferCopy);
+
+
+
+	// Barrier
 #if VK_HEADER_VERSION >= 230  // assuming 1.3 / sync2
-		VkMemoryBarrier2 memBarrier{ VK_STRUCTURE_TYPE_MEMORY_BARRIER_2 };
-		memBarrier.srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
-		memBarrier.srcAccessMask = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT; // writes in CS
-		memBarrier.dstStageMask = VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
-		memBarrier.dstAccessMask = VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_UNIFORM_READ_BIT;
+		//VkMemoryBarrier2 memBarrier{ VK_STRUCTURE_TYPE_MEMORY_BARRIER_2 };
+		//memBarrier.srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
+		//memBarrier.srcAccessMask = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT; // writes in CS
+		//memBarrier.dstStageMask = VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
+		//memBarrier.dstAccessMask = VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_UNIFORM_READ_BIT;
+
+		//VkDependencyInfo dep{ VK_STRUCTURE_TYPE_DEPENDENCY_INFO };
+		//dep.memoryBarrierCount = 1;
+		//dep.pMemoryBarriers = &memBarrier;
+
+	VkBufferMemoryBarrier2 bufferBarriers[] =
+	{
+		{
+			.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
+			.srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+			.srcAccessMask = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+			.dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+			.dstAccessMask = VK_ACCESS_2_SHADER_STORAGE_READ_BIT,
+			.buffer = lightsClusterIndicesBuffer[currentFrame],
+			.offset = 0,
+			.size = VK_WHOLE_SIZE
+		},
+		{
+			.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
+			.srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+			.srcAccessMask = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+			.dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+			.dstAccessMask = VK_ACCESS_2_SHADER_STORAGE_READ_BIT,
+			.buffer = lightsClusterCountBuffer[currentFrame],
+			.offset = 0,
+			.size = VK_WHOLE_SIZE
+		}
+	};
 
 		VkDependencyInfo dep{ VK_STRUCTURE_TYPE_DEPENDENCY_INFO };
-		dep.memoryBarrierCount = 1;
-		dep.pMemoryBarriers = &memBarrier;
+		dep.bufferMemoryBarrierCount = 2;
+		dep.pBufferMemoryBarriers = bufferBarriers;
+
+
 
 		vkCmdPipelineBarrier2(frame.cmdBuffer, &dep);
+
+
+
+
 #else
 		VkMemoryBarrier mem{};
 		mem.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
@@ -590,7 +619,7 @@ void VulkanContext::draw(const DrawContext& ctx) {
 			0, nullptr,
 			0, nullptr);
 #endif
-	}
+	
 
 
 
@@ -646,6 +675,8 @@ void VulkanContext::draw(const DrawContext& ctx) {
 				auto& cmdList = drawCmds[currentFrame][sceneIndex];
 				if (cmdList.empty())
 					continue;
+
+				auto grp = Engine::getInstance()->getActiveScenes()[sceneIndex]->registry().group<TransformComponent, BoundingVolumeComponent>();
 				for (auto& cmd : cmdList) {
 					auto& instData = submeshDrawInstanceData[currentFrame][sceneIndex][cmd.submeshOffset];
 					auto instanceSize = instData.instances.size();
@@ -719,7 +750,7 @@ void VulkanContext::draw(const DrawContext& ctx) {
 						BaseMatPush push{};
 						push.flags = 0;
 						push.matInstanceIndex = cmd.instanceIndex;
-						auto& transComp = scene->registry().get<TransformComponent>(cmd.subMeshEntity);
+						auto& transComp = grp.get<TransformComponent>(cmd.subMeshEntity);//scene->registry().get<TransformComponent>(cmd.subMeshEntity);
 						push.modelToWorld = scene->transformSystem().modelTransforms()[transComp.dataIndex];
 						vkCmdPushConstants(frame.cmdBuffer, pipelineLayouts[matBase->pipelineLayoutId], VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
 										   0, sizeof(BaseMatPush), &push);

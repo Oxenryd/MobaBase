@@ -40,7 +40,7 @@ public:
 
         m_go1 = gameObjectSystem().createGameObject<GameObject>("MerryGoRound");
         
-        size_t numOfObjects = 4096 * 64;
+        size_t numOfObjects = 1024;//4096 * 64;
         m_goList.reserve(numOfObjects);
         auto step = MMath::fTAU / numOfObjects;
         const std::string pathObject = std::format("{}{}", ASSETS_DIR, "Sphere/sphere.obj");
@@ -188,6 +188,7 @@ public:
         auto children = merryTrans.getChildrenEntities();
         merryTrans.rotate(glm::vec3{ 0.0f, 0.5f, 1.0f } * Timing::deltaTimeF());
 
+        //auto grp = m_reg.group<TransformComponent>();
         MWork::for_loop(0, children.size(), 16,
                                 [&](std::size_t i) {
 

@@ -204,14 +204,14 @@ struct BaseVSIn
 struct BasePSIn
 {
     [[vk::location(0)]] float4 pos : SV_Position;
-    [[vk::location(1)]] float3 localPos : TEXCOORD0;
-    [[vk::location(3)]] float3 worldPos : TEXCOORD1;
-    [[vk::location(4)]] float3 normal : NORMAL;
-    [[vk::location(5)]] float3 tangent : TANGENT;
-    [[vk::location(6)]] float3 binormal : BINORMAL;
-    [[vk::location(7)]] float3 localNormal : TEXCOORD2;
-    [[vk::location(8)]] float2 texCoord : TEX;
-    [[vk::location(9)]] uint instanceID : TEXCOORD3;
+    //[[vk::location(1)]] float3 localPos : TEXCOORD0;
+    [[vk::location(1)]] float3 worldPos : TEXCOORD0;
+    [[vk::location(2)]] float3 normal : NORMAL;
+    [[vk::location(3)]] float3 tangent : TANGENT;
+    [[vk::location(4)]] float3 binormal : BINORMAL;
+    //[[vk::location(7)]] float3 localNormal : TEXCOORD2;
+    [[vk::location(5)]] float2 texCoord : TEX;
+    [[vk::location(6)]] uint instanceID : TEXCOORD1;
 };
 
 

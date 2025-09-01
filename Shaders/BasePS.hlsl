@@ -13,9 +13,7 @@ float4 main(BasePSIn input) : SV_Target
 {
     float2 fixedTexUV = float2(input.texCoord.x, 1.0 - input.texCoord.y);
 
-    
-    //return float4(1.0, 0.0, 0.0, 1.0) + RetainGlobals();
-    
+        
     uint matIndex = basePush.flags & INSTANCE_FLAG
         ? instanceData[input.instanceID].matInstanceIndex
         : basePush.matInstanceIndex != UINT_INVALID
@@ -52,9 +50,9 @@ float4 main(BasePSIn input) : SV_Target
     float3 tangentNormal = normalize(normalSample * 2.0 - 1.0);
 
     // Build tangent-to-world matrix (assuming your tangent/binormal are world space)
-    float3 T = normalize(input.tangent);
-    float3 B = normalize(input.binormal);
-    float3 N_world = normalize(input.normal);
+    float3 T = input.tangent;
+    float3 B = input.binormal;
+    float3 N_world = input.normal;
     //N_world.x = -N_world.x;
 
     // If you need to handle flipped tangent space (common in some assets):

@@ -212,7 +212,7 @@ uint32_t DualBVH::buildRecursive(uint32_t* primitiveIds, uint32_t primCount, uin
      node.setLeaf(false);
      node.splitAxis = bestAxis;
      static const uint32_t maxThreadDepthLevel = static_cast<uint32_t>(std::floor(std::log2(NUM_BUILD_THREADS)));
-     if (depth < maxThreadDepthLevel) {
+     if (depth < maxThreadDepthLevel && nodes[index].size() / NUM_BUILD_THREADS >= NUM_BUILD_THREADS) {
 
          auto idL = _getNextThreadId();
          //workerPrimsTemp[idL].resize(leftPrims.size());
@@ -583,11 +583,13 @@ void DualBVH::frustumCullWithOcclusion(
     frontier[frameIndex].reserve(1024);
     frontier[frameIndex].clear();
 
-    static std::array<Job, 256> stack[2];
+    static constexpr size_t stackSize = 256;
+
+    static std::array<Job, stackSize> stack[2];
     size_t sp = 0;
     stack[frameIndex][sp++] = { rootIndex[frameIndex] , 0xf3, 1 };
 
-    static constexpr size_t targetDepth = 3;
+    size_t targetDepth = std::min(nodes[frameIndex].size() / NUM_RUN_THREADS, 3ull);
     while (sp) {
         Job j = stack[frameIndex][--sp];
 
@@ -622,7 +624,8 @@ void DualBVH::frustumCullWithOcclusion(
 
     static std::atomic<uint32_t> tIndex[2];
     tIndex[frameIndex].store(0, std::memory_order_release);
-    MWork::for_loop(0, frontier[frameIndex].size(), T,
+    auto threadsToStart = std::clamp( std::min(T, std::min(frontier[frameIndex].size() / T, 1ull)), 1ull, T);
+    MWork::for_loop(0, frontier[frameIndex].size(), threadsToStart,
                     [&](size_t i) {
 
                         auto thisTIndex = tIndex[frameIndex].fetch_add(1, std::memory_order_acq_rel);
@@ -790,7 +793,7 @@ void DualBVH::frustumCullWithOcclusion(
     result.visibleEntities.clear();
     size_t totalVis = 0;
     size_t totalActiveOcc = 0;
-    for (size_t i = 0; i < T; ++i) {       
+    for (size_t i = 0; i < threadsToStart; ++i) {       
         auto& v = tlsResults[frameIndex][i];
         totalVis += v.visibleEntities.size();
         totalActiveOcc += v.activeOccluders.size();

@@ -11,9 +11,13 @@
 
 BasePSIn main(BaseVSIn input)
 {    
-    float4x4 modelToWorld = basePush.flags & INSTANCE_FLAG
-        ? modelMatrices[instanceData[input.instanceID].matrixIndex].modelToWorld
-        : basePush.modelToWorld;
+    //float4x4 modelToWorld = basePush.flags & INSTANCE_FLAG
+    //    ? modelMatrices[instanceData[input.instanceID].matrixIndex].modelToWorld
+    //    : basePush.modelToWorld;
+    
+    uint isInstance = (uint)(basePush.flags & INSTANCE_FLAG);
+    float4x4 modelToWorld = isInstance * modelMatrices[instanceData[input.instanceID].matrixIndex].modelToWorld +
+        (1 - isInstance) * basePush.modelToWorld;
     
     BasePSIn output = (BasePSIn) 0;
         
@@ -25,14 +29,14 @@ BasePSIn main(BaseVSIn input)
     matrix MVP = mul(projection, MV);
 	
 	// Perform transformations and send to output
-    output.localPos = input.pos + RetainGlobals().aaa;
+    //output.localPos = input.pos + RetainGlobals().aaa;
 	
     output.pos = mul(MVP, float4(input.pos, 1));
     output.worldPos = mul(modelToWorld, float4(input.pos, 1.0)).xyz;
     output.normal = normalize(mul(modelToWorld, float4(input.normal, 0)).xyz);
     output.tangent = normalize(mul(modelToWorld, float4(input.tangent, 0)).xyz);
     output.binormal = normalize(mul(modelToWorld, float4(input.binormal, 0)).xyz);
-    output.localNormal = input.normal;
+    //output.localNormal = input.normal;
     output.texCoord = input.texCoord;
     output.instanceID = input.instanceID;
 		

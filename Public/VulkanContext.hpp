@@ -467,7 +467,8 @@ private:
 	bool m_pendingExit = false;
 	uint32_t m_lastDrawcallCount = 0;
 	uint32_t m_lastPipelineSwitches = 0;
-	std::thread m_renderThread;
+	std::thread* m_renderThread;
+	std::binary_semaphore* m_threadSemas[VULKAN_FRAMES_IN_FLIGHT];
 	FrameArena*  m_mapArenas[VULKAN_FRAMES_IN_FLIGHT];
 	std::vector<std::vector<MeshDrawCommand>> drawCmds[VULKAN_FRAMES_IN_FLIGHT];
 	std::vector<robin_hood::unordered_flat_set<uint32_t>> submeshKeysWithMultipleInstances[VULKAN_FRAMES_IN_FLIGHT];
@@ -545,53 +546,9 @@ private:
 	}
 #endif
 
-	/*VkDescriptorPool* _checkDefaultBinding(size_t set, const BoundDescriptorKey& key, size_t& outIndex) {
-		if (set >= VULKAN_GLOBAL_DESCRIPTOR_SETS)
-			return nullptr;
+	INLINE void _renderThreadMethod() {
 
-		switch (set) {
-
-			case 0:
-			{
-				for (auto& resource : key.bindings) {
-					switch (resource.binding) {
-						default: return nullptr;
-
-						case MAT_BASE_MAT_INSTANCES_INDICES_BIND:
-							outIndex = DESCPOOL_INSTANCE_INDEX;
-							return &descriptorPoolsDefault[DESCPOOL_INSTANCE_INDEX];
-
-						case MAT_MODELMATRICES_BIND:
-						case MAT_CAMERADATA_BIND:
-							outIndex = DESCPOOL_BASE_INDEX;
-							return &descriptorPoolsDefault[DESCPOOL_BASE_INDEX];
-
-					} break;
-				}
-			} break;
-
-			case 1:
-			{
-				for (auto& resource : key.bindings) {
-					switch (resource.binding) {
-						default: return nullptr;
-
-						case MAT_SAMPLER_BIND:
-							outIndex = DESCPOOL_BASE_INDEX;
-							return &descriptorPoolsDefault[DESCPOOL_BASE_INDEX];
-
-						case MAT_BASE_MAT_INSTANCES_BIND:
-							outIndex = DESCPOOL_INSTANCE_INDEX;
-							return &descriptorPoolsDefault[DESCPOOL_INSTANCE_INDEX];
-
-						case MAT_TEXTURES_BIND:
-							outIndex = DESCPOOL_TEXTURES_INDEX;
-							return &descriptorPoolsDefault[DESCPOOL_TEXTURES_INDEX];
-					} break;
-				}
-			} break;
-		}
-	}*/
+	}
 
 	VkDescriptorPool _makePool(VkDevice device, const PoolSpec& spec) {
 		VkDescriptorPoolCreateInfo ci{ VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO };
@@ -3093,6 +3050,7 @@ public:
 
 
 	void draw(const DrawContext& rendCtx);
+
 
 	inline void notifyViewResized(void* ctx, uint16_t width, uint16_t height) {
 		pendingResize = true;
