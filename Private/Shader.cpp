@@ -22,6 +22,7 @@ ErrorCode Shader::reflect() {
         input = std::get<3>(result);
         output = std::get<4>(result);
     } catch (std::exception& e) {
+        LOGLINE(LogType::Error, LogMod::Rendering, std::format("Reflection error: {}", e.what()));
         return ErrorCode::SHADER_REFLECTION_ERROR;
     }
     return ErrorCode::OK;
@@ -56,7 +57,7 @@ std::tuple<
     size_t iaOffset = 0;
     for (auto& var : inputVars) {
         ShaderIO::Attribute attrib{};
-        attrib.location = var->location;
+        attrib.location = static_cast<uint8_t>(var->location);
         attrib.type = parseReflectedTypeDesc(var->type_description, nullptr, 0);
         attrib.offset = static_cast<uint16_t>(iaOffset);
 
@@ -82,9 +83,9 @@ std::tuple<
 
             auto semNameIndex = RenderManager::getInstance()->getParamNameIndex(lastWord);
             if (semNameIndex == SIZE_INVALID) {
-                attrib.semanticNameIndex = RenderManager::getInstance()->registerParamName(lastWord);
+                attrib.semanticNameIndex = static_cast<uint32_t>(RenderManager::getInstance()->registerParamName(lastWord));
             } else {
-                attrib.semanticNameIndex = semNameIndex;
+                attrib.semanticNameIndex = static_cast<uint32_t>(semNameIndex);
             }
         }
 
@@ -98,7 +99,7 @@ std::tuple<
     ShaderIO shaderOutput;
     for (auto& var : outputVars) {
         ShaderIO::Attribute attrib{};
-        attrib.location = var->location;
+        attrib.location = static_cast<uint8_t>(var->location);
         attrib.type = parseReflectedTypeDesc(var->type_description, nullptr, 0);
 
         if (var->name) {
@@ -108,9 +109,9 @@ std::tuple<
 
             auto semNameIndex = RenderManager::getInstance()->getParamNameIndex(lastWord);
             if (semNameIndex == SIZE_INVALID) {
-                attrib.semanticNameIndex = RenderManager::getInstance()->registerParamName(lastWord);
+                attrib.semanticNameIndex = static_cast<uint32_t>(RenderManager::getInstance()->registerParamName(lastWord));
             } else {
-                attrib.semanticNameIndex = semNameIndex;
+                attrib.semanticNameIndex = static_cast<uint32_t>(semNameIndex);
             }
         }
 
@@ -150,41 +151,41 @@ std::tuple<
         ShaderPushConstant pcParam;
         auto nameIndex = RenderManager::getInstance()->getParamNameIndex(pc->name);
         if (nameIndex == SIZE_INVALID) {
-            pcParam.base.nameIndex = RenderManager::getInstance()->registerParamName(pc->name);
+            pcParam.base.nameIndex = static_cast<uint32_t>(RenderManager::getInstance()->registerParamName(pc->name));
         } else {
-            pcParam.base.nameIndex = nameIndex;
+            pcParam.base.nameIndex = static_cast<uint32_t>(nameIndex);
         }
 
         if (pc->member_count == 0) { // single variable
 
-            pcParam.base.size = pc->padded_size;
-            pcParam.base.offset = pc->offset;
+            pcParam.base.size = static_cast<uint8_t>(pc->padded_size);
+            pcParam.base.offset = static_cast<uint16_t>(pc->offset);
             pcParam.base.type = TypeBase::PushConst;
             ShaderPushConstant::Attribute attrib{};
-            attrib.offset = pc->offset;
-            attrib.size = pc->padded_size;
+            attrib.offset = static_cast<uint16_t>(pc->offset);
+            attrib.size = static_cast<uint16_t>(pc->padded_size);
             attrib.type = parseReflectedTypeDesc(pc->type_description, nullptr, 0);
             attrib.nameIndex = pcParam.base.nameIndex;
             pcParam.members.push_back(attrib);
             consts.push_back(pcParam);
         } else {
-            pcParam.base.offset = pc->offset;
-            pcParam.base.size = pc->size;
+            pcParam.base.offset = static_cast<uint16_t>(pc->offset);
+            pcParam.base.size = static_cast<uint16_t>(pc->size);
             pcParam.stageFlags = stage;
             pcParam.base.type = TypeBase::PushConstStruct;
 
             for (uint32_t i = 0; i < pc->member_count; ++i) {
                 auto& member = pc->members[i];
                 ShaderPushConstant::Attribute attrib{};
-                attrib.offset = member.offset;
-                attrib.size = member.padded_size;
+                attrib.offset = static_cast<uint16_t>(member.offset);
+                attrib.size = static_cast<uint16_t>(member.padded_size);
                 attrib.type = parseReflectedTypeDesc(member.type_description, nullptr, 0);
 
-                auto nameIndex = RenderManager::getInstance()->getParamNameIndex(member.name);
-                if (nameIndex == SIZE_INVALID) {
-                    attrib.nameIndex = RenderManager::getInstance()->registerParamName(member.name);
+                auto nameIndex2 = RenderManager::getInstance()->getParamNameIndex(member.name);
+                if (nameIndex2 == SIZE_INVALID) {
+                    attrib.nameIndex = static_cast<uint32_t>(RenderManager::getInstance()->registerParamName(member.name));
                 } else {
-                    attrib.nameIndex = nameIndex;
+                    attrib.nameIndex = static_cast<uint32_t>(nameIndex2);
                 }
                 pcParam.members.push_back(attrib);
             }

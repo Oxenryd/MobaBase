@@ -32,7 +32,7 @@ private:
 	ArenaVector<std::vector<entt::entity>> m_childrenOf;
 
 	// Temps
-	TransformGroup* m_groupPtr;
+	TransformGroup* m_groupPtr = nullptr;
 
 	// RenderSync
 	//bool m_systemDirty = false;
@@ -91,16 +91,16 @@ private:
 				const entt::entity e = entities[i + j];
 				//if (!this_->m_reg->all_of<EnabledTag>(e)) continue;
 
-				auto& t = this_->m_groupPtr->get<TransformComponent>(e);
+				auto& t1 = this_->m_groupPtr->get<TransformComponent>(e);
 				const entt::entity p = this_->m_parentOf[entt::to_integral(e)];
 
 				if (p != entt::null) {
 					const auto& pt = this_->m_groupPtr->get<TransformComponent>(p);
-					if (objectState_is_dirty(pt.state.value())) t.state.setByEnum(ObjectState::ParentMovedThisFrame);
-					this_->m_modelTransforms[t.dataIndex] = MMath::matrix_multiply_avx2(
+					if (objectState_is_dirty(pt.state.value())) t1.state.setByEnum(ObjectState::ParentMovedThisFrame);
+					this_->m_modelTransforms[t1.dataIndex] = MMath::matrix_multiply_avx2(
 						this_->m_modelTransforms[pt.dataIndex], local_matrices[j]);
 				} else {
-					this_->m_modelTransforms[t.dataIndex] = local_matrices[j];
+					this_->m_modelTransforms[t1.dataIndex] = local_matrices[j];
 				}
 
 				// Always update bounds
@@ -110,10 +110,10 @@ private:
 				//		localAABB.transformed_noPerspective(this_->m_modelTransforms[t.dataIndex]);
 				//}
 
-				if (objectState_is_dirty(t.state.value())) t.state.setByEnum(ObjectState::MovedThisFrame);
+				if (objectState_is_dirty(t1.state.value())) t1.state.setByEnum(ObjectState::MovedThisFrame);
 
 				// Flags
-				t.state.clearByEnum(
+				t1.state.clearByEnum(
 					(ObjectState)(
 						static_cast<ObjectStateType>(ObjectState::DirtyTransform) |
 						static_cast<ObjectStateType>(ObjectState::TranslationDirty) |
@@ -127,11 +127,11 @@ private:
 				if (kids.size() >= 4) {
 					auto tRange = this_->_setupWorkerThreadRange(kids.data(), kids.size());
 					if (tRange.count > 0) {
-						for (size_t t = tRange.start(); t < tRange.end(); ++t) {
-							this_->m_startSemas[t]->release();
+						for (size_t t2 = tRange.start(); t2 < tRange.end(); ++t2) {
+							this_->m_startSemas[t2]->release();
 						}
-						for (size_t t = tRange.start(); t < tRange.end(); ++t) {
-							this_->m_doneSemas[t]->acquire();
+						for (size_t t2 = tRange.start(); t2 < tRange.end(); ++t2) {
+							this_->m_doneSemas[t2]->acquire();
 						}
 					} else {
 						_brute_update_transform_batch_avx2(kids, this_, 0, kids.size());
@@ -201,11 +201,11 @@ private:
 		if (kids.size() >= 4) {
 			auto tRange = this_->_setupWorkerThreadRange(kids.data(), kids.size());
 			if (tRange.count > 0) {
-				for (size_t t = tRange.start(); t < tRange.end(); ++t) {
-					this_->m_startSemas[t]->release();
+				for (size_t t2 = tRange.start(); t2 < tRange.end(); ++t2) {
+					this_->m_startSemas[t2]->release();
 				}
-				for (size_t t = tRange.start(); t < tRange.end(); ++t) {
-					this_->m_doneSemas[t]->acquire();
+				for (size_t t2 = tRange.start(); t2 < tRange.end(); ++t2) {
+					this_->m_doneSemas[t2]->acquire();
 				}
 			} else {
 				_brute_update_transform_batch_avx2(kids, this_, 0, kids.size());
@@ -503,9 +503,9 @@ private:
 									   (unsigned int)0,
 									   (unsigned int)TRANSFORM_THREADS_MAX - curThreads);
 
-		uint8_t expected = curThreads + availWorkers;
-		m_curNumWorkers.fetch_add(availWorkers, std::memory_order_acq_rel);
-		if (!m_curNumWorkers.compare_exchange_strong(expected, curThreads + availWorkers)) {
+		uint8_t expected = static_cast<uint8_t>(curThreads + availWorkers);
+		m_curNumWorkers.fetch_add(static_cast<uint8_t>(availWorkers), std::memory_order_acq_rel);
+		if (!m_curNumWorkers.compare_exchange_strong(expected, static_cast<uint8_t>(curThreads + availWorkers))) {
 			if (expected >= TRANSFORM_THREADS_MAX)
 				return { 0, 0 };
 		}
@@ -702,7 +702,7 @@ public:
 		
 		uint32_t depth = 0;
 		for (auto root : m_roots) {			
-			logTransformTag(root, 0);
+			logTransformTag(root, depth);
 		}
 		Log::logLine(LogType::Success, LogMod::Engine, "Done.");
 	}

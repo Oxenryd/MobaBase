@@ -252,6 +252,12 @@ target_include_directories(MobaBase PRIVATE
 	${boost_sort_SOURCE_DIR}/include
 )
 
+target_compile_options(MobaBase PRIVATE
+  $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wall -Wextra -Wpedantic>
+  $<$<CXX_COMPILER_ID:MSVC>:/W4 /wd4201 /wd4127 /wd4100 /wd4458 /wd4505 /wd4324 /wd6262>
+)
+
+
 # DEFINES ----------------------------------------------------------------------------
 target_compile_definitions(MobaBase PRIVATE 
 	GLFW_INCLUDE_VULKAN
@@ -354,6 +360,7 @@ target_compile_definitions(MobaBase PRIVATE
 	TRANSFORM_THREADS_MAX=16
 	WORK_QUEUE_CAP=1024
 	PROFILE_PATH=\"${CMAKE_SOURCE_DIR}/trace.json\"
+	INPUT_RESO_SCALE_FACTOR=0.0001f
 
 	# Directories
 	SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/\"

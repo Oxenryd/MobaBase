@@ -11,7 +11,7 @@
 
 ErrorCode SceneRenderSystem::loadModel(const std::string& filename, MeshComponent* outMeshInfo) {
 	ErrorCode ec{};
-	uint32_t startTexIndex = RenderManager::getInstance()->textures().size();
+	uint32_t startTexIndex = static_cast<uint32_t>(RenderManager::getInstance()->textures().size());
 	MeshComponent mInfo{};
 	auto it = m_pathMeshMap.find(filename);
 	if (it != m_pathMeshMap.end()) {
@@ -22,7 +22,7 @@ ErrorCode SceneRenderSystem::loadModel(const std::string& filename, MeshComponen
 										 m_vertices, m_subMeshes, m_indices,
 										 *RenderManager::getInstance(), &mInfo);
 
-		uint32_t endTexIndex = RenderManager::getInstance()->textures().size();
+		uint32_t endTexIndex = static_cast<uint32_t>(RenderManager::getInstance()->textures().size());
 
 		if (!EC_FAILED(ec)) {
 
@@ -80,7 +80,7 @@ uint32_t SceneRenderSystem::addCamera(CameraData* initData) {
 		this_.m_viewDirty = true;
 		};
 
-	return index;
+	return static_cast<uint32_t>(index);
 }
 
 ErrorCode SceneRenderSystem::createMeshFromModel(const std::string& path, Mesh* outMesh, const entt::entity parent) {
@@ -100,13 +100,13 @@ ErrorCode SceneRenderSystem::createMeshFromModel(const std::string& path, Mesh* 
 			}
 		} 
 
-		float maxVol = 0.0f;
-		entt::entity biggestSubEntity = entt::null;
+		//float maxVol = 0.0f;
+		//entt::entity biggestSubEntity = entt::null;
 		for (size_t i = meshComp.subMeshOffset; i < meshComp.subMeshOffset + meshComp.subMeshCount; ++i) {
 			auto& subMesh = m_subMeshes[i];
 			subMesh.entity = parent != entt::null ? parent : m_reg->create();
 			//subMesh.parent = parent;
-			auto& newSubMeshComp = m_reg->emplace<SubMeshComponent>(subMesh.entity, SubMeshComponent{ static_cast<uint32_t>(i) });
+			[[maybe_unused]] auto& newSubMeshComp = m_reg->emplace<SubMeshComponent>(subMesh.entity, SubMeshComponent{ static_cast<uint32_t>(i) });
 			
 			auto subVerts = std::span<BaseVSIn>(&m_vertices[subMesh.vertexOffset], subMesh.vertexCount);
 

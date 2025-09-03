@@ -112,7 +112,7 @@ public:
 			dCmd.priority = prio;
 			dCmd.instanceIndex = subMesh.instanceIndex;
 			dCmd.sceneIndex = m_sceneIndex;
-			dCmd.submeshOffset = mesh.subMeshOffset + i;
+			dCmd.submeshOffset = static_cast<uint32_t>(mesh.subMeshOffset + i);
 			dCmd.materialIndex = subMesh.materialIndex;
 			s_threadPresistentDrawBuffers[m_sceneIndex].push_back(dCmd);
 		}

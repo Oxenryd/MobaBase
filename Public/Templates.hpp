@@ -19,9 +19,9 @@ private:
     std::vector<float> m_radSpeeds;
 
 public:
-    GameScene(size_t arenaSize, uint32_t sceneIndex)
+    GameScene(size_t arenaSize, uint16_t sceneIndex)
         : Scene<GameScene>{ arenaSize, sceneIndex} {}
-    static SceneBase* createDefault(size_t arenaSize, uint32_t index, void* arg) {
+    static SceneBase* createDefault(size_t arenaSize, uint16_t index, void* arg) {
         return new GameScene{ arenaSize, index};
     }
 
@@ -36,14 +36,14 @@ public:
         auto dirLight = LightFactory::Directional(glm::vec3{-1, -0.85, -0.25});
         dirLight.positionVS = glm::vec3{0, 20, 0};
         m_skyLight = m_reg.create();
-        auto& lightRef = lightSystem().registerLight(dirLight, m_skyLight);
+        [[maybe_unused]] auto& lightRef = lightSystem().registerLight(dirLight, m_skyLight);
 
         m_go1 = gameObjectSystem().createGameObject<GameObject>("MerryGoRound");
         
-        size_t numOfObjects = 4096;//4096 * 64;
+        size_t numOfObjects = 4096 * 64;
         m_goList.reserve(numOfObjects);
         auto step = MMath::fTAU / numOfObjects;
-        const std::string pathObject = std::format("{}{}", ASSETS_DIR, "Sphere/sphere.obj");
+        const std::string pathObject = std::format("{}{}", ASSETS_DIR, "Cube/cube.obj");
         for (size_t i = 0; i < numOfObjects; ++i) {
             m_goList.emplace_back(gameObjectSystem().createGameObject<GameObject>(std::format("Sphere_{}", i)));
             Mesh objectMesh{};
@@ -97,7 +97,7 @@ public:
         //modelMesh3.getTransform().modifyPosition() = { -12, 0, 0 };
         //modelMesh2.getTransform().modifyPosition() = { -12, 0, 0 };
 
-        auto& reg = registry();
+        //auto& reg = registry();
 
         Engine::getInstance()->getInputManager()->onKeyHold.subscribe( [this](KeyCode code) -> void
                        {
@@ -130,25 +130,25 @@ public:
                                           case KeyCode::ArrowLeft:
                                           {
                                               auto sTrans = Transform{&registry(), m_go2};
-                                              auto& pos = sTrans.modifyScale() -= glm::vec3{ 1,0,0 };
+                                              [[maybe_unused]] auto& pos = sTrans.modifyScale() -= glm::vec3{ 1,0,0 };
                                              
                                           } break;
                                           case KeyCode::ArrowRight:
                                           {
                                               auto sTrans = Transform{ &registry(), m_go2 };
-                                              auto& pos = sTrans.modifyScale() += glm::vec3{ 1,0,0 };
+                                              [[maybe_unused]] auto& pos = sTrans.modifyScale() += glm::vec3{ 1,0,0 };
                                     
                                           } break;
                                           case KeyCode::ArrowUp:
                                           {
                                               auto sTrans = Transform{ &registry(), m_go2 };
-                                              auto& pos = sTrans.modifyScale() += glm::vec3{ 0,1,0 };
+                                              [[maybe_unused]] auto& pos = sTrans.modifyScale() += glm::vec3{ 0,1,0 };
 
                                           } break;
                                           case KeyCode::ArrowDown:
                                           {
                                               auto sTrans = Transform{ &registry(), m_go2 };
-                                              auto& pos = sTrans.modifyScale() -= glm::vec3{ 0,1,0 };
+                                              [[maybe_unused]] auto& pos = sTrans.modifyScale() -= glm::vec3{ 0,1,0 };
 
                                           } break;
 
@@ -174,8 +174,10 @@ public:
             onMouseRightHold.subscribe([this](MouseState state) -> void 
                                        {
             auto cam = Camera::getCamera(m_sceneIndex, m_camIndex);
-            auto dt = Timing::deltaTimeF();
-            cam->rotateLocal({ -(float)state.lastPositionDelta.x * dt, -(float)state.lastPositionDelta.y * dt, 0.0f });
+            float dt = Timing::deltaTimeF();
+            auto height = Engine::getInstance()->getWndSurface()->height;
+            auto width = Engine::getInstance()->getWndSurface()->width;
+            cam->rotateLocal(Input::scaledMouseMovementVec3(state, dt, 0.1f, {width, height}));
                                        });
 
 
@@ -183,7 +185,7 @@ public:
         //transformSystem().printHierarchy();
     }
 
-    void update(float dt) {
+    void update(double dt) {
 
         m_time += Timing::deltaTimeF();
 
@@ -215,7 +217,7 @@ public:
         }
     }
 
-    void lateUpdate(float dt) {
+    void lateUpdate(double dt) {
         //setUnload();
     }
 

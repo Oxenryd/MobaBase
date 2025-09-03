@@ -35,11 +35,11 @@ struct ShaderBinding
 {
     std::string name;
     SpvReflectTypeDescription spvTypeDesc;
-    SpvReflectResourceType spvResourceType;
-    uint32_t set;
-    uint32_t binding;
-    VkDescriptorType descriptorType;
-    VkShaderStageFlags stageFlags;
+    SpvReflectResourceType spvResourceType{};
+    uint32_t set{};
+    uint32_t binding{};
+    VkDescriptorType descriptorType{};
+    VkShaderStageFlags stageFlags{};
     uint32_t count = 1;
     uint32_t offset = 0;
     std::vector<ShaderBinding> members;
@@ -50,10 +50,10 @@ struct ShaderPushConstant
 {
     struct Attribute
     {
-        uint32_t nameIndex;
+        uint32_t nameIndex = UINT32_INVALID;
         uint16_t offset = UINT16_INVALID;
-        uint16_t size;
-        TypeBase type;
+        uint16_t size{};
+        TypeBase type{};
         std::string& name() const;
     };
     Attribute base;

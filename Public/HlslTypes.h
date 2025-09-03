@@ -397,6 +397,8 @@ struct CameraData
 			farPlane
 		);
 		proj[1][1] *= -1;
+		
+		invProj = 1.0f / proj;
 
 		clustersX = VULKAN_LIGHT_CLUSTERS_X;
 		clustersY = VULKAN_LIGHT_CLUSTERS_Y;
@@ -437,13 +439,13 @@ struct CameraData
 	float farPlane;
 	float aspectRatio;
 
-	uint32_t numLights;
-	uint32_t clustersX, clustersY, clustersZ;
+	uint32_t numLights{};
+	uint32_t clustersX{}, clustersY{}, clustersZ{};
 
-	float clusterNearK;
-	float clusterLogBase;
-	float _pad0;
-	float _pad1;
+	float clusterNearK{};
+	float clusterLogBase{};
+	float _pad0{};
+	float _pad1{};
 };
 
 struct alignas (16) SpriteInstance

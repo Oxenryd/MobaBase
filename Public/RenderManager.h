@@ -102,7 +102,6 @@ public:
 
 
 	INLINE std::span<ColorRGBA> getPixels(const Texture2D& texture) {
-		size_t end = texture.texelOffset + texture.texelCount();
 		return std::span<ColorRGBA>{ &m_texels[texture.texelOffset], texture.texelCount() };
 	}
 	INLINE std::vector<ColorRGBA>& texels() { return m_texels; }
@@ -142,7 +141,7 @@ public:
 		auto index = m_tex2ds.size();
 		m_tex2ds.push_back(texture);
 		auto& newTex = m_tex2ds.back();
-		newTex.textureIndex = index;
+		newTex.textureIndex = static_cast<uint32_t>(index);
 		auto nameIt = m_texIndexNameMap.find(index);
 		if (nameIt == m_texIndexNameMap.end()) {
 			m_texIndexNameMap[index] = name;

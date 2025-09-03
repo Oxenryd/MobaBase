@@ -52,7 +52,7 @@ void __cdecl MyDumpClient(void* pUserData, size_t size) {
     long requestNumber;
     char* fileName = nullptr;
     int lineNumber;
-    int blockType;
+    //int blockType;
 
     if (_CrtIsValidHeapPointer(pUserData) &&
         _CrtIsMemoryBlock(pUserData, (unsigned int)size, &requestNumber, &fileName, &lineNumber)) {

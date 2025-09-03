@@ -105,12 +105,12 @@ struct BoundedInstanceData
 	BoundedInstanceData() = default;
 	BoundedInstanceData(const BoundedInstanceData& other) :
 		instances{ other.instances.get_allocator() } {
-		instances = std::move(other.instances);
+		instances = other.instances;
 	}
 	BoundedInstanceData(Arena* arena) :
 		instances{ ArenaAllocator<InstanceData>{arena} } {}
 	ArenaVector<InstanceData> instances;
-	AABB bounds;
+	//AABB bounds;
 };
 
 struct SceneInstancePair
@@ -467,8 +467,8 @@ private:
 	bool m_pendingExit = false;
 	uint32_t m_lastDrawcallCount = 0;
 	uint32_t m_lastPipelineSwitches = 0;
-	std::thread* m_renderThread;
-	std::binary_semaphore* m_threadSemas[VULKAN_FRAMES_IN_FLIGHT];
+	std::thread* m_renderThread = nullptr;
+	std::binary_semaphore* m_threadSemas[VULKAN_FRAMES_IN_FLIGHT] = { nullptr, nullptr };
 	FrameArena*  m_mapArenas[VULKAN_FRAMES_IN_FLIGHT];
 	std::vector<std::vector<MeshDrawCommand>> drawCmds[VULKAN_FRAMES_IN_FLIGHT];
 	std::vector<robin_hood::unordered_flat_set<uint32_t>> submeshKeysWithMultipleInstances[VULKAN_FRAMES_IN_FLIGHT];
@@ -488,7 +488,7 @@ private:
 	INLINE MeshDrawCommand subMeshEntity_to_drawCommand(SceneBase* scene, ArenaRegistry& reg, entt::entity entity);
 
 	QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device, VkSurfaceKHR surface) {
-		QueueFamilyIndices indices;
+		QueueFamilyIndices indices_;
 
 		uint32_t queueFamilyCount = 0;
 		vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, nullptr);
@@ -498,22 +498,22 @@ private:
 
 		for (uint32_t i = 0; i < queueFamilyCount; i++) {
 			if (queueFamilies[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) {
-				indices.graphicsFamily = i;
+				indices_.graphicsFamily = i;
 			}
 
 			VkBool32 presentSupport = false;
 			vkGetPhysicalDeviceSurfaceSupportKHR(device, i, surface, &presentSupport);
 
 			if (presentSupport) {
-				indices.presentFamily = i;
+				indices_.presentFamily = i;
 			}
 
-			if (indices.isComplete()) {
+			if (indices_.isComplete()) {
 				break;
 			}
 		}
 
-		return indices;
+		return indices_;
 	};
 
 
@@ -967,7 +967,7 @@ public:
 	std::vector<VkImageView> depthStencilViews;
 	std::vector<VkImageView> swapchainImageViews;
 	std::vector<VkDeviceMemory> depthStencilMemories;
-	VkSurfaceFormatKHR surfaceFormat;
+	//VkSurfaceFormatKHR surfaceFormat;
 	VkFormat swapchainFormat;
 	VkExtent2D swapchainExtent;
 	VkDebugUtilsMessengerEXT debugMessenger = VK_NULL_HANDLE;
@@ -995,7 +995,7 @@ public:
 
 
 	// Staging buffer
-	size_t matStageCurrentSize[VULKAN_FRAMES_IN_FLIGHT];// = VULKAN_MATSTAGEBUF_SIZE;
+	size_t matStageCurrentSize[VULKAN_FRAMES_IN_FLIGHT] = { 0,0 };// = VULKAN_MATSTAGEBUF_SIZE;
 	void* matStagingPtr[VULKAN_FRAMES_IN_FLIGHT] = { nullptr, nullptr };
 	VkBuffer matStagingBuf[VULKAN_FRAMES_IN_FLIGHT] = { nullptr, nullptr };
 	VkDeviceMemory matStagingMem[VULKAN_FRAMES_IN_FLIGHT] = { nullptr, nullptr };
@@ -1053,7 +1053,7 @@ public:
 			matData_baseMatInstances.push_back(*matInstance);
 		else
 			matData_baseMatInstances.push_back({});
-		return index;
+		return static_cast<uint32_t>(index);
 	}
 
 	INLINE BaseMaterialInstance* getBaseMaterialInstanceData(const uint32_t index) {
@@ -1097,7 +1097,6 @@ public:
 		swapchain{nullptr},
 		swapchainFormat{},
 		swapchainExtent{},
-		surfaceFormat{},
 		presentMode{},
 		renderPassIndex{},
 		camData{},
@@ -1116,7 +1115,7 @@ public:
 	INLINE VkResult _appendStageBuffer(uint8_t fit, size_t requestedSize ) {
 		VkResult vkResult{};
 		if (matStageCurrentSize[fit] >= requestedSize)
-			return VK_SUCCESS;
+			return vkResult;
 
 
 
@@ -1174,7 +1173,7 @@ public:
 
 		matStageCurrentSize[fit] = newSize;
 
-		return VK_SUCCESS;
+		return vkResult;
 	}
 	
 
@@ -1433,7 +1432,7 @@ public:
 	}
 
 	inline VkResult setupVertexBuffer() {
-		VkResult vkResult;
+		VkResult vkResult{};
 
 		vertexAttributes[0] = {
 			.location = 0,
@@ -1475,7 +1474,7 @@ public:
 		binding.stride = sizeof(BaseVSIn);
 		binding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
 
-		return VK_SUCCESS;
+		return vkResult;
 	}
 
 	INLINE VkResult createLightClusterPipeline(Shader* const lightCsShader) {
@@ -1974,32 +1973,32 @@ public:
 		return VK_SUCCESS;
 	}
 
-	INLINE VkResult createInstanceGlfw() {
-		VkResult vkResult;
-		LOGLINE_IND(LogType::Info, LogMod::Vulkan, "Creating VkInstance with GLFW... ", 1);
-
-		glfwInitHint(GLFW_ANGLE_PLATFORM_TYPE, GLFW_ANGLE_PLATFORM_TYPE_VULKAN);
-		glfwInitHint(GLFW_WAYLAND_LIBDECOR, GLFW_WAYLAND_PREFER_LIBDECOR);
-		glfwInitHint(GLFW_X11_XCB_VULKAN_SURFACE, GLFW_TRUE);
-#ifndef BUILD_WIN
-		glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_X11);
-		glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_WAYLAND);
-#endif
-
-		if (!glfwInit()) {
-			return (VkResult)ErrorCode::GLFW_UNKNOWN_INIT_ERROR;
-		}
-
-		PFN_vkCreateInstance pfnCreateInstance = (PFN_vkCreateInstance)
-			glfwGetInstanceProcAddress(NULL, "vkCreateInstance");
-
-		PFN_vkCreateDevice pfnCreateDevice = (PFN_vkCreateDevice)
-			glfwGetInstanceProcAddress(m_vkInstance, "vkCreateDevice");
-
-		GLFWwindow* window = glfwCreateWindow(640, 480, "My Title", NULL, NULL);
-
-		return VK_SUCCESS;
-	}
+//	INLINE VkResult createInstanceGlfw() {
+//		VkResult vkResult;
+//		LOGLINE_IND(LogType::Info, LogMod::Vulkan, "Creating VkInstance with GLFW... ", 1);
+//
+//		glfwInitHint(GLFW_ANGLE_PLATFORM_TYPE, GLFW_ANGLE_PLATFORM_TYPE_VULKAN);
+//		glfwInitHint(GLFW_WAYLAND_LIBDECOR, GLFW_WAYLAND_PREFER_LIBDECOR);
+//		glfwInitHint(GLFW_X11_XCB_VULKAN_SURFACE, GLFW_TRUE);
+//#ifndef BUILD_WIN
+//		glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_X11);
+//		glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_WAYLAND);
+//#endif
+//
+//		if (!glfwInit()) {
+//			return (VkResult)ErrorCode::GLFW_UNKNOWN_INIT_ERROR;
+//		}
+//
+//		PFN_vkCreateInstance pfnCreateInstance = (PFN_vkCreateInstance)
+//			glfwGetInstanceProcAddress(NULL, "vkCreateInstance");
+//
+//		PFN_vkCreateDevice pfnCreateDevice = (PFN_vkCreateDevice)
+//			glfwGetInstanceProcAddress(m_vkInstance, "vkCreateDevice");
+//
+//		GLFWwindow* window = glfwCreateWindow(640, 480, "My Title", NULL, NULL);
+//
+//		return VK_SUCCESS;
+//	}
 
 	inline VkResult createInstance() {
 		VkResult vkResult;
@@ -2282,7 +2281,6 @@ public:
 				break;
 			}
 		}
-
 		surfaceFormat = surfaceFormat;
 		swapchainFormat = surfaceFormat.format;
 		swapchainExtent = { surfaceCaps.currentExtent.width, surfaceCaps.currentExtent.height };
@@ -2535,7 +2533,7 @@ public:
 			desc.binding = 0;
 			desc.format = GetVkFormat(attr.type);
 			desc.offset = attr.offset;
-			uint32_t end = attr.offset + SizeOfTypeBase(attr.type);
+			uint32_t end = attr.offset + static_cast<uint32_t>(SizeOfTypeBase(attr.type));
 			vsIaStride = std::max(vsIaStride, end);
 			attributeDescs.push_back(desc);
 		}
@@ -2592,7 +2590,7 @@ public:
 		VkPipelineColorBlendStateCreateInfo colorBlending{};
 		colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
 		colorBlending.logicOpEnable = VK_FALSE;
-		colorBlending.attachmentCount = colorBlends.size();
+		colorBlending.attachmentCount = static_cast<uint32_t>(colorBlends.size());
 		colorBlending.pAttachments = colorBlends.data();
 
 		
@@ -2604,7 +2602,7 @@ public:
 
 			VkPushConstantRange range{};
 			range.offset = param.offset;
-			range.size = param.size;
+			range.size = static_cast<uint32_t>(param.size);
 			range.stageFlags = MatParamStageToVkShaderStageFlagBits(param.stage, param.resourceType);
 			pushConstantRanges.push_back(range);
 		}
@@ -2684,7 +2682,7 @@ public:
 		auto pipelineLayoutIndex = pipelineLayouts.size();
 		auto remakeKey = PipelineKey::create(material);
 
-		material.init(pipelineIndex, pipelineLayoutIndex, descriptorSetsList);
+		material.init(static_cast<uint32_t>(pipelineIndex), static_cast<uint32_t>(pipelineLayoutIndex), descriptorSetsList);
 		pipelines.push_back(graphicsPipeline);
 		pipelineLayouts.push_back(pipelineLayout);
 		pipelineHashIndexMap.insert({ remakeKey, static_cast<uint32_t>(pipelineIndex) });
@@ -3116,20 +3114,20 @@ public:
 		memcpy(data, pixelData, static_cast<size_t>(imageSize));
 		vkUnmapMemory(m_vkDevice, stagingMemory);
 
-		VkImageMemoryBarrier barrier{};
-		barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-		barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-		barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-		barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-		barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-		barrier.image = image;
-		barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-		barrier.subresourceRange.baseMipLevel = 0;
-		barrier.subresourceRange.levelCount = mipLevels;
-		barrier.subresourceRange.baseArrayLayer = 0;
-		barrier.subresourceRange.layerCount = 1;
-		barrier.srcAccessMask = 0;
-		barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+		VkImageMemoryBarrier barrier1{};
+		barrier1.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+		barrier1.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		barrier1.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+		barrier1.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		barrier1.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		barrier1.image = image;
+		barrier1.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		barrier1.subresourceRange.baseMipLevel = 0;
+		barrier1.subresourceRange.levelCount = mipLevels;
+		barrier1.subresourceRange.baseArrayLayer = 0;
+		barrier1.subresourceRange.layerCount = 1;
+		barrier1.srcAccessMask = 0;
+		barrier1.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
 
 		VkCommandBufferBeginInfo beginInfo{};
 		beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -3141,7 +3139,7 @@ public:
 
 		vkCmdPipelineBarrier(loadingCmdBuffer,
 							 VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
-							 0, 0, nullptr, 0, nullptr, 1, &barrier);
+							 0, 0, nullptr, 0, nullptr, 1, &barrier1);
 
 		VkBufferImageCopy region{};
 		region.bufferOffset = 0;
@@ -3166,25 +3164,25 @@ public:
 
 		for (uint32_t i = 1; i < mipLevels; ++i) {
 			// Transition level i-1 to TRANSFER_SRC_OPTIMAL
-			VkImageMemoryBarrier barrier{};
-			barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-			barrier.image = image;
-			barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-			barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-			barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-			barrier.subresourceRange.baseArrayLayer = 0;
-			barrier.subresourceRange.layerCount = 1;
-			barrier.subresourceRange.levelCount = 1;
-			barrier.subresourceRange.baseMipLevel = i - 1;
+			VkImageMemoryBarrier barrier2{};
+			barrier2.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+			barrier2.image = image;
+			barrier2.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			barrier2.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			barrier2.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			barrier2.subresourceRange.baseArrayLayer = 0;
+			barrier2.subresourceRange.layerCount = 1;
+			barrier2.subresourceRange.levelCount = 1;
+			barrier2.subresourceRange.baseMipLevel = i - 1;
 
-			barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-			barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-			barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-			barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+			barrier2.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+			barrier2.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+			barrier2.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+			barrier2.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
 
 			vkCmdPipelineBarrier(loadingCmdBuffer,
 								 VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
-								 0, 0, nullptr, 0, nullptr, 1, &barrier);
+								 0, 0, nullptr, 0, nullptr, 1, &barrier2);
 
 			// Set up the blit
 			VkImageBlit blit{};
@@ -3212,20 +3210,20 @@ public:
 						   1, &blit, VK_FILTER_LINEAR);
 
 			// After blit, transition previous mip level to SHADER_READ_ONLY_OPTIMAL
-			barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-			barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-			barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-			barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			barrier1.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+			barrier1.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+			barrier1.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+			barrier1.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
 
 			vkCmdPipelineBarrier(loadingCmdBuffer,
 								 VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-								 0, 0, nullptr, 0, nullptr, 1, &barrier);
+								 0, 0, nullptr, 0, nullptr, 1, &barrier1);
 
 			mipWidth = std::max(1, mipWidth / 2);
 			mipHeight = std::max(1, mipHeight / 2);
 		}
 
-		VkImageMemoryBarrier lastBarrier = barrier;
+		VkImageMemoryBarrier lastBarrier = barrier1;
 		lastBarrier.subresourceRange.baseMipLevel = mipLevels - 1;
 		lastBarrier.subresourceRange.levelCount = 1;
 		lastBarrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
@@ -3347,7 +3345,7 @@ public:
 		}
 
 
-		return transferTextureData(tex.texelData(), texture.image, mipLevels, tex.width, tex.height, 4, commandPool, m_graphicsQueue);
+		return transferTextureData(tex.texelData(), texture.image, static_cast<uint8_t>(mipLevels), tex.width, tex.height, 4, commandPool, m_graphicsQueue);
 	}
 
 

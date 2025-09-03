@@ -49,12 +49,12 @@ void DualBVH::_updatePrimitives(DualBVH* _this) {
     while (true) {
 
 
-        _this->rebuildStartSema.acquire();
+        _this->primitivesStartSema.acquire();
         if (!_this->workersRunning.load(std::memory_order_acquire))
             return;
         {
             PROFILE_SCOPE("BVH_RebuildPrimitiveAABBs");
-
+            _this->primitivesLock.acquire();
             auto group = _this->m_reg.group<TransformComponent, BoundingVolumeComponent, EnabledTag>();
 
             auto& prims0 = _this->primitives[0];
@@ -90,7 +90,7 @@ void DualBVH::_updatePrimitives(DualBVH* _this) {
                             });
         }
 
-        _this->rebuildDoneSema.release();
+        _this->primitivesLock.release();
     }
 }
 
@@ -161,8 +161,9 @@ void DualBVH::_buildThreadMethod(DualBVH* _this, ArenaRegistry& registry) {
 
                 auto it = _this->entityToPrimitive[index].find(entity);
                 if (it == _this->entityToPrimitive[index].end()) {
-
+                    _this->primitivesLock.acquire();
                     _this->rebuildPrimitives(registry, index);
+                    _this->primitivesLock.release();
                     break;
                 }
             }
@@ -224,7 +225,7 @@ void DualBVH::rebuildPrimitives(ArenaRegistry& registry, uint8_t index) {
     //std::iota(primitiveIndices[index].begin(), primitiveIndices[index].end(), 0);
 }
 
-uint32_t DualBVH::buildRecursive(uint32_t* primitiveIds, uint32_t primCount, uint32_t depth, uint32_t parent, uint8_t index) {
+uint32_t DualBVH::buildRecursive(uint32_t* primitiveIds, uint32_t primCount, uint8_t depth, uint32_t parent, uint8_t index) {
      if (primCount == 0) return 0;
 
      uint32_t nodeIndex = nodeCount[index].fetch_add(1, std::memory_order_acquire);
@@ -243,7 +244,7 @@ uint32_t DualBVH::buildRecursive(uint32_t* primitiveIds, uint32_t primCount, uin
      if (primCount <= settings.maxLeafPrimitives) { //|| depth > settings.maxDepth) {
          node.setLeaf(true);
 
-         node.primCount = primCount;
+         node.primCount = static_cast<uint8_t>(primCount);
 
          for (size_t i = 0; i < primCount; ++i) {
              node.primIndices[i] = primitiveIds[i];
@@ -254,7 +255,7 @@ uint32_t DualBVH::buildRecursive(uint32_t* primitiveIds, uint32_t primCount, uin
      // Internal node - find best split
      int bestAxis;
      float bestPos;
-     uint32_t bestCost = findBestSplit(primitiveIds, primCount, bestAxis, bestPos, index);
+     [[maybe_unused]] uint32_t bestCost = findBestSplit(primitiveIds, primCount, bestAxis, bestPos, index);
 
 
      
@@ -414,7 +415,7 @@ uint32_t DualBVH::buildRecursive(uint32_t* primitiveIds, uint32_t primCount, uin
      }
 
      node.setLeaf(false);
-     node.splitAxis = bestAxis;
+     node.splitAxis = static_cast<uint8_t>(bestAxis);
      const uint32_t maxThreadDepthLevel = static_cast<uint32_t>(std::floor(std::log2(NUM_BUILD_THREADS)));
      if (depth < maxThreadDepthLevel && nodes[index].size() / NUM_BUILD_THREADS >= NUM_BUILD_THREADS) {
 
@@ -457,8 +458,8 @@ uint32_t DualBVH::buildRecursive(uint32_t* primitiveIds, uint32_t primCount, uin
 
 
      } else {
-         node.leftChild = buildRecursive(leftPrims.data(), leftPrims.size(), depth + 1, nodeIndex, index);
-         node.rightChild = buildRecursive(rightPrims.data(), rightPrims.size(), depth + 1, nodeIndex, index);
+         node.leftChild = buildRecursive(leftPrims.data(), static_cast<uint32_t>(leftPrims.size()), depth + 1, nodeIndex, index);
+         node.rightChild = buildRecursive(rightPrims.data(), static_cast<uint32_t>(rightPrims.size()), depth + 1, nodeIndex, index);
      }
 
      return nodeIndex;
@@ -702,7 +703,7 @@ void DualBVH::buildNodes(ArenaRegistry& registry, uint8_t index) {
     nodes[index].resize(primitives[index].size() * 2);  // Worst case
     nodeCount[index].store(0);
     indicesCount[index].store(0);
-    rootIndex[index] = buildRecursive(allPrimitives.data(), allPrimitives.size(), 0, 0, index);
+    rootIndex[index] = buildRecursive(allPrimitives.data(), static_cast<uint32_t>(allPrimitives.size()), 0, 0, index);
 
     //dirtyCount = 0;
 }
@@ -718,7 +719,7 @@ void DualBVH::incrementalUpdate(ArenaRegistry& registry, uint8_t index) {
 
     // Update all dirty primitives
     auto view = registry.view<BoundingVolumeComponent>();
-    uint32_t updatedCount = 0;
+    //uint32_t updatedCount = 0;
 
     for (auto entity : view) {
         auto it = entityToPrimitive[index].find(entity);
@@ -810,7 +811,7 @@ void DualBVH::frustumCullWithOcclusion(
     // Find occluders
     FrameArenaVector<OccluderData> potentialOccluders{ FrameArenaAllocator<OccluderData>{cullArenas[frameIndex][NUM_RUN_THREADS]} };
 
-    for (const auto& [index, offset, depth] : occluderIndices[frameIndex]) {
+    for (const auto& [thisIndex, offset, depth] : occluderIndices[frameIndex]) {
 
         auto& prim = primitives[frameIndex][index];
         AABB& worldBounds = prim.bounds;//GET_AABB(prim);
@@ -832,7 +833,7 @@ void DualBVH::frustumCullWithOcclusion(
         MMath::hmin8(v, mn);
         float closest = mn;
 
-        potentialOccluders.push_back({ prim.entity, closest, offset, index });
+        potentialOccluders.push_back({ prim.entity, closest, offset, thisIndex });
     }
 
     //collectOccluders(cameraPos, frustum, potentialOccluders);
@@ -862,7 +863,7 @@ void DualBVH::frustumCullWithOcclusion(
     frontier[frameIndex].reserve(1024);
     frontier[frameIndex].clear();
 
-    static constexpr size_t stackSize = 256;
+    static constexpr size_t stackSize = 1024;
 
     static std::array<Job, stackSize> stack[2];
     size_t sp = 0;
@@ -898,8 +899,8 @@ void DualBVH::frustumCullWithOcclusion(
 
     static constexpr size_t T = NUM_RUN_THREADS;
     static std::vector<TraversalResult> tlsResults[] = { std::vector<TraversalResult>(T), std::vector<TraversalResult>(T) };
-    for (auto& result : tlsResults[frameIndex])
-        result.clear();
+    for (auto& thisResult : tlsResults[frameIndex])
+        thisResult.clear();
 
     static std::atomic<uint32_t> tIndex[2];
     tIndex[frameIndex].store(0, std::memory_order_release);
@@ -1001,7 +1002,7 @@ void DualBVH::frustumCullWithOcclusion(
 
 
                                     if (method != OcclusionMethod::NONE && !out.activeOccluders.empty()) {
-                                        float closest = 0.0f;
+                                        //float closest = 0.0f;
                                         BoundingVolume primBounds{ registry, prim.entity };
                                         auto primVerts = primBounds.getCoarseAABB().getVertices();
                                         float d[8] = {
@@ -1114,8 +1115,8 @@ DualBVH::TraversalResult DualBVH::broadPhaseCollision(uint8_t index) const {
             // Test all primitive pairs
             for (uint32_t i = 0; i < a._pad0; ++i) {
                 for (uint32_t j = (nodeA == nodeB ? i + 1 : 0); j < b._pad0; ++j) {
-                    uint32_t primA = -1;// primitiveIndices[frameIndex][a.firstPrimitive + i];
-                    uint32_t primB = -1; // primitiveIndices[frameIndex][b.firstPrimitive + j];
+                    [[maybe_unused]] uint32_t primA = 0xffffffff;// primitiveIndices[frameIndex][a.firstPrimitive + i];
+                    [[maybe_unused]] uint32_t primB = 0xffffffff; // primitiveIndices[frameIndex][b.firstPrimitive + j];
 
 
 

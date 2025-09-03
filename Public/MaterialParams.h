@@ -180,12 +180,12 @@ struct alignas(8) MatParam
 	}
 
 	uint32_t paddedVarSize() const {
-		uint32_t size = SizeOfTypeBase(type);
+		uint32_t size_ = static_cast<uint32_t>(SizeOfTypeBase(type));
 		for (auto& member : members) {
-			size += member.varSize();
+			size_ += member.varSize();
 		}
-		size = (size + 15) & ~15;
-		return size;
+		size_ = (size_ + 15) & ~15;
+		return size_;
 	}
 
 	std::string& name();

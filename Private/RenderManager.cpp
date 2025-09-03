@@ -293,10 +293,11 @@ ErrorCode DxcWin32VulkanShaderCompiler::compile(Shader& shader) {
 		shader.bytecode.resize(wordCount); // vector<uint32_t>
 		spvFile.read(reinterpret_cast<char*>(shader.bytecode.data()), fileSize);
 
-		if (!spvFile || spvFile.gcount() != fileSize) {
+		if (!spvFile || spvFile.gcount() != static_cast<long>(fileSize)) {
 			return ErrorCode::SHADER_COULD_NOT_READ_BYTECODE;
 		}
 	} catch (std::exception& e) {
+		LOGLINE(LogType::Error, LogMod::Rendering, std::format("Read error: {}", e.what()));
 		return ErrorCode::SHADER_COULD_NOT_READ_BYTECODE;
 	}
 

@@ -115,7 +115,8 @@ ErrorCode Engine::_initGraphics() {
 #ifdef IGPU_PRIO
 	presentMode = VkPresentModeKHR::VK_PRESENT_MODE_FIFO_KHR;
 #else
-	presentMode = VkPresentModeKHR::VK_PRESENT_MODE_MAILBOX_KHR;
+	//presentMode = VkPresentModeKHR::VK_PRESENT_MODE_MAILBOX_KHR;
+	presentMode = VkPresentModeKHR::VK_PRESENT_MODE_IMMEDIATE_KHR;
 #endif
 
 #ifdef IGPU_PRIO
@@ -206,7 +207,7 @@ void Engine::start() {
 	// No scenes, create default and run.
 	if (m_scenes.empty()) {
 		LOGLINE(LogType::Remark, LogMod::Engine, "Creating a default scene... ");
-		auto* scenePtr = this->createNewScene<DefaultScene>(512_MB, nullptr);
+		[[maybe_unused]] auto* scenePtr = this->createNewScene<DefaultScene>(512_MB, nullptr);
 		m_activeSceneIndices.insert(0);
 		LOGLINE(LogType::Remark, LogMod::Engine, "Scene created.");
 	} else if (m_activeSceneIndices.empty())
@@ -242,12 +243,22 @@ inline void Engine::_run() {
 			PROFILE_BEGIN_SESSION(ENGINE_NAME, PROFILE_PATH);
 			m_pendingTrace = false;
 		}	
+
+		if (m_framesTraced != UINT32_INVALID) {
+			m_framesTraced++;
+			if (m_framesTraced > m_framesToTrace) {
+				PROFILE_END_SESSION();
+				LOGLINE(LogType::Success, LogMod::Engine, "Trace Complete. ");
+				m_framesTraced = UINT32_INVALID;
+			}
+		}
 #endif
 
 		PROFILE_SCOPE("Frame");
 		PROFILE_FRAME_MARK(m_totalFrames);
 
 		auto dt = _tickDt();
+		m_updateDeltaTime = dt;
 		m_fixedAccu += dt;
 		m_totalTime += dt;
 		m_baseCosD = std::cos(m_totalTime);
@@ -262,40 +273,6 @@ inline void Engine::_run() {
 			}
 		}
 
-		//// Scene transit
-		//if (m_sceneTransitionRequested) {
-		//	switch (m_sceneTransitMode)
-		//	{
-		//		case SceneTransitionMode::DontRunTransitioning:
-		//		{
-		//			m_scenes[m_requestedSceneIndex]->loadDispatch();
-		//			m_scenes[m_curSceneIndex]->unloadDispatch();
-		//			m_curSceneIndex = m_requestedSceneIndex;
-		//			m_sceneTransitionRequested = false;
-		//		} break;
-
-		//		case SceneTransitionMode::RunOnce:
-		//		{
-		//			m_scenes[m_curSceneIndex]->transitioningDispatch();
-		//			m_scenes[m_requestedSceneIndex]->loadDispatch();
-		//			m_scenes[m_curSceneIndex]->unloadDispatch();
-		//			m_curSceneIndex = m_requestedSceneIndex;
-		//			m_sceneTransitionRequested = false;
-		//		} break;
-
-		//		case SceneTransitionMode::WaitForDone:
-		//		{
-		//			auto doneStatus = m_scenes[m_curSceneIndex]->transitioningDispatch();
-		//			if (doneStatus == SceneTransitionStatus::Done) {
-		//				m_scenes[m_requestedSceneIndex]->loadDispatch();
-		//				m_scenes[m_curSceneIndex]->unloadDispatch();
-		//				m_curSceneIndex = m_requestedSceneIndex;
-		//				m_sceneTransitionRequested = false;
-		//			}
-		//		} break;
-		//	}
-		//}
-
 		//Wait for last frames jobs	before resetting arena
 		{
 			PROFILE_SCOPE("MWork_WaitPoint_NextFrame");
@@ -305,7 +282,7 @@ inline void Engine::_run() {
 
 		{
 			PROFILE_SCOPE("Input");
-			m_inputMan->update();
+			m_inputMan->update(dt);
 		}
 
 
@@ -320,41 +297,29 @@ inline void Engine::_run() {
 			m_baseTimers.update(dt);
 		}
 
-		
+		if (m_vkCtx) {
+			VulkanContext::DrawContext drawCtx{};
+			drawCtx.frameCount = static_cast<uint32_t>(m_totalFrames);
+			{
+				PROFILE_SCOPE("PreDraw");
+				m_vkCtx->preDraw(getRenderManager());
+			}
 
+			{
+				PROFILE_SCOPE("Draw");
+				m_vkCtx->draw(drawCtx);
+			}
 
-		VulkanContext::DrawContext drawCtx{};	
-		drawCtx.frameCount = m_totalFrames;
-
-		{
-			PROFILE_SCOPE("PreDraw");
-			m_vkCtx->preDraw(getRenderManager());
-		}
-
-		{
-			PROFILE_SCOPE("Draw");
-			m_vkCtx->draw(drawCtx);
-		}
-
-		{
-			PROFILE_SCOPE("PostDraw");
-			m_vkCtx->postDraw();
-		}
-		m_framesSinceLastFpsRead++;
-		m_totalFrames++;
-		std::this_thread::yield();
-
-
-#ifdef PROFILER
-		if (m_framesTraced != UINT32_INVALID ) {
-			m_framesTraced++;
-			if (m_framesTraced >= m_framesToTrace) {
-				PROFILE_END_SESSION();
-				LOGLINE(LogType::Success, LogMod::Engine, "Trace Complete. ");
-				m_framesTraced = UINT32_INVALID;
+			{
+				PROFILE_SCOPE("PostDraw");
+				m_vkCtx->postDraw();
 			}
 		}
-#endif
+
+		m_framesSinceLastFpsRead++;
+		m_totalFrames++;
+		//std::this_thread::yield();
+
 	}
 
 	for (auto scene : m_scenes) {
@@ -448,7 +413,7 @@ inline void Engine::_updateEarly(double dt) {
 
 		{
 			PROFILE_SCOPE("Scene_BVH_Update");
-			m_scenes[index]->bvhSystem().updateBVH(m_scenes[index]->m_reg, m_totalFrames, m_updateDeltaTime, 0.01667f);
+			m_scenes[index]->bvhSystem().updateBVH(m_scenes[index]->m_reg, m_updateDeltaTime, 0.01667f);
 		}
 	}
 	onEarlyUpdateExit.notify(this);

@@ -131,8 +131,8 @@ struct KeyEvent
 };
 
 INLINE static KeyCode VkeyToKeyCode(USHORT vkey, USHORT makeCode, USHORT flags) {
-    const bool isE0 = (flags & RI_KEY_E0);
-    const bool isE1 = (flags & RI_KEY_E1);  // rarely used
+    //const bool isE0 = (flags & RI_KEY_E0);
+    //const bool isE1 = (flags & RI_KEY_E1);  // rarely used
 
     switch (vkey) {
         case 'A': return KeyCode::A;
@@ -258,7 +258,7 @@ INLINE static KeyEvent MapRawKeyboardEvent(const RAWKEYBOARD& keyboard) {
     bool isBreak = (flags & RI_KEY_BREAK);
 
     if (vkey == VK_SHIFT) {
-        mappedVKey = MapVirtualKey(makeCode, MAPVK_VSC_TO_VK_EX);
+        mappedVKey = static_cast<USHORT>(MapVirtualKey(makeCode, MAPVK_VSC_TO_VK_EX));
     } else if (vkey == VK_CONTROL) {
         mappedVKey = isE0 ? VK_RCONTROL : VK_LCONTROL;
     } else if (vkey == VK_MENU) {

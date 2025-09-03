@@ -13,7 +13,7 @@ INLINE MeshDrawCommand VulkanContext::subMeshEntity_to_drawCommand(SceneBase* sc
 	MeshDrawCommand cmd{};
 	cmd.instanceIndex = subMesh.instanceIndex;
 	cmd.materialIndex = subMesh.materialIndex;
-	cmd.priority = 1.0f; //TODO
+	cmd.priority = 0xffff; //TODO
 	cmd.sceneIndex = scene->sceneIndex();
 	cmd.submeshOffset = subMeshComp.subMeshIndex;
 	cmd.subMeshEntity = entity;
@@ -94,9 +94,9 @@ void VulkanContext::draw(const DrawContext& ctx) {
 					instData.matInstanceIndex = newDrawCmd.materialIndex;
 					instData.matrixIndex = transComp.dataIndex;
 					instanceData.instances.push_back(instData);
-					BoundingVolumeComponent& bVol = grp.get<BoundingVolumeComponent>(newDrawCmd.subMeshEntity);
-					instanceData.bounds.merge(Engine::getInstance()->
-											  getScene(transComp.sceneIndex)->boundingSystem().cachedLocals()[bVol.coarseIndexLocal]);
+					//BoundingVolumeComponent& bVol = grp.get<BoundingVolumeComponent>(newDrawCmd.subMeshEntity);
+					//instanceData.bounds.merge(Engine::getInstance()->
+					//						  getScene(transComp.sceneIndex)->boundingSystem().cachedLocals()[bVol.coarseIndexLocal]);
 
 				} else {
 					BoundedInstanceData& instanceData = it->second;
@@ -105,9 +105,9 @@ void VulkanContext::draw(const DrawContext& ctx) {
 					instData.matInstanceIndex = newDrawCmd.materialIndex;
 					instData.matrixIndex = transComp.dataIndex;
 					instanceData.instances.push_back(instData);
-					BoundingVolumeComponent& bVol = grp.get<BoundingVolumeComponent>(newDrawCmd.subMeshEntity);
-					instanceData.bounds.merge(Engine::getInstance()->
-											  getScene(transComp.sceneIndex)->boundingSystem().cachedLocals()[bVol.coarseIndexLocal]);
+					//BoundingVolumeComponent& bVol = grp.get<BoundingVolumeComponent>(newDrawCmd.subMeshEntity);
+					//instanceData.bounds.merge(Engine::getInstance()->
+					//						  getScene(transComp.sceneIndex)->boundingSystem().cachedLocals()[bVol.coarseIndexLocal]);
 
 					submeshKeysWithMultipleInstances[currentFrame][sceneIndex].insert(newDrawCmd.submeshOffset);
 				}
@@ -128,10 +128,10 @@ void VulkanContext::draw(const DrawContext& ctx) {
 	bool firstPass = true;
 	bool hasDrawn = false;
 	size_t stageCursor = 0;
-	SceneBase* scene = nullptr;
+	SceneBase* scene1 = nullptr;
 	//uint16_t sceneIndex{};
 	//FrameArenaVector<MeshDrawCommand>* cmdScene;
-	std::vector<MeshDrawCommand>* cmdScene;
+	//std::vector<MeshDrawCommand>* cmdScene;
 	//static std::pair<const uint16_t, std::vector<MeshDrawCommand>>* cmdScene[VULKAN_FRAMES_IN_FLIGHT];
 	//static robin_hood::pair<uint16_t, std::vector<MeshDrawCommand>>* cmdScene[VULKAN_FRAMES_IN_FLIGHT];
 
@@ -148,18 +148,18 @@ void VulkanContext::draw(const DrawContext& ctx) {
 	instDataTemp.reserve(8192);
 	VkBufferCopy instanceBufferCopy{};
 	static std::vector<VkBufferCopy> stagingRegions[VULKAN_FRAMES_IN_FLIGHT];
-	bool stageWritten = false;
+	//bool stageWritten = false;
 	stagingRegions[currentFrame].clear();
 	{
 		PROFILE_SCOPE("Buffer CPU-Stage");
-		for (size_t sI = 0; sI < drawCmds[currentFrame].size(); ++sI) {
+		for (uint16_t sI = 0; sI < static_cast<uint16_t>(drawCmds[currentFrame].size()); ++sI) {
 
 			if (drawCmds[currentFrame][sI].empty())
 				continue;
-			scene = Engine::getInstance()->getScene(sI);
+			scene1 = Engine::getInstance()->getScene(sI);
 
 			sceneIndices[currentFrame].push_back(sI);
-			size_t count = sizeof(ModelTransform) * scene->transformSystem().modelTransforms().size();
+			size_t count = sizeof(ModelTransform) * scene1->transformSystem().modelTransforms().size();
 			bufferOffsets[currentFrame].push_back(Range<size_t>{totalMatBufSize, count});
 			totalMatBufSize += count;
 
@@ -179,7 +179,7 @@ void VulkanContext::draw(const DrawContext& ctx) {
 			auto* thisScene = Engine::getInstance()->getActiveScenes()[sceneIndices[currentFrame][s]];
 
 			std::memcpy(static_cast<uint8_t*>(matStagingPtr[currentFrame]) + stageCursor,
-						scene->transformSystem().modelTransforms().data(),
+						thisScene->transformSystem().modelTransforms().data(),
 						bufferOffsets[currentFrame][s].count);
 
 			stagingRegions[currentFrame].emplace_back(
@@ -230,334 +230,335 @@ void VulkanContext::draw(const DrawContext& ctx) {
 
 
 
-	// Resize buffers if needed
-	if (lastMatBufferSize[currentFrame] < totalMatBufSize) {
-		lastMatBufferSize[currentFrame] = totalMatBufSize;
-
-		VkResult vkResult{};
-		VkDeviceSize bufferSize = totalMatBufSize;
-		VkBufferCreateInfo createInfo{};
-		createInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-		createInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-		createInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-		createInfo.size = bufferSize;
-		vkDestroyBuffer(m_vkDevice, matBuf_modelTransforms[currentFrame], nullptr);
-		modelTransforms_lastBufferSize[currentFrame] = bufferSize;
-
-		if (matDevMem_modelTransforms[currentFrame] != VK_NULL_HANDLE)
-			vkFreeMemory(m_vkDevice, matDevMem_modelTransforms[currentFrame], nullptr);
-
-		vkResult = vkCreateBuffer(m_vkDevice, &createInfo, nullptr, &matBuf_modelTransforms[currentFrame]);
-		VkMemoryRequirements bufferMemReq{};
-		vkGetBufferMemoryRequirements(m_vkDevice, matBuf_modelTransforms[currentFrame], &bufferMemReq);
-		VkMemoryAllocateInfo allocInfo{};
-		allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-		allocInfo.allocationSize = bufferMemReq.size;
-		allocInfo.memoryTypeIndex = findMemoryType(
-			bufferMemReq.memoryTypeBits,
-			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,//VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-			m_phyDevice
-		);
-		vkResult = vkAllocateMemory(m_vkDevice, &allocInfo, nullptr, &matDevMem_modelTransforms[currentFrame]);
-		vkResult = vkBindBufferMemory(m_vkDevice, matBuf_modelTransforms[currentFrame], matDevMem_modelTransforms[currentFrame], 0);
-
-		VkDescriptorSet matricesSet = bindingToDescriptorSet[{MAT_MODELMATRICES_BIND, MAT_MODELMATRICES_SET, 0}][currentFrame];
-		std::vector<VkWriteDescriptorSet> descriptorWrites;
-		VkDescriptorBufferInfo modelMatricesBufferInfo{};
-		modelMatricesBufferInfo.buffer = matBuf_modelTransforms[currentFrame];
-		modelMatricesBufferInfo.offset = 0;
-		modelMatricesBufferInfo.range = VK_WHOLE_SIZE;
-
-		VkWriteDescriptorSet matrixDataWrite{};
-		matrixDataWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-		matrixDataWrite.dstSet = matricesSet;
-		matrixDataWrite.dstBinding = MAT_MODELMATRICES_BIND;
-		matrixDataWrite.dstArrayElement = 0;
-		matrixDataWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-		matrixDataWrite.descriptorCount = 1;
-		matrixDataWrite.pBufferInfo = &modelMatricesBufferInfo;
-		vkUpdateDescriptorSets(m_vkDevice, 1, &matrixDataWrite, 0, nullptr);
-	}
-
-	if (totalInstanceDataBufSize > lastInstDataTempSize[currentFrame]) {
-		lastInstDataTempSize[currentFrame] = totalInstanceDataBufSize;
-
-		VkResult vkResult{};
-		VkDeviceSize bufferSize = totalInstanceDataBufSize;
-		VkBufferCreateInfo createInfo{};
-		createInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-		createInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-		createInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-		createInfo.size = bufferSize;
-
-		vkDestroyBuffer(m_vkDevice, instanceIndexBuffer[currentFrame], nullptr);
-		instancesIndex_lastBufferSize[currentFrame] = bufferSize;
-
-		if (instanceIndexMemory[currentFrame] != VK_NULL_HANDLE)
-			vkFreeMemory(m_vkDevice, instanceIndexMemory[currentFrame], nullptr);
-
-		vkResult = vkCreateBuffer(m_vkDevice, &createInfo, nullptr, &instanceIndexBuffer[currentFrame]);
-		VkMemoryRequirements bufferMemReq{};
-		vkGetBufferMemoryRequirements(m_vkDevice, instanceIndexBuffer[currentFrame], &bufferMemReq);
-		VkMemoryAllocateInfo allocInfo{};
-		allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-		allocInfo.allocationSize = bufferMemReq.size;
-		allocInfo.memoryTypeIndex = findMemoryType(
-			bufferMemReq.memoryTypeBits,
-			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,//VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-			m_phyDevice
-		);
-		vkResult = vkAllocateMemory(m_vkDevice, &allocInfo, nullptr, &instanceIndexMemory[currentFrame]);
-		vkResult = vkBindBufferMemory(m_vkDevice, instanceIndexBuffer[currentFrame], instanceIndexMemory[currentFrame], 0);
-
-		VkDescriptorSet instanceIndexSet = bindingToDescriptorSet[{MAT_BASE_INSTANCES_DATA_BIND, MAT_BASE_INSTANCES_DATA_SET, 0}][currentFrame];
-		std::vector<VkWriteDescriptorSet> descriptorWrites;
-		VkDescriptorBufferInfo instanceIndexBufferInfo{};
-		instanceIndexBufferInfo.buffer = instanceIndexBuffer[currentFrame];
-		instanceIndexBufferInfo.offset = 0;
-		instanceIndexBufferInfo.range = VK_WHOLE_SIZE;
-		VkWriteDescriptorSet instanceDataWrite{};
-		instanceDataWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-		instanceDataWrite.dstSet = instanceIndexSet;
-		instanceDataWrite.dstBinding = MAT_BASE_INSTANCES_DATA_BIND;
-		instanceDataWrite.dstArrayElement = 0;
-		instanceDataWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-		instanceDataWrite.descriptorCount = 1;
-		instanceDataWrite.pBufferInfo = &instanceIndexBufferInfo;
-		vkUpdateDescriptorSets(m_vkDevice, 1, &instanceDataWrite, 0, nullptr);
-	}
-
-
-
-	//Begin command buffer
-	vkResetCommandBuffer(frame.cmdBuffer, 0);
-	recordCommandBuffer(frame.cmdBuffer, currentFrame);
-
-
-
-
-
-	// Dispatch light cluster CS
-	vkCmdBindPipeline(frame.cmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, lightCluster_pipeline);
-	vkCmdBindDescriptorSets(frame.cmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE,
-							lightCluster_pipelineLayout, 0, 3, lightCluster_descSets[currentFrame].data(),
-							0, nullptr);
-
-	// Compute proper group counts from clusters and shader local size
-	constexpr uint32_t LOCAL_X = VULKAN_LIGHT_CLUSTER_THREADS_X; // matches [numthreads(…)]
-	constexpr uint32_t LOCAL_Y = VULKAN_LIGHT_CLUSTER_THREADS_Y;
-	constexpr uint32_t LOCAL_Z = VULKAN_LIGHT_CLUSTER_THREADS_Z;
-	auto ceilDiv = [](uint32_t a, uint32_t b) { return (a + b - 1) / b; };
-
-	const uint32_t groupsX = ceilDiv(camData.clustersX, LOCAL_X);
-	const uint32_t groupsY = ceilDiv(camData.clustersY, LOCAL_Y);
-	const uint32_t groupsZ = ceilDiv(camData.clustersZ, LOCAL_Z);
-
-	vkCmdDispatch(frame.cmdBuffer, VULKAN_LIGHT_CLUSTERS_X, VULKAN_LIGHT_CLUSTERS_Y, VULKAN_LIGHT_CLUSTERS_Z);
-
-
-
-	VkViewport viewport{};
-
-
-	// Set Dynamic state
-
-	viewport.x = ctx.vPortPos[0];
-	viewport.y = ctx.vPortPos[1];
-	viewport.width = ctx.vPortSize[0] < 0 ? static_cast<float>(swapchainExtent.width) : ctx.vPortSize[0];
-	viewport.height = ctx.vPortSize[1] < 0 ? static_cast<float>(swapchainExtent.height) : ctx.vPortSize[1];
-	viewport.minDepth = ctx.vPortMinDepth;
-	viewport.maxDepth = ctx.vPortMaxDepth;
-	vkCmdSetViewport(frame.cmdBuffer, 0, 1, &viewport);
-
-	VkRect2D scissor{};
-	scissor.offset = { ctx.sciOffset[0], ctx.sciOffset[1] };
-	scissor.extent = swapchainExtent;
-	vkCmdSetScissor(frame.cmdBuffer, 0, 1, &scissor);
-
-	vkCmdSetDepthTestEnable(frame.cmdBuffer, VK_TRUE);
-	vkCmdSetDepthWriteEnable(frame.cmdBuffer, VK_TRUE);
-	vkCmdSetDepthCompareOp(frame.cmdBuffer, VK_COMPARE_OP_LESS_OR_EQUAL);
-
-
 	Camera* mainCam = nullptr;
 	Frustum* f = nullptr;
+	{
+		PROFILE_SCOPE("PreSceneDraws");
+		// Resize buffers if needed
+		if (lastMatBufferSize[currentFrame] < totalMatBufSize) {
+			lastMatBufferSize[currentFrame] = totalMatBufSize;
 
-	// Camera
-	mainCam = Engine::getInstance()->mainCamera();
-	auto& camData = mainCam->cameraData();
-	camData.numLights = static_cast<uint32_t>(lightsData.size());
-	camData.screenSize = { viewport.width, viewport.height };
-	camData.invScreenSize = { 1.0f / camData.screenSize.x, 1.0f / camData.screenSize.y };
-	camData.clustersX = VULKAN_LIGHT_CLUSTERS_X;
-	camData.clustersY = VULKAN_LIGHT_CLUSTERS_Y;
-	camData.clustersZ = VULKAN_LIGHT_CLUSTERS_Z;
-	f = &mainCam->getFrustum();
+			VkResult vkResult{};
+			VkDeviceSize bufferSize = totalMatBufSize;
+			VkBufferCreateInfo createInfo{};
+			createInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+			createInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+			createInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+			createInfo.size = bufferSize;
+			vkDestroyBuffer(m_vkDevice, matBuf_modelTransforms[currentFrame], nullptr);
+			modelTransforms_lastBufferSize[currentFrame] = bufferSize;
 
-	// Update CameraData cBuffer
-	void* mappedData = nullptr;
-	vkMapMemory(m_vkDevice, camDataMemory[currentFrame], 0, sizeof(CameraData), 0, &mappedData);
-	memcpy(mappedData, &camData, sizeof(CameraData));
-	vkUnmapMemory(m_vkDevice, camDataMemory[currentFrame]);
+			if (matDevMem_modelTransforms[currentFrame] != VK_NULL_HANDLE)
+				vkFreeMemory(m_vkDevice, matDevMem_modelTransforms[currentFrame], nullptr);
+
+			vkResult = vkCreateBuffer(m_vkDevice, &createInfo, nullptr, &matBuf_modelTransforms[currentFrame]);
+			VkMemoryRequirements bufferMemReq{};
+			vkGetBufferMemoryRequirements(m_vkDevice, matBuf_modelTransforms[currentFrame], &bufferMemReq);
+			VkMemoryAllocateInfo allocInfo{};
+			allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+			allocInfo.allocationSize = bufferMemReq.size;
+			allocInfo.memoryTypeIndex = findMemoryType(
+				bufferMemReq.memoryTypeBits,
+				VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,//VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+				m_phyDevice
+			);
+			vkResult = vkAllocateMemory(m_vkDevice, &allocInfo, nullptr, &matDevMem_modelTransforms[currentFrame]);
+			vkResult = vkBindBufferMemory(m_vkDevice, matBuf_modelTransforms[currentFrame], matDevMem_modelTransforms[currentFrame], 0);
+
+			VkDescriptorSet matricesSet = bindingToDescriptorSet[{MAT_MODELMATRICES_BIND, MAT_MODELMATRICES_SET, 0}][currentFrame];
+			std::vector<VkWriteDescriptorSet> descriptorWrites;
+			VkDescriptorBufferInfo modelMatricesBufferInfo{};
+			modelMatricesBufferInfo.buffer = matBuf_modelTransforms[currentFrame];
+			modelMatricesBufferInfo.offset = 0;
+			modelMatricesBufferInfo.range = VK_WHOLE_SIZE;
+
+			VkWriteDescriptorSet matrixDataWrite{};
+			matrixDataWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+			matrixDataWrite.dstSet = matricesSet;
+			matrixDataWrite.dstBinding = MAT_MODELMATRICES_BIND;
+			matrixDataWrite.dstArrayElement = 0;
+			matrixDataWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+			matrixDataWrite.descriptorCount = 1;
+			matrixDataWrite.pBufferInfo = &modelMatricesBufferInfo;
+			vkUpdateDescriptorSets(m_vkDevice, 1, &matrixDataWrite, 0, nullptr);
+		}
+
+		if (totalInstanceDataBufSize > lastInstDataTempSize[currentFrame]) {
+			lastInstDataTempSize[currentFrame] = totalInstanceDataBufSize;
+
+			VkResult vkResult{};
+			VkDeviceSize bufferSize = totalInstanceDataBufSize;
+			VkBufferCreateInfo createInfo{};
+			createInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+			createInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+			createInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+			createInfo.size = bufferSize;
+
+			vkDestroyBuffer(m_vkDevice, instanceIndexBuffer[currentFrame], nullptr);
+			instancesIndex_lastBufferSize[currentFrame] = bufferSize;
+
+			if (instanceIndexMemory[currentFrame] != VK_NULL_HANDLE)
+				vkFreeMemory(m_vkDevice, instanceIndexMemory[currentFrame], nullptr);
+
+			vkResult = vkCreateBuffer(m_vkDevice, &createInfo, nullptr, &instanceIndexBuffer[currentFrame]);
+			VkMemoryRequirements bufferMemReq{};
+			vkGetBufferMemoryRequirements(m_vkDevice, instanceIndexBuffer[currentFrame], &bufferMemReq);
+			VkMemoryAllocateInfo allocInfo{};
+			allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+			allocInfo.allocationSize = bufferMemReq.size;
+			allocInfo.memoryTypeIndex = findMemoryType(
+				bufferMemReq.memoryTypeBits,
+				VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,//VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+				m_phyDevice
+			);
+			vkResult = vkAllocateMemory(m_vkDevice, &allocInfo, nullptr, &instanceIndexMemory[currentFrame]);
+			vkResult = vkBindBufferMemory(m_vkDevice, instanceIndexBuffer[currentFrame], instanceIndexMemory[currentFrame], 0);
+
+			VkDescriptorSet instanceIndexSet = bindingToDescriptorSet[{MAT_BASE_INSTANCES_DATA_BIND, MAT_BASE_INSTANCES_DATA_SET, 0}][currentFrame];
+			std::vector<VkWriteDescriptorSet> descriptorWrites;
+			VkDescriptorBufferInfo instanceIndexBufferInfo{};
+			instanceIndexBufferInfo.buffer = instanceIndexBuffer[currentFrame];
+			instanceIndexBufferInfo.offset = 0;
+			instanceIndexBufferInfo.range = VK_WHOLE_SIZE;
+			VkWriteDescriptorSet instanceDataWrite{};
+			instanceDataWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+			instanceDataWrite.dstSet = instanceIndexSet;
+			instanceDataWrite.dstBinding = MAT_BASE_INSTANCES_DATA_BIND;
+			instanceDataWrite.dstArrayElement = 0;
+			instanceDataWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+			instanceDataWrite.descriptorCount = 1;
+			instanceDataWrite.pBufferInfo = &instanceIndexBufferInfo;
+			vkUpdateDescriptorSets(m_vkDevice, 1, &instanceDataWrite, 0, nullptr);
+		}
 
 
 
-	//for (size_t sI = 0; sI < drawCmds[currentFrame].size(); ++sI) //for (auto& cScene : drawCmds[currentFrame])
-	//{
-	//	PROFILE_SCOPE("BufferCopy");
-	//	if (drawCmds[currentFrame][sI].empty())
-	//		continue;
-
-	//	cmdScene = &drawCmds[currentFrame][sI];
-	//	sceneIndex = sI;
-	//	scene = Engine::getInstance()->getScene(sceneIndex);
-
-
-	//	// upload the data
-	//	// Matrices
-	//	static size_t lastMatBufferSize[VULKAN_FRAMES_IN_FLIGHT] = { 0, 0 };
-	//	{
-	//		VkResult vkResult{};
-	//		VkDeviceSize bufferSize = sizeof(ModelTransform) * scene->transformSystem().modelTransforms().size();
-	//		VkBufferCreateInfo createInfo{};
-	//		createInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-	//		createInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-	//		createInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-	//		createInfo.size = bufferSize;
-
-	//		if (lastMatBufferSize[currentFrame] < bufferSize) {
-	//			lastMatBufferSize[currentFrame] = bufferSize;
-	//			vkDestroyBuffer(m_vkDevice, matBuf_modelTransforms[currentFrame], nullptr);
-	//			modelTransforms_lastBufferSize[currentFrame] = bufferSize;
-
-	//			if (matDevMem_modelTransforms[currentFrame] != VK_NULL_HANDLE)
-	//				vkFreeMemory(m_vkDevice, matDevMem_modelTransforms[currentFrame], nullptr);
-
-
-	//			vkResult = vkCreateBuffer(m_vkDevice, &createInfo, nullptr, &matBuf_modelTransforms[currentFrame]);
-	//			VkMemoryRequirements bufferMemReq{};
-	//			vkGetBufferMemoryRequirements(m_vkDevice, matBuf_modelTransforms[currentFrame], &bufferMemReq);
-	//			VkMemoryAllocateInfo allocInfo{};
-	//			allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-	//			allocInfo.allocationSize = bufferMemReq.size;
-	//			allocInfo.memoryTypeIndex = findMemoryType(
-	//				bufferMemReq.memoryTypeBits,
-	//				VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,//VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-	//				m_phyDevice
-	//			);
-	//			vkResult = vkAllocateMemory(m_vkDevice, &allocInfo, nullptr, &matDevMem_modelTransforms[currentFrame]);
-	//			vkResult = vkBindBufferMemory(m_vkDevice, matBuf_modelTransforms[currentFrame], matDevMem_modelTransforms[currentFrame], 0);
-
-	//			VkDescriptorSet matricesSet = bindingToDescriptorSet[{MAT_MODELMATRICES_BIND, MAT_MODELMATRICES_SET, 0}][currentFrame];
-	//			std::vector<VkWriteDescriptorSet> descriptorWrites;
-	//			VkDescriptorBufferInfo modelMatricesBufferInfo{};
-	//			modelMatricesBufferInfo.buffer = matBuf_modelTransforms[currentFrame];
-	//			modelMatricesBufferInfo.offset = 0;
-	//			modelMatricesBufferInfo.range = VK_WHOLE_SIZE;
-
-	//			VkWriteDescriptorSet matrixDataWrite{};
-	//			matrixDataWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-	//			matrixDataWrite.dstSet = matricesSet;
-	//			matrixDataWrite.dstBinding = MAT_MODELMATRICES_BIND;
-	//			matrixDataWrite.dstArrayElement = 0;
-	//			matrixDataWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-	//			matrixDataWrite.descriptorCount = 1;
-	//			matrixDataWrite.pBufferInfo = &modelMatricesBufferInfo;
-	//			vkUpdateDescriptorSets(m_vkDevice, 1, &matrixDataWrite, 0, nullptr);
-	//		}
-	//		_checkStageRealloc(bufferSize);
-	//		std::memcpy(static_cast<uint8_t*>(matStagingPtr[currentFrame]) + stageCursor,
-	//					scene->transformSystem().modelTransforms().data(),
-	//					bufferSize);
-	//		VkBufferCopy c{ .srcOffset = stageCursor, .dstOffset = 0, .size = bufferSize };
-	//		vkCmdCopyBuffer(frame.cmdBuffer, matStagingBuf[currentFrame], matBuf_modelTransforms[currentFrame], 1, &c);
-	//		stageCursor += bufferSize;
-
-	//	}
-	//	// instanceData on gpu
-	//	ArenaVector<InstanceData> instDataTemp{ ArenaAllocator<InstanceData>{instanceDataArena[currentFrame]} };
-	//	instDataTemp.reserve(8192);
-	//	for (auto& key : submeshKeysWithMultipleInstances[currentFrame][sceneIndex]) {
-	//		const SceneInstancePair pair{ sceneIndex, key };
-
-	//		for (auto& instData : submeshDrawInstanceData[currentFrame][pair].instances) {
-	//			instDataTemp.push_back(instData);
-	//		}
-
-	//	}
-
-	//	// Copy instance data to GPU
-	//	
-	//	if (!instDataTemp.empty()) {
-	//		VkResult vkResult{};
-	//		VkDeviceSize bufferSize = sizeof(InstanceData) * instDataTemp.size();
-	//		VkBufferCreateInfo createInfo{};
-	//		createInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-	//		createInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-	//		createInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-	//		createInfo.size = bufferSize;
-	//		if (bufferSize > lastInstDataTempSize[currentFrame]) {
-	//			lastInstDataTempSize[currentFrame] = bufferSize;
-
-	//			vkDestroyBuffer(m_vkDevice, instanceIndexBuffer[currentFrame], nullptr);
-	//			instancesIndex_lastBufferSize[currentFrame] = bufferSize;
-
-	//			if (instanceIndexMemory[currentFrame] != VK_NULL_HANDLE)
-	//				vkFreeMemory(m_vkDevice, instanceIndexMemory[currentFrame], nullptr);
-
-	//			vkResult = vkCreateBuffer(m_vkDevice, &createInfo, nullptr, &instanceIndexBuffer[currentFrame]);
-	//			VkMemoryRequirements bufferMemReq{};
-	//			vkGetBufferMemoryRequirements(m_vkDevice, instanceIndexBuffer[currentFrame], &bufferMemReq);
-	//			VkMemoryAllocateInfo allocInfo{};
-	//			allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-	//			allocInfo.allocationSize = bufferMemReq.size;
-	//			allocInfo.memoryTypeIndex = findMemoryType(
-	//				bufferMemReq.memoryTypeBits,
-	//				VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,//VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-	//				m_phyDevice
-	//			);
-	//			vkResult = vkAllocateMemory(m_vkDevice, &allocInfo, nullptr, &instanceIndexMemory[currentFrame]);
-	//			vkResult = vkBindBufferMemory(m_vkDevice, instanceIndexBuffer[currentFrame], instanceIndexMemory[currentFrame], 0);
-
-	//			VkDescriptorSet instanceIndexSet = bindingToDescriptorSet[{MAT_BASE_INSTANCES_DATA_BIND, MAT_BASE_INSTANCES_DATA_SET, 0}][currentFrame];
-	//			std::vector<VkWriteDescriptorSet> descriptorWrites;
-	//			VkDescriptorBufferInfo instanceIndexBufferInfo{};
-	//			instanceIndexBufferInfo.buffer = instanceIndexBuffer[currentFrame];
-	//			instanceIndexBufferInfo.offset = 0;
-	//			instanceIndexBufferInfo.range = VK_WHOLE_SIZE;
-	//			VkWriteDescriptorSet instanceDataWrite{};
-	//			instanceDataWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-	//			instanceDataWrite.dstSet = instanceIndexSet;
-	//			instanceDataWrite.dstBinding = MAT_BASE_INSTANCES_DATA_BIND;
-	//			instanceDataWrite.dstArrayElement = 0;
-	//			instanceDataWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-	//			instanceDataWrite.descriptorCount = 1;
-	//			instanceDataWrite.pBufferInfo = &instanceIndexBufferInfo;
-	//			vkUpdateDescriptorSets(m_vkDevice, 1, &instanceDataWrite, 0, nullptr);
-	//		}
-	//		_checkStageRealloc(bufferSize);
-	//		std::memcpy(static_cast<uint8_t*>(matStagingPtr[currentFrame]) + stageCursor,
-	//					instDataTemp.data(),
-	//					bufferSize);
-	//		VkBufferCopy c{ .srcOffset = stageCursor, .dstOffset = 0, .size = bufferSize };
-	//		vkCmdCopyBuffer(frame.cmdBuffer, matStagingBuf[currentFrame], instanceIndexBuffer[currentFrame], 1, &c);
-	//		stageCursor += bufferSize;
-
-	//	}
+		//Begin command buffer
+		vkResetCommandBuffer(frame.cmdBuffer, 0);
+		recordCommandBuffer(frame.cmdBuffer, currentFrame);
 
 
 
 
-	if (totalMatBufSize > 0)
-		vkCmdCopyBuffer(frame.cmdBuffer, matStagingBuf[currentFrame], matBuf_modelTransforms[currentFrame],
-						stagingRegions[currentFrame].size(), stagingRegions[currentFrame].data());
 
-	if (totalInstanceDataBufSize > 0)
-		vkCmdCopyBuffer(frame.cmdBuffer, matStagingBuf[currentFrame], instanceIndexBuffer[currentFrame], 1, &instanceBufferCopy);
+		// Dispatch light cluster CS
+		vkCmdBindPipeline(frame.cmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, lightCluster_pipeline);
+		vkCmdBindDescriptorSets(frame.cmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE,
+								lightCluster_pipelineLayout, 0, 3, lightCluster_descSets[currentFrame].data(),
+								0, nullptr);
+
+		// Compute proper group counts from clusters and shader local size
+		//constexpr uint32_t LOCAL_X = VULKAN_LIGHT_CLUSTER_THREADS_X; // matches [numthreads(…)]
+		//constexpr uint32_t LOCAL_Y = VULKAN_LIGHT_CLUSTER_THREADS_Y;
+		//constexpr uint32_t LOCAL_Z = VULKAN_LIGHT_CLUSTER_THREADS_Z;
+		//auto ceilDiv = [](uint32_t a, uint32_t b) { return (a + b - 1) / b; };
+
+		//const uint32_t groupsX = ceilDiv(camData.clustersX, LOCAL_X);
+		//const uint32_t groupsY = ceilDiv(camData.clustersY, LOCAL_Y);
+		//const uint32_t groupsZ = ceilDiv(camData.clustersZ, LOCAL_Z);
+
+		vkCmdDispatch(frame.cmdBuffer, VULKAN_LIGHT_CLUSTERS_X, VULKAN_LIGHT_CLUSTERS_Y, VULKAN_LIGHT_CLUSTERS_Z);
 
 
 
-	// Barrier
+		VkViewport viewport{};
+
+
+		// Set Dynamic state
+
+		viewport.x = ctx.vPortPos[0];
+		viewport.y = ctx.vPortPos[1];
+		viewport.width = ctx.vPortSize[0] < 0 ? static_cast<float>(swapchainExtent.width) : ctx.vPortSize[0];
+		viewport.height = ctx.vPortSize[1] < 0 ? static_cast<float>(swapchainExtent.height) : ctx.vPortSize[1];
+		viewport.minDepth = ctx.vPortMinDepth;
+		viewport.maxDepth = ctx.vPortMaxDepth;
+		vkCmdSetViewport(frame.cmdBuffer, 0, 1, &viewport);
+
+		VkRect2D scissor{};
+		scissor.offset = { ctx.sciOffset[0], ctx.sciOffset[1] };
+		scissor.extent = swapchainExtent;
+		vkCmdSetScissor(frame.cmdBuffer, 0, 1, &scissor);
+
+		vkCmdSetDepthTestEnable(frame.cmdBuffer, VK_TRUE);
+		vkCmdSetDepthWriteEnable(frame.cmdBuffer, VK_TRUE);
+		vkCmdSetDepthCompareOp(frame.cmdBuffer, VK_COMPARE_OP_LESS_OR_EQUAL);
+
+
+		// Camera
+		mainCam = Engine::getInstance()->mainCamera();
+		auto& camData = mainCam->cameraData();
+		camData.numLights = static_cast<uint32_t>(lightsData.size());
+		camData.screenSize = { viewport.width, viewport.height };
+		camData.invScreenSize = { 1.0f / camData.screenSize.x, 1.0f / camData.screenSize.y };
+		camData.clustersX = VULKAN_LIGHT_CLUSTERS_X;
+		camData.clustersY = VULKAN_LIGHT_CLUSTERS_Y;
+		camData.clustersZ = VULKAN_LIGHT_CLUSTERS_Z;
+		f = &mainCam->getFrustum();
+
+		// Update CameraData cBuffer
+		void* mappedData = nullptr;
+		vkMapMemory(m_vkDevice, camDataMemory[currentFrame], 0, sizeof(CameraData), 0, &mappedData);
+		memcpy(mappedData, &camData, sizeof(CameraData));
+		vkUnmapMemory(m_vkDevice, camDataMemory[currentFrame]);
+
+
+
+		//for (size_t sI = 0; sI < drawCmds[currentFrame].size(); ++sI) //for (auto& cScene : drawCmds[currentFrame])
+		//{
+		//	PROFILE_SCOPE("BufferCopy");
+		//	if (drawCmds[currentFrame][sI].empty())
+		//		continue;
+
+		//	cmdScene = &drawCmds[currentFrame][sI];
+		//	sceneIndex = sI;
+		//	scene = Engine::getInstance()->getScene(sceneIndex);
+
+
+		//	// upload the data
+		//	// Matrices
+		//	static size_t lastMatBufferSize[VULKAN_FRAMES_IN_FLIGHT] = { 0, 0 };
+		//	{
+		//		VkResult vkResult{};
+		//		VkDeviceSize bufferSize = sizeof(ModelTransform) * scene->transformSystem().modelTransforms().size();
+		//		VkBufferCreateInfo createInfo{};
+		//		createInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+		//		createInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+		//		createInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+		//		createInfo.size = bufferSize;
+
+		//		if (lastMatBufferSize[currentFrame] < bufferSize) {
+		//			lastMatBufferSize[currentFrame] = bufferSize;
+		//			vkDestroyBuffer(m_vkDevice, matBuf_modelTransforms[currentFrame], nullptr);
+		//			modelTransforms_lastBufferSize[currentFrame] = bufferSize;
+
+		//			if (matDevMem_modelTransforms[currentFrame] != VK_NULL_HANDLE)
+		//				vkFreeMemory(m_vkDevice, matDevMem_modelTransforms[currentFrame], nullptr);
+
+
+		//			vkResult = vkCreateBuffer(m_vkDevice, &createInfo, nullptr, &matBuf_modelTransforms[currentFrame]);
+		//			VkMemoryRequirements bufferMemReq{};
+		//			vkGetBufferMemoryRequirements(m_vkDevice, matBuf_modelTransforms[currentFrame], &bufferMemReq);
+		//			VkMemoryAllocateInfo allocInfo{};
+		//			allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+		//			allocInfo.allocationSize = bufferMemReq.size;
+		//			allocInfo.memoryTypeIndex = findMemoryType(
+		//				bufferMemReq.memoryTypeBits,
+		//				VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,//VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+		//				m_phyDevice
+		//			);
+		//			vkResult = vkAllocateMemory(m_vkDevice, &allocInfo, nullptr, &matDevMem_modelTransforms[currentFrame]);
+		//			vkResult = vkBindBufferMemory(m_vkDevice, matBuf_modelTransforms[currentFrame], matDevMem_modelTransforms[currentFrame], 0);
+
+		//			VkDescriptorSet matricesSet = bindingToDescriptorSet[{MAT_MODELMATRICES_BIND, MAT_MODELMATRICES_SET, 0}][currentFrame];
+		//			std::vector<VkWriteDescriptorSet> descriptorWrites;
+		//			VkDescriptorBufferInfo modelMatricesBufferInfo{};
+		//			modelMatricesBufferInfo.buffer = matBuf_modelTransforms[currentFrame];
+		//			modelMatricesBufferInfo.offset = 0;
+		//			modelMatricesBufferInfo.range = VK_WHOLE_SIZE;
+
+		//			VkWriteDescriptorSet matrixDataWrite{};
+		//			matrixDataWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		//			matrixDataWrite.dstSet = matricesSet;
+		//			matrixDataWrite.dstBinding = MAT_MODELMATRICES_BIND;
+		//			matrixDataWrite.dstArrayElement = 0;
+		//			matrixDataWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+		//			matrixDataWrite.descriptorCount = 1;
+		//			matrixDataWrite.pBufferInfo = &modelMatricesBufferInfo;
+		//			vkUpdateDescriptorSets(m_vkDevice, 1, &matrixDataWrite, 0, nullptr);
+		//		}
+		//		_checkStageRealloc(bufferSize);
+		//		std::memcpy(static_cast<uint8_t*>(matStagingPtr[currentFrame]) + stageCursor,
+		//					scene->transformSystem().modelTransforms().data(),
+		//					bufferSize);
+		//		VkBufferCopy c{ .srcOffset = stageCursor, .dstOffset = 0, .size = bufferSize };
+		//		vkCmdCopyBuffer(frame.cmdBuffer, matStagingBuf[currentFrame], matBuf_modelTransforms[currentFrame], 1, &c);
+		//		stageCursor += bufferSize;
+
+		//	}
+		//	// instanceData on gpu
+		//	ArenaVector<InstanceData> instDataTemp{ ArenaAllocator<InstanceData>{instanceDataArena[currentFrame]} };
+		//	instDataTemp.reserve(8192);
+		//	for (auto& key : submeshKeysWithMultipleInstances[currentFrame][sceneIndex]) {
+		//		const SceneInstancePair pair{ sceneIndex, key };
+
+		//		for (auto& instData : submeshDrawInstanceData[currentFrame][pair].instances) {
+		//			instDataTemp.push_back(instData);
+		//		}
+
+		//	}
+
+		//	// Copy instance data to GPU
+		//	
+		//	if (!instDataTemp.empty()) {
+		//		VkResult vkResult{};
+		//		VkDeviceSize bufferSize = sizeof(InstanceData) * instDataTemp.size();
+		//		VkBufferCreateInfo createInfo{};
+		//		createInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+		//		createInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+		//		createInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+		//		createInfo.size = bufferSize;
+		//		if (bufferSize > lastInstDataTempSize[currentFrame]) {
+		//			lastInstDataTempSize[currentFrame] = bufferSize;
+
+		//			vkDestroyBuffer(m_vkDevice, instanceIndexBuffer[currentFrame], nullptr);
+		//			instancesIndex_lastBufferSize[currentFrame] = bufferSize;
+
+		//			if (instanceIndexMemory[currentFrame] != VK_NULL_HANDLE)
+		//				vkFreeMemory(m_vkDevice, instanceIndexMemory[currentFrame], nullptr);
+
+		//			vkResult = vkCreateBuffer(m_vkDevice, &createInfo, nullptr, &instanceIndexBuffer[currentFrame]);
+		//			VkMemoryRequirements bufferMemReq{};
+		//			vkGetBufferMemoryRequirements(m_vkDevice, instanceIndexBuffer[currentFrame], &bufferMemReq);
+		//			VkMemoryAllocateInfo allocInfo{};
+		//			allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+		//			allocInfo.allocationSize = bufferMemReq.size;
+		//			allocInfo.memoryTypeIndex = findMemoryType(
+		//				bufferMemReq.memoryTypeBits,
+		//				VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,//VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+		//				m_phyDevice
+		//			);
+		//			vkResult = vkAllocateMemory(m_vkDevice, &allocInfo, nullptr, &instanceIndexMemory[currentFrame]);
+		//			vkResult = vkBindBufferMemory(m_vkDevice, instanceIndexBuffer[currentFrame], instanceIndexMemory[currentFrame], 0);
+
+		//			VkDescriptorSet instanceIndexSet = bindingToDescriptorSet[{MAT_BASE_INSTANCES_DATA_BIND, MAT_BASE_INSTANCES_DATA_SET, 0}][currentFrame];
+		//			std::vector<VkWriteDescriptorSet> descriptorWrites;
+		//			VkDescriptorBufferInfo instanceIndexBufferInfo{};
+		//			instanceIndexBufferInfo.buffer = instanceIndexBuffer[currentFrame];
+		//			instanceIndexBufferInfo.offset = 0;
+		//			instanceIndexBufferInfo.range = VK_WHOLE_SIZE;
+		//			VkWriteDescriptorSet instanceDataWrite{};
+		//			instanceDataWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		//			instanceDataWrite.dstSet = instanceIndexSet;
+		//			instanceDataWrite.dstBinding = MAT_BASE_INSTANCES_DATA_BIND;
+		//			instanceDataWrite.dstArrayElement = 0;
+		//			instanceDataWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+		//			instanceDataWrite.descriptorCount = 1;
+		//			instanceDataWrite.pBufferInfo = &instanceIndexBufferInfo;
+		//			vkUpdateDescriptorSets(m_vkDevice, 1, &instanceDataWrite, 0, nullptr);
+		//		}
+		//		_checkStageRealloc(bufferSize);
+		//		std::memcpy(static_cast<uint8_t*>(matStagingPtr[currentFrame]) + stageCursor,
+		//					instDataTemp.data(),
+		//					bufferSize);
+		//		VkBufferCopy c{ .srcOffset = stageCursor, .dstOffset = 0, .size = bufferSize };
+		//		vkCmdCopyBuffer(frame.cmdBuffer, matStagingBuf[currentFrame], instanceIndexBuffer[currentFrame], 1, &c);
+		//		stageCursor += bufferSize;
+
+		//	}
+
+
+
+
+		if (totalMatBufSize > 0)
+			vkCmdCopyBuffer(frame.cmdBuffer, matStagingBuf[currentFrame], matBuf_modelTransforms[currentFrame],
+							static_cast<uint32_t>(stagingRegions[currentFrame].size()), stagingRegions[currentFrame].data());
+
+		if (totalInstanceDataBufSize > 0)
+			vkCmdCopyBuffer(frame.cmdBuffer, matStagingBuf[currentFrame], instanceIndexBuffer[currentFrame], 1, &instanceBufferCopy);
+
+
+
+		// Barrier
 #if VK_HEADER_VERSION >= 230  // assuming 1.3 / sync2
 		//VkMemoryBarrier2 memBarrier{ VK_STRUCTURE_TYPE_MEMORY_BARRIER_2 };
 		//memBarrier.srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
@@ -569,29 +570,29 @@ void VulkanContext::draw(const DrawContext& ctx) {
 		//dep.memoryBarrierCount = 1;
 		//dep.pMemoryBarriers = &memBarrier;
 
-	VkBufferMemoryBarrier2 bufferBarriers[] =
-	{
+		VkBufferMemoryBarrier2 bufferBarriers[] =
 		{
-			.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
-			.srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-			.srcAccessMask = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
-			.dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
-			.dstAccessMask = VK_ACCESS_2_SHADER_STORAGE_READ_BIT,
-			.buffer = lightsClusterIndicesBuffer[currentFrame],
-			.offset = 0,
-			.size = VK_WHOLE_SIZE
-		},
-		{
-			.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
-			.srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-			.srcAccessMask = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
-			.dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
-			.dstAccessMask = VK_ACCESS_2_SHADER_STORAGE_READ_BIT,
-			.buffer = lightsClusterCountBuffer[currentFrame],
-			.offset = 0,
-			.size = VK_WHOLE_SIZE
-		}
-	};
+			{
+				.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
+				.srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+				.srcAccessMask = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+				.dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+				.dstAccessMask = VK_ACCESS_2_SHADER_STORAGE_READ_BIT,
+				.buffer = lightsClusterIndicesBuffer[currentFrame],
+				.offset = 0,
+				.size = VK_WHOLE_SIZE
+			},
+			{
+				.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
+				.srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+				.srcAccessMask = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+				.dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+				.dstAccessMask = VK_ACCESS_2_SHADER_STORAGE_READ_BIT,
+				.buffer = lightsClusterCountBuffer[currentFrame],
+				.offset = 0,
+				.size = VK_WHOLE_SIZE
+			}
+		};
 
 		VkDependencyInfo dep{ VK_STRUCTURE_TYPE_DEPENDENCY_INFO };
 		dep.bufferMemoryBarrierCount = 2;
@@ -619,9 +620,9 @@ void VulkanContext::draw(const DrawContext& ctx) {
 			0, nullptr,
 			0, nullptr);
 #endif
-	
 
 
+	}
 
 
 		{
@@ -663,11 +664,11 @@ void VulkanContext::draw(const DrawContext& ctx) {
 			}
 
 			uint32_t lastPipelineIndex = UINT32_INVALID - 1;
-			Material* lastMaterial = nullptr;
-			uint32_t lastDescCount = 0;
+			//Material* lastMaterial = nullptr;
+			//uint32_t lastDescCount = 0;
 			uint32_t lastMatIndex = UINT32_INVALID;
 			VkDescriptorSet lastSets[4]{ nullptr, nullptr, nullptr, nullptr };
-			size_t firstSet = 0;
+			uint32_t firstSet = 0;
 			bool pendingRebind = false;
 
 			for (size_t i = 0; i < sceneIndices[currentFrame].size(); ++i) {			//for (auto& cmd : *cmdScene) {
@@ -680,11 +681,11 @@ void VulkanContext::draw(const DrawContext& ctx) {
 				for (auto& cmd : cmdList) {
 					auto& instData = submeshDrawInstanceData[currentFrame][sceneIndex][cmd.submeshOffset];
 					auto instanceSize = instData.instances.size();
-					if (instanceSize > 1) {
-						auto& aabb = instData.bounds;
-						if (!MMath::aabbVisible(aabb.min, aabb.max, *f))
-							continue;
-					}
+					//if (instanceSize > 1) {
+					//	auto& aabb = instData.bounds;
+					//	if (!MMath::aabbVisible(aabb.min, aabb.max, *f))
+					//		continue;
+					//}
 
 
 
@@ -736,7 +737,7 @@ void VulkanContext::draw(const DrawContext& ctx) {
 						vkCmdPushConstants(frame.cmdBuffer, pipelineLayouts[matBase->pipelineLayoutId], VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
 										   0, sizeof(BaseMatPush), &push);
 
-						auto& submesh = scene->sceneRender().getSubMeshes()[cmd.submeshOffset];
+						auto& submesh = scene1->sceneRender().getSubMeshes()[cmd.submeshOffset];
 						auto vertexOffset = submesh.vertexOffset;
 						auto indexOffset = submesh.indexOffset;
 						auto indexCount = submesh.indexCount;
@@ -751,12 +752,12 @@ void VulkanContext::draw(const DrawContext& ctx) {
 						push.flags = 0;
 						push.matInstanceIndex = cmd.instanceIndex;
 						auto& transComp = grp.get<TransformComponent>(cmd.subMeshEntity);//scene->registry().get<TransformComponent>(cmd.subMeshEntity);
-						push.modelToWorld = scene->transformSystem().modelTransforms()[transComp.dataIndex];
+						push.modelToWorld = scene1->transformSystem().modelTransforms()[transComp.dataIndex];
 						vkCmdPushConstants(frame.cmdBuffer, pipelineLayouts[matBase->pipelineLayoutId], VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
 										   0, sizeof(BaseMatPush), &push);
 
 
-						auto& submesh = scene->sceneRender().getSubMeshes()[cmd.submeshOffset];
+						auto& submesh = scene1->sceneRender().getSubMeshes()[cmd.submeshOffset];
 						auto vertexOffset = submesh.vertexOffset;
 						auto indexOffset = submesh.indexOffset;
 						auto indexCount = submesh.indexCount;
@@ -799,32 +800,32 @@ void VulkanContext::draw(const DrawContext& ctx) {
 				vkCmdBindDescriptorSets(frame.cmdBuffer,
 										VK_PIPELINE_BIND_POINT_GRAPHICS,
 										pipelineLayouts[shapeMat->pipelineLayoutId],
-										0,
-										1,
-										&shapeRendererDescSet[currentFrame],
-										0, nullptr);
-				pipelinesCount++;
-				setCount++;
-				anyAabbsDrawn = true;
+											0,
+											1,
+											& shapeRendererDescSet[currentFrame],
+											0, nullptr);
+											pipelinesCount++;
+											setCount++;
+											anyAabbsDrawn = true;
 
-				vkCmdSetDepthTestEnable(frame.cmdBuffer, VK_FALSE);
-				vkCmdSetDepthWriteEnable(frame.cmdBuffer, VK_FALSE);
-				//vkCmdSetDepthCompareOp(frame.cmdBuffer, VK_COMPARE_OP_LESS_OR_EQUAL);
+											vkCmdSetDepthTestEnable(frame.cmdBuffer, VK_FALSE);
+											vkCmdSetDepthWriteEnable(frame.cmdBuffer, VK_FALSE);
+											//vkCmdSetDepthCompareOp(frame.cmdBuffer, VK_COMPARE_OP_LESS_OR_EQUAL);
 
 
-				VkClearValue clearValues[2] = {};
-				clearValues[0].color = { ctx.clearColor[0], ctx.clearColor[1], ctx.clearColor[2], 0.0f };
-				clearValues[1].depthStencil = { 1.0f, 0 };
-				VkRenderPassBeginInfo renderPassInfo{};
-				renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-				renderPassInfo.renderPass = rendPasses[0];
-				renderPassInfo.framebuffer = swapChainFramebuffers[imageIndex];
-				renderPassInfo.renderArea.offset = { 0, 0 };
-				renderPassInfo.renderArea.extent = swapchainExtent;
-				renderPassInfo.clearValueCount = 2;
-				renderPassInfo.pClearValues = clearValues;
-				vkCmdBeginRenderPass(frame.cmdBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
-				hasDrawn = true;
+											VkClearValue clearValues[2] = {};
+											clearValues[0].color = { ctx.clearColor[0], ctx.clearColor[1], ctx.clearColor[2], 0.0f };
+											clearValues[1].depthStencil = { 1.0f, 0 };
+											VkRenderPassBeginInfo renderPassInfo{};
+											renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+											renderPassInfo.renderPass = rendPasses[0];
+											renderPassInfo.framebuffer = swapChainFramebuffers[imageIndex];
+											renderPassInfo.renderArea.offset = { 0, 0 };
+											renderPassInfo.renderArea.extent = swapchainExtent;
+											renderPassInfo.clearValueCount = 2;
+											renderPassInfo.pClearValues = clearValues;
+											vkCmdBeginRenderPass(frame.cmdBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+											hasDrawn = true;
 			}
 
 			if (scene->sceneRender().drawOccluders()) {
@@ -897,81 +898,86 @@ void VulkanContext::draw(const DrawContext& ctx) {
 			vkCmdEndRenderPass(frame.cmdBuffer);
 
 	}
-	// Just clear screen if nothing has been rendered
-	if (!hasDrawn) {
-		VkClearValue clearValues[2] = {};
-		clearValues[0].color = { ctx.clearColor[0], ctx.clearColor[1], ctx.clearColor[2], ctx.clearColor[3] };
-		clearValues[1].depthStencil = { 1.0f, 0 };
 
-		VkRenderPassBeginInfo renderPassInfo{};
-		renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-		renderPassInfo.renderPass = rendPasses[0];
-		renderPassInfo.framebuffer = swapChainFramebuffers[imageIndex];
-		renderPassInfo.renderArea.offset = { 0, 0 };
-		renderPassInfo.renderArea.extent = swapchainExtent;
-		renderPassInfo.clearValueCount = 2;
-		renderPassInfo.pClearValues = clearValues;
-		vkCmdBeginRenderPass(frame.cmdBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+	{
+		PROFILE_SCOPE("DrawPresentation");
 
-		vkCmdEndRenderPass(frame.cmdBuffer);
+		// Just clear screen if nothing has been rendered
+		if (!hasDrawn) {
+			VkClearValue clearValues[2] = {};
+			clearValues[0].color = { ctx.clearColor[0], ctx.clearColor[1], ctx.clearColor[2], ctx.clearColor[3] };
+			clearValues[1].depthStencil = { 1.0f, 0 };
+
+			VkRenderPassBeginInfo renderPassInfo{};
+			renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+			renderPassInfo.renderPass = rendPasses[0];
+			renderPassInfo.framebuffer = swapChainFramebuffers[imageIndex];
+			renderPassInfo.renderArea.offset = { 0, 0 };
+			renderPassInfo.renderArea.extent = swapchainExtent;
+			renderPassInfo.clearValueCount = 2;
+			renderPassInfo.pClearValues = clearValues;
+			vkCmdBeginRenderPass(frame.cmdBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+			vkCmdEndRenderPass(frame.cmdBuffer);
+		}
+
+
+		// End command buffer
+		if (vkEndCommandBuffer(frame.cmdBuffer) != VK_SUCCESS) {
+			throw std::runtime_error("failed to record command buffer!");
+		}
+
+		m_lastDrawcallCount = drawCount;
+		m_lastPipelineSwitches = pipelinesCount;
+
+
+		VkSubmitInfo submitInfo{};
+		submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+
+		VkSemaphore waitSemaphores[] = { frame.imageAvailable };
+		VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
+		submitInfo.waitSemaphoreCount = 1;
+		submitInfo.pWaitSemaphores = waitSemaphores;
+		submitInfo.pWaitDstStageMask = waitStages;
+		submitInfo.commandBufferCount = 1;
+		submitInfo.pCommandBuffers = &frame.cmdBuffer;
+
+		// Signal done
+		VkSemaphore signalSemaphores[] = { imageRenderFinished[imageIndex] };
+		submitInfo.signalSemaphoreCount = 1;
+		submitInfo.pSignalSemaphores = signalSemaphores;
+
+		// Submit command buffer
+		auto submitResult = vkQueueSubmit(m_graphicsQueue, 1, &submitInfo, frame.inFlight);
+		if (submitResult != VK_SUCCESS) {
+			LOGLINE(LogType::Error, LogMod::Vulkan, "failed to submit draw command buffer!");
+			vkDeviceWaitIdle(m_vkDevice);
+			throw std::runtime_error("failed to submit draw command buffer!");
+		}
+
+
+
+		// Present frame
+		VkPresentInfoKHR presentInfo{};
+		presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+		presentInfo.waitSemaphoreCount = 1;
+		presentInfo.pWaitSemaphores = signalSemaphores;
+
+		VkSwapchainKHR swapChains[] = { swapchain };
+		presentInfo.swapchainCount = 1;
+		presentInfo.pSwapchains = swapChains;
+		presentInfo.pImageIndices = &imageIndex;
+		presentInfo.pResults = nullptr; // Optional
+
+
+		auto presentResult = vkQueuePresentKHR(m_graphicsQueue, &presentInfo);
+		if (presentResult == VK_ERROR_OUT_OF_DATE_KHR || presentResult == VK_SUBOPTIMAL_KHR || pendingResize) {
+			recreateSwapchain();
+		}
+
+		// rotate frame sync /semaphores
+		currentFrame = (currentFrame + 1) % VULKAN_FRAMES_IN_FLIGHT;
 	}
-
-
-	// End command buffer
-	if (vkEndCommandBuffer(frame.cmdBuffer) != VK_SUCCESS) {
-		throw std::runtime_error("failed to record command buffer!");
-	}
-
-	m_lastDrawcallCount = drawCount;
-	m_lastPipelineSwitches = pipelinesCount;
-
-
-	VkSubmitInfo submitInfo{};
-	submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-
-	VkSemaphore waitSemaphores[] = { frame.imageAvailable };
-	VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
-	submitInfo.waitSemaphoreCount = 1;
-	submitInfo.pWaitSemaphores = waitSemaphores;
-	submitInfo.pWaitDstStageMask = waitStages;
-	submitInfo.commandBufferCount = 1;
-	submitInfo.pCommandBuffers = &frame.cmdBuffer;
-
-	// Signal done
-	VkSemaphore signalSemaphores[] = { imageRenderFinished[imageIndex] };
-	submitInfo.signalSemaphoreCount = 1;
-	submitInfo.pSignalSemaphores = signalSemaphores;
-
-	// Submit command buffer
-	auto submitResult = vkQueueSubmit(m_graphicsQueue, 1, &submitInfo, frame.inFlight);
-	if (submitResult != VK_SUCCESS) {
-		LOGLINE(LogType::Error, LogMod::Vulkan, "failed to submit draw command buffer!");
-		vkDeviceWaitIdle(m_vkDevice);
-		throw std::runtime_error("failed to submit draw command buffer!");
-	}
-
-
-		
-	// Present frame
-	VkPresentInfoKHR presentInfo{};
-	presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-	presentInfo.waitSemaphoreCount = 1;
-	presentInfo.pWaitSemaphores = signalSemaphores;
-
-	VkSwapchainKHR swapChains[] = { swapchain };
-	presentInfo.swapchainCount = 1;
-	presentInfo.pSwapchains = swapChains;
-	presentInfo.pImageIndices = &imageIndex;
-	presentInfo.pResults = nullptr; // Optional
-
-
-	auto presentResult = vkQueuePresentKHR(m_graphicsQueue, &presentInfo);
-	if (presentResult == VK_ERROR_OUT_OF_DATE_KHR || presentResult == VK_SUBOPTIMAL_KHR || pendingResize) {
-		recreateSwapchain();
-	}
-
-	// rotate frame sync /semaphores
-	currentFrame = (currentFrame + 1) % VULKAN_FRAMES_IN_FLIGHT;
 }
 
 void VulkanContext::preDraw(RenderManager* const renderMan) {

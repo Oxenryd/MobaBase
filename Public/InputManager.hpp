@@ -5,6 +5,7 @@
 
 #include "WindowSurface.h"
 #include "Delegate.hpp"
+#include <glm/glm.hpp>
 //#include "GlobalMacros.h"
 
 
@@ -36,6 +37,7 @@ private:
 	glm::i16vec2 m_lastDeltaMax{};
 
 	bool m_gotMousePosThisFrame = false;
+	float m_deltaTime{};
 
 
 
@@ -91,7 +93,7 @@ public:
 #ifdef BUILD_WIN
 		m_ws->onMouseRaw.subscribe( [this](MouseDataRaw raw) -> void
 								   {
-									   m_currentMouseState.lastPositionDelta += glm::ivec2{raw.deltaX, raw.deltaY};
+									   m_currentMouseState.lastPositionDelta += glm::ivec2{ raw.deltaX, raw.deltaY };// *std::max(static_cast<int32_t>(1.0f / m_deltaTime * m_mouseSense), 1);
 									   m_currentMouseState.absoluteScreenPosition = glm::ivec2{ raw.absX, raw.absY };
 								   });
 		m_ws->onKeyEvent.subscribe( [this](KeyEvent event) -> void
@@ -111,9 +113,9 @@ public:
 #endif
 	}
 
-	INLINE void update() {
+	INLINE void update(double dt) {
 
-		
+		m_deltaTime = static_cast<float>(dt);
 		//m_lastDeltaMax = { 0,0 };
 		//m_currentMouseState.lastPositionDelta = m_lastDeltaMax;
 		m_currentMouseState.lastPositionDelta = glm::ivec2{ 0, 0 };
@@ -236,5 +238,42 @@ public:
 	Event<MouseState> onMouseM5Hold;
 	Event<MouseState> onMouseM5Up;
 };
+
+
+class Input
+{
+private:
+	static constexpr uint16_t STANDARD_WIDTH = 1280;
+	static constexpr uint16_t STANDARD_HEIGHT = 800;
+public:
+	INLINE static glm::vec2 scaledMouseMovementVec2(
+		const MouseState& mState,
+		float dt, float sensitivity,
+		glm::highp_u16vec2 resolution = { STANDARD_WIDTH , STANDARD_HEIGHT})
+	{
+
+		auto rec = 1.0f / dt;
+		glm::vec2 scaledRes = glm::vec2{ static_cast<float>(resolution.x), static_cast<float>(resolution.y) } * INPUT_RESO_SCALE_FACTOR;
+		return glm::vec2{
+			-(float)mState.lastPositionDelta.x * rec * sensitivity * scaledRes.x,
+			-(float)mState.lastPositionDelta.y * rec * sensitivity * scaledRes.y
+		};
+	}
+	INLINE static glm::vec3 scaledMouseMovementVec3(
+		const MouseState& mState,
+		float dt, float sensitivity,
+		glm::highp_u16vec2 resolution = { STANDARD_WIDTH , STANDARD_HEIGHT }) {
+
+		auto rec = 1.0f / dt * 0.001f;
+		glm::vec2 scaledRes = glm::vec2{ static_cast<float>(resolution.x), static_cast<float>(resolution.y) } * INPUT_RESO_SCALE_FACTOR;
+		auto sense = rec * sensitivity * sensitivity;
+		return glm::vec3{
+			-(float)mState.lastPositionDelta.x * sense * scaledRes.x,
+			-(float)mState.lastPositionDelta.y * sense * scaledRes.y,
+			0.0f
+		};
+	}
+};
+
 
 #endif // INPUTMANAGER_HPP

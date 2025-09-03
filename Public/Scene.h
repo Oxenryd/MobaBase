@@ -125,7 +125,7 @@ class Scene : public SceneBase
 public:
     virtual ~Scene() {}
     Scene() = delete;
-    Scene(size_t arenaSize, uint32_t index) : SceneBase(arenaSize, index) {}
+    Scene(size_t arenaSize, uint16_t index) : SceneBase(arenaSize, index) {}
     //static SceneBase* defaultCreation(void* arg) {
     //    return new Derived{};
     //}
@@ -186,15 +186,15 @@ public:
 class DefaultScene : public Scene<DefaultScene>
 {
 public:
-    DefaultScene(size_t arenaSize, uint32_t index)
+    DefaultScene(size_t arenaSize, uint16_t index)
         : Scene<DefaultScene>{ arenaSize, index } {}
-    static SceneBase* createDefault(size_t arenaSize, uint32_t index, void* arg) {
+    static SceneBase* createDefault(size_t arenaSize, uint16_t index, void* arg) {
         return new DefaultScene{ arenaSize, index};
     }
 };
 
 template<typename T>
-concept SceneConcept = requires(T t, void* arg, double dt, uint32_t index, size_t size) {
+concept SceneConcept = requires(T t, void* arg, double dt, uint16_t index, size_t size) {
     { std::is_base_of_v<SceneBase, T> };
     { T::createDefault(size, index, arg) } -> std::convertible_to<SceneBase*>;
 };

@@ -36,7 +36,7 @@ ErrorCode AssetLoader::loadModel(
 		return _logReturnError(ErrorCode::ASSETS_MODEL_NO_ROOT, std::format("Assimp Error:  {}", importer.GetErrorString()));
 
 	MeshComponent mesh{};
-	mesh.subMeshOffset = subMeshBuffer.size();
+	mesh.subMeshOffset = static_cast<uint32_t>(subMeshBuffer.size());
 	mesh.subMeshCount = scene->mNumMeshes;
 	size_t vertCount = 0;
 	size_t indexCount = 0;
@@ -46,7 +46,7 @@ ErrorCode AssetLoader::loadModel(
 		const aiMesh* aiMesh = scene->mMeshes[i];
 
 		SubMeshData subMesh{};
-		subMesh.vertexOffset = vertexBuffer.size();
+		subMesh.vertexOffset = static_cast<uint32_t>(vertexBuffer.size());
 
 		// Vertices
 		uint32_t submeshVertices = 0;
@@ -66,7 +66,7 @@ ErrorCode AssetLoader::loadModel(
 		subMesh.vertexCount = submeshVertices;
 
 		// Indices
-		subMesh.indexOffset = indexBuffer.size();
+		subMesh.indexOffset = static_cast<uint32_t>(indexBuffer.size());
 		for (size_t f = 0; f < aiMesh->mNumFaces; ++f) {
 			const aiFace& face = aiMesh->mFaces[f];
 			if (face.mNumIndices != 3) {
@@ -90,7 +90,7 @@ ErrorCode AssetLoader::loadModel(
 			auto material = render.getMaterial(aiMat->GetName().C_Str());
 			if (!material) {
 				auto& newMat = createMaterial(aiMat);
-				subMesh.materialIndex = newMat.matIndex;
+				subMesh.materialIndex = static_cast<uint32_t>(newMat.matIndex);
 				newMats++;
 				
 				auto matData = aiMaterialToBaseMaterialData(aiMat);
@@ -103,7 +103,7 @@ ErrorCode AssetLoader::loadModel(
 					return ErrorCode::VULKAN_COULD_NOT_CREATE_PIPELINE;
 				}
 			} else {
-				subMesh.materialIndex = material->matIndex;
+				subMesh.materialIndex = static_cast<uint32_t>(material->matIndex);
 				auto& instance = material->createCopyOfLastInstance();
 				subMesh.instanceIndex = instance.instanceIndex();
 			}
@@ -119,7 +119,7 @@ ErrorCode AssetLoader::loadModel(
 		subMeshBuffer.push_back(subMesh);
 	}
 	if (outMeshInfo) {
-		outMeshInfo->subMeshCount = subMeshBuffer.size() - mesh.subMeshOffset;
+		outMeshInfo->subMeshCount = static_cast<uint32_t>(subMeshBuffer.size()) - mesh.subMeshOffset;
 		outMeshInfo->subMeshOffset = mesh.subMeshOffset;
 	}
 
@@ -172,44 +172,44 @@ BaseMaterialInstance AssetLoader::aiMaterialToBaseMaterialData(const aiMaterial*
 	}
 
 	if (ai.Get(AI_MATKEY_SHININESS, *reinterpret_cast<ai_real*>(ptr)) == AI_SUCCESS) {
-		auto ai = reinterpret_cast<ai_real*>(ptr);
-		base.shininess = *ai;
+		auto aiP = reinterpret_cast<ai_real*>(ptr);
+		base.shininess = *aiP;
 	}
 	if (ai.Get(AI_MATKEY_SHININESS_STRENGTH, *reinterpret_cast<ai_real*>(ptr)) == AI_SUCCESS) {
-		auto ai = reinterpret_cast<ai_real*>(ptr);
-		base.specularStrength = *ai;
+		auto aiP = reinterpret_cast<ai_real*>(ptr);
+		base.specularStrength = *aiP;
 	}
 	if (ai.Get(AI_MATKEY_OPACITY, *reinterpret_cast<ai_real*>(ptr)) == AI_SUCCESS) {
-		auto ai = reinterpret_cast<ai_real*>(ptr);
-		base.transparency = *ai;
+		auto aip = reinterpret_cast<ai_real*>(ptr);
+		base.transparency = *aip;
 	}
 	if (ai.Get(AI_MATKEY_REFRACTI, *reinterpret_cast<ai_real*>(ptr)) == AI_SUCCESS) {
-		auto ai = reinterpret_cast<ai_real*>(ptr);
-		base.refraction = *ai;
+		auto aip = reinterpret_cast<ai_real*>(ptr);
+		base.refraction = *aip;
 	}
 	if (ai.Get(AI_MATKEY_METALLIC_FACTOR, *reinterpret_cast<ai_real*>(ptr)) == AI_SUCCESS) {
-		auto ai = reinterpret_cast<ai_real*>(ptr);
-		base.metallic = *ai;
+		auto aip = reinterpret_cast<ai_real*>(ptr);
+		base.metallic = *aip;
 	}
 	if (ai.Get(AI_MATKEY_ROUGHNESS_FACTOR, *reinterpret_cast<ai_real*>(ptr)) == AI_SUCCESS) {
-		auto ai = reinterpret_cast<ai_real*>(ptr);
-		base.roughness = *ai;
+		auto aip = reinterpret_cast<ai_real*>(ptr);
+		base.roughness = *aip;
 	}
 	if (ai.Get(AI_MATKEY_REFLECTIVITY, *reinterpret_cast<ai_real*>(ptr)) == AI_SUCCESS) {
-		auto ai = reinterpret_cast<ai_real*>(ptr);
-		base.reflectivity = *ai;
+		auto aip = reinterpret_cast<ai_real*>(ptr);
+		base.reflectivity = *aip;
 	}
 	if (ai.Get(AI_MATKEY_TRANSMISSION_FACTOR, *reinterpret_cast<ai_real*>(ptr)) == AI_SUCCESS) {
-		auto ai = reinterpret_cast<ai_real*>(ptr);
-		base.transmission = *ai;
+		auto aip = reinterpret_cast<ai_real*>(ptr);
+		base.transmission = *aip;
 	}
 	if (ai.Get(AI_MATKEY_EMISSIVE_INTENSITY, *reinterpret_cast<ai_real*>(ptr)) == AI_SUCCESS) {
-		auto ai = reinterpret_cast<ai_real*>(ptr);
-		base.emissiveStrength = *ai;
+		auto aip = reinterpret_cast<ai_real*>(ptr);
+		base.emissiveStrength = *aip;
 	}
 	if (ai.Get(AI_MATKEY_CLEARCOAT_FACTOR, *reinterpret_cast<ai_real*>(ptr)) == AI_SUCCESS) {
-		auto ai = reinterpret_cast<ai_real*>(ptr);
-		base.clearcoatStrength = *ai;
+		auto aip = reinterpret_cast<ai_real*>(ptr);
+		base.clearcoatStrength = *aip;
 	}
 
 
@@ -247,16 +247,16 @@ void AssetLoader::parseMaterialTextures(const std::string& filename, const aiSce
 
 				if (embeddedTex->mHeight == 0) {
 					// Compressed texture (PNG/JPEG) in memory
-					size_t dataSize = embeddedTex->mWidth;
-					const uint8_t* data = reinterpret_cast<const uint8_t*>(embeddedTex->pcData);
+					//size_t dataSize = embeddedTex->mWidth;
+					//const uint8_t* data = reinterpret_cast<const uint8_t*>(embeddedTex->pcData);
 					// Now you can feed `data` to your image loader (stb_image, etc.)
 					throw std::exception("Not Implemented.");
 
 				} else {
 					
 
-					newTex.height = embeddedTex->mHeight;
-					newTex.width = embeddedTex->mWidth;
+					newTex.height = static_cast<uint16_t>(embeddedTex->mHeight);
+					newTex.width = static_cast<uint16_t>(embeddedTex->mWidth);
 					newTex.filePath = path.C_Str();
 
 					newTex = Engine::getInstance()->getRenderManager()->registerTexture(path.C_Str(), newTex);

@@ -238,14 +238,14 @@ static LRESULT CALLBACK WindowProc(
             case WM_KEYDOWN:
             {
                 auto code = static_cast<uint8_t>(wParam);
-                auto bitfield = static_cast<WindowSurface::KeysBitfield>(lParam);
+                auto bitfield = static_cast<WindowSurface::KeysBitfield>(static_cast<uint32_t>(lParam));
                 surface->onKeyDown.notify(code, bitfield);
             } break;
 
             case WM_KEYUP:
             {
                 auto code = static_cast<uint8_t>(wParam);
-                auto bitfield = static_cast<WindowSurface::KeysBitfield>(lParam);
+                auto bitfield = static_cast<WindowSurface::KeysBitfield>(static_cast<uint32_t>(lParam));
                 surface->onKeyUp.notify(code, bitfield);
             } break;
 

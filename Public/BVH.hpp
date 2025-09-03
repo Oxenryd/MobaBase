@@ -26,8 +26,8 @@ struct BVHNode //alignas(64)
 {
     //AABB bounds{};
 
-    glm::vec3 center;
-    glm::vec3 extent;
+    glm::vec3 center{};
+    glm::vec3 extent{};
 
     // Using bit packing for efficiency
     union
@@ -227,7 +227,7 @@ public:
         WorkerPkg(Arena* arena) :
             primitiveIds{ArenaAllocator<uint32_t>{arena}} {}
         WorkerPkg(const WorkerPkg& other) = default;
-        WorkerPkg& operator=(const WorkerPkg& rhs) {
+        WorkerPkg& operator=(WorkerPkg& rhs) {
             depth = rhs.depth;
             parent = rhs.parent;
             index = rhs.index;
@@ -241,20 +241,20 @@ public:
 
         ArenaVector<uint32_t> primitiveIds;
         uint32_t primCount{ UINT32_INVALID };
-        uint32_t depth{ UINT32_INVALID };
+        uint8_t depth{ UINT8_INVALID };
         uint32_t parent{ UINT32_INVALID };
         uint8_t index{ UINT8_INVALID };
 
     };
     std::atomic<bool> workersRunning = true;
-    std::atomic<bool> hasBuiltPrimitivesOnce[2] = {false, false};
+    //std::atomic<bool> hasBuiltPrimitivesOnce[2] = {false, false};
     std::atomic<uint8_t> nextThId;
     std::array<std::thread*, NUM_BUILD_THREADS> workers;
     std::array<WorkerPkg*, NUM_BUILD_THREADS> workerPkgs;
     std::array<std::atomic<bool>, NUM_BUILD_THREADS> workPkgCondition;
     std::array<std::binary_semaphore*, NUM_BUILD_THREADS> startSemas;
-    std::binary_semaphore rebuildStartSema{ 0 };
-    std::binary_semaphore rebuildDoneSema{ 1 };
+    std::binary_semaphore primitivesStartSema{ 0 };
+    std::binary_semaphore primitivesLock{ 1 };
     std::thread* rebuildThreads = nullptr;
     std::array<std::binary_semaphore*, NUM_BUILD_THREADS> doneSemas;
     //std::array<std::vector<uint32_t>, NUM_BUILD_THREADS> workerPrimsTemp;
@@ -366,7 +366,7 @@ public:
     uint8_t _getIndexToUseThisFrame();
     static void _buildThreadMethod(DualBVH* _this, ArenaRegistry& registry);
     void rebuildPrimitives(ArenaRegistry& registry, uint8_t index);
-    uint32_t buildRecursive(uint32_t* primitiveIds, uint32_t primCount, uint32_t depth, uint32_t parent, uint8_t index);
+    uint32_t buildRecursive(uint32_t* primitiveIds, uint32_t primCount, uint8_t depth, uint32_t parent, uint8_t index);
 
     uint32_t findBestSplit(const uint32_t* primitiveIds, uint32_t primCount, int& bestAxis, float& bestPos, uint8_t index);
     AABB computeBounds(const uint32_t* primitiveIds, uint32_t primCount, uint8_t index);
@@ -557,7 +557,7 @@ public:
         rebuildThread->join();
         delete rebuildThread;
 
-        rebuildStartSema.release();
+        primitivesStartSema.release();
 
         delete _frameArena;
         _frameArena = nullptr;
@@ -602,8 +602,8 @@ public:
     }
     explicit DualBVH(ArenaRegistry& registry, const BuildSettings& settings = {}) :
         settings(settings), m_reg{registry}
-        //, rebuildStartSema{ std::binary_semaphore{0}, std::binary_semaphore{0} },
-        //rebuildDoneSema{ std::binary_semaphore{1}, std::binary_semaphore{1} }
+        //, primitivesStartSema{ std::binary_semaphore{0}, std::binary_semaphore{0} },
+        //primitivesLock{ std::binary_semaphore{1}, std::binary_semaphore{1} }
     {
         for (size_t i = 0; i < 2; ++i) {
             nodes[i].reserve(1024);  // Pre-allocate for better performance
@@ -648,7 +648,7 @@ public:
 
     void startRebuild(ArenaRegistry& registry) {
 
-        rebuildStartSema.release();
+        primitivesStartSema.release();
     }
 
     // Construction
@@ -764,7 +764,7 @@ public:
     // Thread-safe accessors
     std::vector<BVHNode>& getCurrentNodes() { return nodes[_threadIndexToUse.load()]; }
     uint32_t getNodeCount() const { return nodeCount[_threadIndexToUse.load()]; }
-    uint32_t getPrimitiveCount(uint8_t index) const { return primitives[index].size(); }
+    uint32_t getPrimitiveCount(uint8_t index) const { return static_cast<uint32_t>(primitives[index].size()); }
     bool isEmpty(uint8_t index) const { return primitives[index].empty(); }
 
     // Debug/profiling methods
@@ -857,16 +857,16 @@ public:
     BVHSystem(ArenaRegistry& registry) :
         m_bvh{registry} {}
     // Called once per frame in main thread
-    void updateBVH(ArenaRegistry& registry, uint32_t currentFrame, float dt, float time) {
+    void updateBVH(ArenaRegistry& registry, double dt, double time) {
             //bvh.incrementalUpdate(registry);
             
-        counter += dt;
-        if (counter >= time) {
+        counter += static_cast<float>(dt);
+        if (counter >= static_cast<float>(time)) {
             counter = 0;
             m_bvh.setPendingUpdate(currentIndex);
         }
         //bvh.nextFrame();
-        lastUpdateFrame = currentFrame;
+        //lastUpdateFrame = currentFrame;
         
     }
 

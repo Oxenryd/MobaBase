@@ -31,8 +31,8 @@ private:
 
 
     INLINE void _checkDirty() {
-        auto& world = worldToView();
-        auto& proj = projection();
+        [[maybe_unused]] auto& world = worldToView();
+        [[maybe_unused]] auto& proj = projection();
     }
 
 public:

@@ -45,13 +45,13 @@ using MaterialCallback = void(*)(Material&, MaterialInstanceIndex);
 
 struct DescriptorSetLayoutKey
 {
-	uint32_t setIndex;
+	uint32_t setIndex{0};
 	std::vector<uint32_t> bindings;
 	std::vector<VkShaderStageFlags> stageFlags;
 	std::vector<uint32_t> counts;
 	std::vector<VkDescriptorType> types;
 	std::vector<uint32_t> nameIndices;
-	VkFlags flags;
+	VkFlags flags{0};
 	bool operator==(const DescriptorSetLayoutKey& other) const = default;
 
 
@@ -310,13 +310,13 @@ struct PipelineKey
 	std::string vShaderName;
 	std::string pShaderName;
 	std::vector<BlendMode> blendModes;
-	DepthMode depthMode;
-	RasterMode rasterMode;
-	MultiSamplingMode msaaMode;
+	DepthMode depthMode{};
+	RasterMode rasterMode{};
+	MultiSamplingMode msaaMode{};
 	std::unordered_map<uint32_t, DescriptorSetLayoutKey> descriptorSetLayoutKeys;
-	uint32_t pushConstantOffset;
-	uint32_t pushConstantSize;
-	VkShaderStageFlags pushShaderFlags;
+	uint32_t pushConstantOffset{};
+	uint32_t pushConstantSize{};
+	VkShaderStageFlags pushShaderFlags{};
 
 	bool operator==(const PipelineKey& other) const = default;
 

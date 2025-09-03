@@ -104,7 +104,7 @@ public:
         return ptr;
     }
 
-    bool findFirstFreeSpot(uint32_t size, size_t& outOffset, size_t alignment = alignof(std::max_align_t)) {
+    bool findFirstFreeSpot(size_t size, size_t& outOffset, size_t alignment = alignof(std::max_align_t)) {
         for (size_t i = 0; i < m_pagesPtr.size(); ++i) {
             auto& page = m_pagesPtr[i];
             if (!page.isFree())
@@ -115,11 +115,11 @@ public:
             auto actualSize = alignUp(size + delta, alignment);
 
             if (actualSize < page.size) {
-                auto lastSize = page.size;
-                page.size = actualSize;
-                page.occupy(delta);
+                size_t lastSize = page.size;
+                page.size = static_cast<uint32_t>(actualSize);
+                page.occupy(static_cast<uint8_t>(delta));
                 outOffset = aligned;
-                m_pagesPtr.emplace_back(ArenaPage{ page.offset + page.size, lastSize - size });
+                m_pagesPtr.emplace_back(ArenaPage{ page.offset + page.size, static_cast<uint32_t>(lastSize - size )});
                 mergePages();
                 m_used += page.size;
                 return true;
@@ -140,7 +140,7 @@ public:
         delete m_memory;
         m_size = newSizeBytes;
         if (m_pagesPtr.back().isFree()) {
-            m_pagesPtr.back().size = m_size - m_pagesPtr.back().offset;
+            m_pagesPtr.back().size = static_cast<uint32_t>(m_size - m_pagesPtr.back().offset);
         }
         m_memory = temp;
     }
@@ -249,7 +249,7 @@ public:
         m_nextArenaId = 1;
         if (m_size > 0xffffffff) {
             size_t pageStart = 0;//sizeof(ArenaPage) * HEAP_ARENA_MAX_PAGES + sizeof(std::vector<ArenaPage>);
-            uint32_t firstEnd = 0xffffffff - pageStart;
+            uint32_t firstEnd = 0xffffffff - static_cast<uint32_t>(pageStart);
             m_pagesPtr.emplace_back(ArenaPage{ pageStart, firstEnd });
             m_pagesPtr.emplace_back(ArenaPage{ firstEnd + 1,  static_cast<uint32_t>(m_size - firstEnd + 1) });
         } else {
@@ -276,7 +276,7 @@ public:
                         try {
                             entry.destroyFunc(entry.object);
                         } catch (std::exception& e) {
-                            LOGLINE(LogType::Warning, LogMod::Memory, "Failed to execute a destructor.");
+                            LOGLINE(LogType::Warning, LogMod::Memory, std::format("Failed to execute a destructor: {}" ,e.what()));
                         }
                     }
                     #ifdef LOGGING
@@ -405,6 +405,7 @@ public:
 
     void* destruct(void* ptr, size_t size) {}
     void deallocate(void* ptr, size_t size) {}
+
 
     //template<typename T, typename... Args>
     //T* construct(Args&&... args) {

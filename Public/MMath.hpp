@@ -160,7 +160,7 @@ namespace MMath
     INLINE Frustum getFrustum(const glm::mat4x4& viewProjection, bool normalize = true) {
 
         Frustum f;
-        const auto m = viewProjection;
+        const auto& m = viewProjection;
 
         __m128 col0 = _mm_loadu_ps(&m[0][0]);
         __m128 col1 = _mm_loadu_ps(&m[1][0]);

@@ -236,7 +236,7 @@ public:
         std::uniform_real_distribution<float> d(min, std::nextafter(max, std::numeric_limits<float>::infinity()));
         return d(engine_());
     }
-    static inline float nextDouble() { return nextDouble01(); }
+    static inline double nextDouble() { return nextDouble01(); }
     static inline double nextDouble(double min, double max) {
         ensure_order_(min, max);
         std::uniform_real_distribution<double> d(min, std::nextafter(max, std::numeric_limits<double>::infinity()));

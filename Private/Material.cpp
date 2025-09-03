@@ -62,17 +62,17 @@ void Material::addShaderParams(
 			}
 		} else
 			matParam.count = param.count;
-		matParam.bindingIndex = param.binding;
-		matParam.setIndex = param.set;
+		matParam.bindingIndex = static_cast<uint8_t>(param.binding);
+		matParam.setIndex = static_cast<uint8_t>(param.set);
 		matParam.offset = param.offset;
 
 		std::string name;
 		auto nameIndex = RenderManager::getInstance()->getParamNameIndex(param.name);
 		if (nameIndex == SIZE_INVALID) {
 			name = param.name;
-			matParam.nameIndex = RenderManager::getInstance()->registerParamName(name);
+			matParam.nameIndex = static_cast<uint32_t>(RenderManager::getInstance()->registerParamName(name));
 		} else {
-			matParam.nameIndex = nameIndex;
+			matParam.nameIndex = static_cast<uint32_t>(nameIndex);
 			name = RenderManager::getInstance()->getParamName(nameIndex);
 		}
 
@@ -80,9 +80,9 @@ void Material::addShaderParams(
 		if (!parentName.empty()) {
 			auto parentNameIndex = RenderManager::getInstance()->getParamNameIndex(parentName);
 			if (parentNameIndex == SIZE_INVALID) {
-				matParam.parentNameIndex = RenderManager::getInstance()->registerParamName(parentName);
+				matParam.parentNameIndex = static_cast<uint32_t>(RenderManager::getInstance()->registerParamName(parentName));
 			} else {
-				matParam.parentNameIndex = parentNameIndex;
+				matParam.parentNameIndex = static_cast<uint32_t>(parentNameIndex);
 			}
 		} else
 			matParam.parentNameIndex = UINT32_INVALID;
@@ -182,7 +182,7 @@ Material& Material::initFromShaders(Material& thisMat, const std::string& newNam
 			descSetKey.bindings.push_back(param.bindingIndex);
 			descSetKey.types.push_back(param.descriptorType);
 			descSetKey.nameIndices.push_back(param.nameIndex);
-			descSetKey.counts.push_back(param.count);
+			descSetKey.counts.push_back(static_cast<uint32_t>(param.count));
 			descSetKey.stageFlags.push_back(MatParamStageToVkShaderStageFlagBits(param.stage, param.resourceType));
 
 			if (param.descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER || param.descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC)
@@ -201,7 +201,7 @@ Material& Material::initFromShaders(Material& thisMat, const std::string& newNam
 			{
 				this_.pushShaderFlags = MatParamStageToVkShaderStageFlagBits(param.stage, param.resourceType);
 				this_.pushConstantOffset = param.offset;
-				this_.pushConstantSize = param.size;
+				this_.pushConstantSize = static_cast<uint32_t>(param.size);
 			} break;
 
 			case TypeBase::Sampler:
@@ -324,7 +324,7 @@ std::string& Material::name() const {
 MaterialBuffer* Material::getBuffer(const std::string& bufferName) {
 	auto nameIndex = RenderManager::getInstance()->getParamNameIndex(bufferName);
 	if (nameIndex != SIZE_INVALID) {
-		auto it = bufferNameIndexMap.find(nameIndex);
+		auto it = bufferNameIndexMap.find(static_cast<uint32_t>(nameIndex));
 		if (it != bufferNameIndexMap.end())
 			return &buffers[it->second];
 	}

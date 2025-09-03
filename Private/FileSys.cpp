@@ -75,7 +75,7 @@ ErrorCode FileSys::execAndCapture(const std::string& command, std::string& outSt
     if (!pipe)
         return ErrorCode::COMMAND_FAILED_EXECUTION;
 
-    while (fgets(buffer.data(), buffer.size(), pipe.get()) != nullptr)
+    while (fgets(buffer.data(), static_cast<int>(buffer.size()), pipe.get()) != nullptr)
         outStr += buffer.data();
 
     int returnCode = _pclose(pipe.release());

@@ -40,7 +40,7 @@ constexpr const double			FPS_165 = 1.0 / 165.0;
 constexpr const double			FPS_120 = 1.0 / 120.0;
 constexpr const double			FPS_60 = 1.0 / 60.0;
 constexpr const double			FPS_50 = 1.0 / 50.0;
-constexpr static const double	MAX_DELTA_TIME = 0.25;
+constexpr static const double	MAX_DELTA_TIME = 1.0;
 
 enum class EngineStatus : uint8_t
 {
@@ -94,20 +94,20 @@ private:
 	std::string m_appName;
 	std::vector<SceneBase*> m_scenes;
 	std::set<uint32_t> m_activeSceneIndices;
-	size_t m_newSceneIndex = 0;
-	double m_targetUpdateDeltaTime;
-	double m_updateDeltaTime;
-	double m_targetFixedDeltaTime;
-	double m_fixedAccu;
-	uint32_t m_framesSinceLastFpsRead;
+	uint16_t m_newSceneIndex = 0;
+	double m_targetUpdateDeltaTime{};
+	double m_updateDeltaTime{};
+	double m_targetFixedDeltaTime{};
+	double m_fixedAccu{};
+	uint32_t m_framesSinceLastFpsRead{};
 	EngineStatus m_status = EngineStatus::Stopped;
 	bool m_sceneTransitionRequested = false;
 	SceneTransitionMode m_sceneTransitMode = SceneTransitionMode::WaitForDone;
-	double m_lastReadFps;
-	float m_baseCosF;
-	float m_baseSinF;
-	double m_baseCosD;
-	double m_baseSinD;
+	double m_lastReadFps{};
+	float m_baseCosF{};
+	float m_baseSinF{};
+	double m_baseCosD{};
+	double m_baseSinD{};
 	size_t m_requestedSceneIndex = SIZE_INVALID;
 	uint32_t m_nextTraceId = 0;
 	uint32_t m_framesToTrace = 2;
@@ -167,7 +167,7 @@ public:
 
 	template <SceneConcept T>	
 	INLINE SceneBase* createNewScene(size_t arenaSize, void* argument) {
-		uint32_t index = m_newSceneIndex++;
+		uint16_t index = m_newSceneIndex++;
 		m_scenes.resize(std::max(static_cast<size_t>(index), m_scenes.size() + 1));
 		m_scenes[index] = (T::createDefault(arenaSize, index, argument));
 		return m_scenes[index];
