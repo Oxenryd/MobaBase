@@ -850,7 +850,7 @@ void VulkanContext::draw(const DrawContext& ctx) {
 				float largestNodeVol = 0;
 				for (size_t n = 0; n < scene->bvhSystem().bvh().getNodeCount(); ++n) {
 					auto& node = scene->bvhSystem().bvh().getCurrentNodes()[n];
-					AABB box = node.bounds();
+					AABB box = node.bounds;
 
 					if (n == 0) {
 						largestNodeVol = box.volume();

@@ -54,43 +54,53 @@ void DualBVH::_updatePrimitives(DualBVH* _this) {
             return;
         {
             PROFILE_SCOPE("BVH_RebuildPrimitiveAABBs");
-            _this->primitivesLock.acquire();
-            auto group = _this->m_reg.group<TransformComponent, BoundingVolumeComponent, EnabledTag>();
+            if (_this->primitivesLock[0].try_acquire()) {
+                auto group = _this->m_reg.group<TransformComponent, BoundingVolumeComponent, EnabledTag>();
+                auto& prims0 = _this->primitives[0];
+                MWork::for_loop(0, prims0.size(), 6,
+                                [&](size_t i) {
+                                    auto& prim = prims0[i];
+                                    auto& trans = group.get<TransformComponent>(prim.entity);
 
-            auto& prims0 = _this->primitives[0];
-            MWork::for_loop(0, prims0.size(), 6,
-                            [&](size_t i) {
-                                auto& prim = prims0[i];
-                                auto& trans = group.get<TransformComponent>(prim.entity);
+                                    if (trans.state.hasFlag(ObjectState::ParentMovedThisFrame) ||
+                                        trans.state.hasFlag(ObjectState::MovedThisFrame)) {
 
-                                if (trans.state.hasFlag(ObjectState::ParentMovedThisFrame) ||
-                                    trans.state.hasFlag(ObjectState::MovedThisFrame)) {
+                                        auto& bounds = group.get<BoundingVolumeComponent>(prim.entity);
+                                        prim.bounds = Engine::getInstance()->getScene(trans.sceneIndex)->
+                                            boundingSystem().aabbs()[bounds.coarseIndexWorld];
+                                        prim.center = prim.bounds.center();
+                                    }
 
-                                    auto& bounds = group.get<BoundingVolumeComponent>(prim.entity);
-                                    prim.bounds = Engine::getInstance()->getScene(trans.sceneIndex)->
-                                        boundingSystem().aabbs()[bounds.coarseIndexWorld];
-                                }
+                                });
+                _this->primitivesLock[0].release();
+            }
+            
 
-                            });
 
-            auto& prims1 = _this->primitives[1];
-            MWork::for_loop(0, prims1.size(), 6,
-                            [&](size_t i) {
-                                auto& prim = prims1[i];
-                                auto& trans = group.get<TransformComponent>(prim.entity);
+            if (_this->primitivesLock[1].try_acquire()) {
+                auto group = _this->m_reg.group<TransformComponent, BoundingVolumeComponent, EnabledTag>();
+                auto& prims1 = _this->primitives[1];
+                MWork::for_loop(0, prims1.size(), 6,
+                                [&](size_t i) {
+                                    auto& prim = prims1[i];
+                                    auto& trans = group.get<TransformComponent>(prim.entity);
 
-                                if (trans.state.hasFlag(ObjectState::ParentMovedThisFrame) ||
-                                    trans.state.hasFlag(ObjectState::MovedThisFrame)) {
+                                    if (trans.state.hasFlag(ObjectState::ParentMovedThisFrame) ||
+                                        trans.state.hasFlag(ObjectState::MovedThisFrame)) {
 
-                                    auto& bounds = group.get<BoundingVolumeComponent>(prim.entity);
-                                    prim.bounds = Engine::getInstance()->getScene(trans.sceneIndex)->
-                                        boundingSystem().aabbs()[bounds.coarseIndexWorld];
-                                }
+                                        auto& bounds = group.get<BoundingVolumeComponent>(prim.entity);
+                                        prim.bounds = Engine::getInstance()->getScene(trans.sceneIndex)->
+                                            boundingSystem().aabbs()[bounds.coarseIndexWorld];
+                                        prim.center = prim.bounds.center();
+                                    }
 
-                            });
+                                });
+                _this->primitivesLock[1].release();
+            }
+
         }
 
-        _this->primitivesLock.release();
+        //_this->primitivesLock.release();
     }
 }
 
@@ -161,9 +171,9 @@ void DualBVH::_buildThreadMethod(DualBVH* _this, ArenaRegistry& registry) {
 
                 auto it = _this->entityToPrimitive[index].find(entity);
                 if (it == _this->entityToPrimitive[index].end()) {
-                    _this->primitivesLock.acquire();
+                    _this->primitivesLock[index].acquire();
                     _this->rebuildPrimitives(registry, index);
-                    _this->primitivesLock.release();
+                    _this->primitivesLock[index].release();
                     break;
                 }
             }
@@ -235,8 +245,9 @@ uint32_t DualBVH::buildRecursive(uint32_t* primitiveIds, uint32_t primCount, uin
 
      node.parentIndex = parent;
      auto bounds = computeBounds(primitiveIds, primCount, index);
-     node.center = bounds.center();
-     node.extent = bounds.extent();
+     //node.center = bounds.center();
+     //node.extent = bounds.extent();
+     node.bounds = bounds;
      node.depth = depth;
      node.setDirty(false);
 
@@ -369,15 +380,34 @@ uint32_t DualBVH::buildRecursive(uint32_t* primitiveIds, uint32_t primCount, uin
 
 
 
-
-
-
-
-
-
-
-
-
+    //ArenaVector<uint32_t> leftPrims{ ArenaAllocator<uint32_t>(_frameArena) };
+    ////leftPrims.resize(primCount);
+    //ArenaVector<uint32_t> rightPrims{ ArenaAllocator<uint32_t>(_frameArena) };
+    ////rightPrims.resize(primCount);
+    //uint32_t leftCount = 0;
+    //uint32_t rightCount = 0;
+    //
+    //// First pass: count
+    //for (uint32_t i = 0; i < primCount; ++i) {
+    //    if (primitives[index][primitiveIds[i]].center[bestAxis] < bestPos) {
+    //        leftCount++;
+    //    } else {
+    //        rightCount++;
+    //    }
+    //}
+    //
+    ////// Second pass: separate (or use pre-allocated thread-local buffers)
+    ////uint32_t* leftPrims = threadLocalLeft[threadId];   // Pre-allocated
+    ////uint32_t* rightPrims = threadLocalRight[threadId]; // Pre-allocated
+    //
+    ////uint32_t leftIdx = 0, rightIdx = 0;
+    //for (uint32_t i = 0; i < primCount; ++i) {
+    //    if (primitives[index][primitiveIds[i]].center[bestAxis] < bestPos) {
+    //        leftPrims.push_back(primitiveIds[i]);
+    //    } else {
+    //        rightPrims.push_back(primitiveIds[i]);
+    //    }
+    //}
 
 
 
@@ -385,13 +415,17 @@ uint32_t DualBVH::buildRecursive(uint32_t* primitiveIds, uint32_t primCount, uin
      // Partition primitives
      auto partition = std::partition(primitiveIds, primitiveIds + primCount,
                                      [&](uint32_t primId) {
-                                         AABB& bounds = primitives[index][primId].bounds;//GET_AABB(primitives[index][primId]);
-                                         //AABB& bounds = Engine::getInstance()->getScene(primitives[index][primId].sceneIndex)->boundingSystem().aabbs()[primitives[index][primId].aabbIndex];
-                                         return bounds.center()[bestAxis] < bestPos;
+                                         //AABB& bounds = primitives[index][primId].bounds;//GET_AABB(primitives[index][primId]);                                      
+                                         //return bounds.center()[bestAxis] < bestPos;
+
+                                         return primitives[index][primId].center[bestAxis] < bestPos;
                                      });
 
-     ArenaVector<uint32_t> leftPrims(primitiveIds, partition, ArenaAllocator<uint32_t>(_frameArena));
-     ArenaVector<uint32_t> rightPrims(partition, primitiveIds + primCount, ArenaAllocator<uint32_t>(_frameArena));
+    
+
+    ArenaVector<uint32_t> leftPrims(primitiveIds, partition, ArenaAllocator<uint32_t>(_frameArena));
+    ArenaVector<uint32_t> rightPrims(partition, primitiveIds + primCount, ArenaAllocator<uint32_t>(_frameArena));
+
 
      // Ensure both sides have primitives
      if (leftPrims.empty() || rightPrims.empty()) {
@@ -537,17 +571,53 @@ uint32_t DualBVH::findBestSplit(const uint32_t* primitiveIds, uint32_t primCount
 }
 
 AABB DualBVH::computeBounds(const uint32_t* primitiveIds, uint32_t primCount, uint8_t index) {
-    if (primCount == 0) {
-        return AABB();
+    //if (primCount == 0) {
+    //    return AABB();
+    //}
+
+    //AABB& bounds = primitives[index][primitiveIds[0]].bounds;//GET_AABB(primitives[index][primitiveIds[0]]);//primitives[index][primitiveIds[0]].bounds;
+    //for (size_t i = 1; i < primCount; ++i) {
+    //    AABB& otherBounds = primitives[index][primitiveIds[i]].bounds;//GET_AABB(primitives[index][primitiveIds[i]]);
+    //    bounds = bounds.merge(otherBounds);//     primitives[index][primitiveIds[i]].bounds);
+    //}
+
+    //return bounds;
+
+    if (primCount == 0) return AABB();
+
+    const AABB& firstBounds = primitives[index][primitiveIds[0]].bounds;
+
+    //// Load first bounds into SIMD registers
+    //__m128 minVec = _mm_load_ps(&firstBounds.min.x);  // x,y,z,w
+    //__m128 maxVec = _mm_load_ps(&firstBounds.max.x);
+
+    //for (uint32_t i = 1; i < primCount; ++i) {
+    //    const AABB& bounds = primitives[index][primitiveIds[i]].bounds;
+
+    //    __m128 currentMin = _mm_load_ps(&bounds.min.x);
+    //    __m128 currentMax = _mm_load_ps(&bounds.max.x);
+
+    //    minVec = _mm_min_ps(minVec, currentMin);
+    //    maxVec = _mm_max_ps(maxVec, currentMax);
+    //}
+
+    //glm::vec3 resultMin, resultMax;
+    //_mm_store_ps(&resultMin.x, minVec);
+    //_mm_store_ps(&resultMax.x, maxVec);
+
+    //return AABB(resultMin, resultMax);
+
+    glm::vec3 minBounds = firstBounds.min;
+    glm::vec3 maxBounds = firstBounds.max;
+
+    for (uint32_t i = 1; i < primCount; ++i) {
+        const AABB& bounds = primitives[index][primitiveIds[i]].bounds;
+        minBounds = glm::min(minBounds, bounds.min);  // GLM vectorized min
+        maxBounds = glm::max(maxBounds, bounds.max);  // GLM vectorized max
     }
 
-    AABB& bounds = primitives[index][primitiveIds[0]].bounds;//GET_AABB(primitives[index][primitiveIds[0]]);//primitives[index][primitiveIds[0]].bounds;
-    for (size_t i = 1; i < primCount; ++i) {
-        AABB& otherBounds = primitives[index][primitiveIds[i]].bounds;//GET_AABB(primitives[index][primitiveIds[i]]);
-        bounds = bounds.merge(otherBounds);//     primitives[index][primitiveIds[i]].bounds);
-    }
+    return AABB{ minBounds, maxBounds };
 
-    return bounds;
 }
 
 void DualBVH::collectOccluders(const glm::vec3& cameraPos, const Frustum& frustum, std::vector<OccluderData>& occluders) const {
@@ -845,24 +915,25 @@ void DualBVH::frustumCullWithOcclusion(
 
 
         // classify quickly using mask from parent
-        auto res = frustumTest_centerExtent(node.center, node.extent, frustum.planes);
-        if (res.state == /*Outside*/0)
+        //auto res = frustumTest_centerExtent(node.center, node.extent, frustum.planes);
+        auto res = MMath::aabbClassifyWithMask(node.bounds.min, node.bounds.max, frustum);
+        if (res.state() == /*Outside*/0)
             continue;
 
         if (node.depth >= targetDepth) {
-            frontier[frameIndex].push_back({ j.nodeIndex, res.mask, res.state });
+            frontier[frameIndex].push_back({ j.nodeIndex, res.mask(), res.state()});
             continue;
         }
 
-        if (res.state == /*Inside*/2) {
+        if (res.state() == /*Inside*/2) {
             // whole subtree accepted: push once with state=Inside
             frontier[frameIndex].push_back({ j.nodeIndex, 0, /*Inside*/2 });
             continue;
         }
 
         // Intersect: descend
-        stack[frameIndex][sp++] = { node.leftChild, res.mask, /*Intersect*/1 };
-        stack[frameIndex][sp++] = { node.rightChild, res.mask, /*Intersect*/1 };
+        stack[frameIndex][sp++] = { node.leftChild, res.mask(), /*Intersect*/1};
+        stack[frameIndex][sp++] = { node.rightChild, res.mask(), /*Intersect*/1};
     }
 
     static constexpr size_t T = NUM_RUN_THREADS;
@@ -906,7 +977,7 @@ void DualBVH::frustumCullWithOcclusion(
                         } else {
 
                             const BVHNode& node = nodes[frameIndex][thisNodeIndex];
-                            const AABB& bounds = node.bounds();
+                            const AABB& bounds = node.bounds;
                             aabbViewZRange(bounds, camForward, camForwardPosDot, rootMinDepth, rootMaxDepth);
                         }
 
@@ -922,7 +993,7 @@ void DualBVH::frustumCullWithOcclusion(
                             out.nodesVisited++;
 
                             // Frustum test first (cheapest)
-                            if (!MMath::aabbVisible(node.min(), node.max(), frustum)) {
+                            if (!MMath::aabbVisible(node.bounds.min, node.bounds.max, frustum)) {
                                 out.nodesCulledByFrustum++;
                                 continue;
                             }
@@ -1009,7 +1080,7 @@ void DualBVH::frustumCullWithOcclusion(
                                     } else {
 
                                         //const BVHNode& node = nodes[frameIndex][node.leftChild];
-                                        const AABB& bounds = node.bounds();
+                                        const AABB& bounds = node.bounds;
                                         aabbViewZRange(bounds, camForward, camForwardPosDot, minDepth, maxDepth);
                                     }
 
@@ -1025,7 +1096,7 @@ void DualBVH::frustumCullWithOcclusion(
                                     } else {
 
                                         //const BVHNode& node = nodes[frameIndex][node.rightChild];
-                                        const AABB& bounds = node.bounds();
+                                        const AABB& bounds = node.bounds;
                                         aabbViewZRange(bounds, camForward, camForwardPosDot, minDepth, maxDepth);
                                     }
 
@@ -1077,7 +1148,7 @@ DualBVH::TraversalResult DualBVH::broadPhaseCollision(uint8_t index) const {
 
         result.nodesVisited++;
 
-        if (!a.bounds().intersects(b.bounds())) return;
+        if (!a.bounds.intersects(b.bounds)) return;
 
         if (a.isLeaf() && b.isLeaf()) {
             // Test all primitive pairs

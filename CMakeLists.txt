@@ -202,6 +202,7 @@ add_executable (MobaBase
 	"Public/MWork.hpp"
 	"Public/Profiler.hpp"
 	"Public/Robin_Hood.h"
+	"Public/Unions.h"
 
 
 	"Private/Engine.cpp"

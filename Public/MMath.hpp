@@ -10,7 +10,7 @@
 #include "Frustum.hpp"
 #include "Range.hpp"
 //#include "BasicTypes.hpp"
-
+#include "Unions.h"
 
 
 
@@ -275,6 +275,52 @@ namespace MMath
                 return false;
         }
         return true;
+    }
+
+    INLINE static MaskState<6, 2, uint8_t> aabbClassifyWithMask(const glm::vec3& min, const glm::vec3& max, const Frustum& frustum) {
+        // Convert to center-extent
+        const glm::vec3 center = (min + max) * 0.5f;
+        const glm::vec3 extent = (max - min) * 0.5f;
+
+        uint8_t mask = 0;
+        bool anyIntersect = false;
+
+        for (int i = 0; i < 6; ++i) {
+            // Quick outside test using your existing function
+            if (!__aabbVisibleSIMDPlane_mul(frustum.planes[i].raw, min, max)) {
+                return { 0, 0 };  // Outside
+            }
+
+            // Now do the center-extent test for intersection
+            const float* plane = frustum.planes[i].raw;
+            const __m128 n_d = _mm_load_ps(plane);
+            const __m128 center_vec = _mm_set_ps(0.0f, center.z, center.y, center.x);
+            const __m128 extent_vec = _mm_set_ps(0.0f, extent.z, extent.y, extent.x);
+
+            // s = dot(n, center) + d
+            __m128 mul_center = _mm_mul_ps(n_d, center_vec);
+            __m128 shuf = _mm_shuffle_ps(mul_center, mul_center, _MM_SHUFFLE(2, 1, 0, 3));
+            __m128 sum = _mm_add_ps(mul_center, shuf);
+            shuf = _mm_shuffle_ps(sum, sum, _MM_SHUFFLE(1, 0, 3, 2));
+            __m128 dot_result = _mm_add_ss(sum, shuf);
+            float s = _mm_cvtss_f32(dot_result) + plane[3];
+
+            // r = dot(|n|, extent)  
+            const __m128 abs_n = _mm_andnot_ps(_mm_set1_ps(-0.0f), n_d);
+            __m128 mul_extent = _mm_mul_ps(abs_n, extent_vec);
+            shuf = _mm_shuffle_ps(mul_extent, mul_extent, _MM_SHUFFLE(2, 1, 0, 3));
+            sum = _mm_add_ps(mul_extent, shuf);
+            shuf = _mm_shuffle_ps(sum, sum, _MM_SHUFFLE(1, 0, 3, 2));
+            dot_result = _mm_add_ss(sum, shuf);
+            float r = _mm_cvtss_f32(dot_result);
+
+            if (s - r < 0.0f) {
+                anyIntersect = true;
+                mask |= (1u << i);
+            }
+        }
+
+        return { mask, anyIntersect ? (uint8_t)1 : (uint8_t)2 };
     }
 
     //INLINE static bool obbVisible(const OBB& obb, const Frustum& frustum) {

@@ -726,7 +726,8 @@ namespace robin_hood
             h ^= k;
             h *= m;
         }
-
+#pragma warning(push)
+#pragma warning(disable : 26819)
         auto const* const data8 = reinterpret_cast<uint8_t const*>(data64 + n_blocks);
         switch (len & 7U) {
             case 7:
@@ -754,7 +755,7 @@ namespace robin_hood
             default:
                 break;
         }
-
+#pragma warning(pop)
         h ^= h >> r;
 
         // not doing the final step here, because this will be done by keyToIdx anyways

@@ -21,13 +21,18 @@ using TransformGroup =
 decltype(std::declval<ArenaRegistry&>()
          .group<TransformComponent, BoundingVolumeComponent, EnabledTag>());
 
-// BVH Node - designed for cache efficiency
+
+
+#pragma warning(push)
+#pragma warning(disable : 26495)
 struct BVHNode //alignas(64)
 {
-    //AABB bounds{};
+    AABB bounds{};
 
-    glm::vec3 center{};
-    glm::vec3 extent{};
+
+    
+    // glm::vec3 center{};
+    //glm::vec3 extent{};
 
     // Using bit packing for efficiency
     union
@@ -56,21 +61,34 @@ struct BVHNode //alignas(64)
     void setLeaf(bool leaf) { flags = leaf ? (flags | 0x01) : (flags & ~0x01); }
     void setDirty(bool dirty) { flags = dirty ? (flags | 0x02) : (flags & ~0x02); }
 
-    INLINE glm::vec3 min() const {
-        return center - 0.5f * extent;
+    //INLINE glm::vec3 min() const {
+    //    return center - 0.5f * extent;
+    //}
+    //INLINE glm::vec3 max() const {
+    //    return center + 0.5f * extent;
+    //}
+    //INLINE AABB bounds() const {
+    //    return AABB{ min(), max() };
+    //}
+    INLINE glm::vec3& min() const {
+        return const_cast<glm::vec3&>(bounds.min);
     }
-    INLINE glm::vec3 max() const {
-        return center + 0.5f * extent;
+    INLINE glm::vec3& max() const {
+        return const_cast<glm::vec3&>(bounds.max);
     }
-    INLINE AABB bounds() const {
-        return AABB{ min(), max() };
-    }
+    //INLINE AABB& bounds()  {
+    //    return bounds;;
+    //}
+
 };
+
+#pragma warning(pop)
 
 // Primitive reference for BVH
 struct BVHPrimitive
 {
     entt::entity entity;
+    glm::vec3 center{};
     AABB bounds;
     //uint32_t aabbIndex;
     //uint16_t sceneIndex;
@@ -135,15 +153,16 @@ private:
     struct TestResult { 
         TestResult(uint8_t mask, uint8_t state) :
             state{state}, mask{mask} {}
+       
         union
         {
-            uint8_t raw;
+            uint8_t __raw;
             struct
             {
-                uint8_t state : 2;
                 uint8_t mask : 6;
+                uint8_t state : 2;
             };
-        };        
+        };
     };
 
     inline TestResult frustumTest_centerExtent(const glm::vec3& c, const glm::vec3& e,
@@ -253,8 +272,9 @@ public:
     std::array<WorkerPkg*, NUM_BUILD_THREADS> workerPkgs;
     std::array<std::atomic<bool>, NUM_BUILD_THREADS> workPkgCondition;
     std::array<std::binary_semaphore*, NUM_BUILD_THREADS> startSemas;
+    std::binary_semaphore primitivesLock[2] = { std::binary_semaphore{1}, std::binary_semaphore{1} };
     std::binary_semaphore primitivesStartSema{ 0 };
-    std::binary_semaphore primitivesLock{ 1 };
+    //std::binary_semaphore primitivesLock{ 1 };
     std::thread* rebuildThreads = nullptr;
     std::array<std::binary_semaphore*, NUM_BUILD_THREADS> doneSemas;
     //std::array<std::vector<uint32_t>, NUM_BUILD_THREADS> workerPrimsTemp;
@@ -614,7 +634,7 @@ public:
             nodeCount[i].store(0);
         }
 
-        _frameArena = new Arena(32_MB);
+        _frameArena = new Arena(48_MB);
 
         //_threadRunning = true;
         rebuildThread = new std::thread{
