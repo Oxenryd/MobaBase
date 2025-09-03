@@ -3210,14 +3210,14 @@ public:
 						   1, &blit, VK_FILTER_LINEAR);
 
 			// After blit, transition previous mip level to SHADER_READ_ONLY_OPTIMAL
-			barrier1.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-			barrier1.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-			barrier1.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-			barrier1.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			barrier2.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+			barrier2.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+			barrier2.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+			barrier2.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
 
 			vkCmdPipelineBarrier(loadingCmdBuffer,
 								 VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-								 0, 0, nullptr, 0, nullptr, 1, &barrier1);
+								 0, 0, nullptr, 0, nullptr, 1, &barrier2);
 
 			mipWidth = std::max(1, mipWidth / 2);
 			mipHeight = std::max(1, mipHeight / 2);

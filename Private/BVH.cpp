@@ -658,41 +658,10 @@ bool DualBVH::isOccludedRaycast(
 
 void DualBVH::buildNodes(ArenaRegistry& registry, uint8_t index) {
     // Clear existing data
-    //nodes[index].clear();
-    //primitives[index].clear();
     primitiveIndices[index].clear();
-    //entityToPrimitive[index].clear();
+
     occluderIndices[index].clear();
     occluderCorners[index].clear();
-    //primitiveIndices[index].clear();
-    //// Collect all entities with Transform and AABB components
-    //auto view = registry.view<BoundingVolumeComponent>();
-    //uint32_t primIndex = 0;
-    //for (auto [entity, boundComp] : view.each()) {
-
-    //    BoundingVolume bounds = BoundingVolume{ &registry, entity };
-    //    primitives[index].emplace_back(entity, bounds);
-    //    primitives[index].back().frameUpdated = currentFrame;
-
-    //    if (boundComp.flags & static_cast<uint32_t>(BoundingVolumeFlags::Occluder)) {
-    //        auto cornerIndex = occluderCorners.size();
-    //        auto verts = bounds.getCoarseAABB().getVertices();
-    //        occluderCorners[index].insert(occluderCorners[index].end(), verts.begin(), verts.end());
-    //        occluderIndices[index].push_back({ primIndex, cornerIndex, 0.0f });
-    //    }
-
-    //    entityToPrimitive[index][entity] = primIndex++;
-    //}
-
-    //if (primitives.empty()) {
-    //    nodeCount[index] = 0;
-    //    rootIndex[index] = 0;
-    //    return;
-    //}
-
-    //// Build primitive indices array
-    //primitiveIndices[index].resize(primitives.size());
-    //std::iota(primitiveIndices[index].begin(), primitiveIndices[index].end(), 0);
 
     // Build tree
     ArenaVector<uint32_t> allPrimitives{ ArenaAllocator<uint32_t>{_frameArena} };
@@ -705,7 +674,6 @@ void DualBVH::buildNodes(ArenaRegistry& registry, uint8_t index) {
     indicesCount[index].store(0);
     rootIndex[index] = buildRecursive(allPrimitives.data(), static_cast<uint32_t>(allPrimitives.size()), 0, 0, index);
 
-    //dirtyCount = 0;
 }
 
 void DualBVH::incrementalUpdate(ArenaRegistry& registry, uint8_t index) {

@@ -116,7 +116,7 @@ void DumpFilteredLeaksManual() {
     _CrtSetReportMode(_CRT_WARN, _CRTDBG_MODE_DEBUG);
 
     // Create a memory state checkpoint
-    _CrtMemState memState;
+    [[maybe_unused]] _CrtMemState memState;
     _CrtMemCheckpoint(&memState);
 
     // Manually walk through allocations

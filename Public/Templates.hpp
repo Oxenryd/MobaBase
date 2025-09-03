@@ -174,7 +174,7 @@ public:
             onMouseRightHold.subscribe([this](MouseState state) -> void 
                                        {
             auto cam = Camera::getCamera(m_sceneIndex, m_camIndex);
-            float dt = Timing::deltaTimeF();
+            auto dt = Timing::deltaTime();
             auto height = Engine::getInstance()->getWndSurface()->height;
             auto width = Engine::getInstance()->getWndSurface()->width;
             cam->rotateLocal(Input::scaledMouseMovementVec3(state, dt, 0.1f, {width, height}));

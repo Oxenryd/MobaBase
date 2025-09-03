@@ -860,11 +860,13 @@ public:
     void updateBVH(ArenaRegistry& registry, double dt, double time) {
             //bvh.incrementalUpdate(registry);
             
-        counter += static_cast<float>(dt);
-        if (counter >= static_cast<float>(time)) {
-            counter = 0;
-            m_bvh.setPendingUpdate(currentIndex);
-        }
+        m_bvh.setPendingUpdate(currentIndex);
+
+        //counter += static_cast<float>(dt);
+        //if (counter >= static_cast<float>(time)) {
+        //    counter = 0;
+        //    m_bvh.setPendingUpdate(currentIndex);
+        //}
         //bvh.nextFrame();
         //lastUpdateFrame = currentFrame;
         

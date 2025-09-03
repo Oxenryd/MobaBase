@@ -246,32 +246,28 @@ private:
 	static constexpr uint16_t STANDARD_WIDTH = 1280;
 	static constexpr uint16_t STANDARD_HEIGHT = 800;
 public:
+
+	template <std::floating_point T, std::floating_point U>
 	INLINE static glm::vec2 scaledMouseMovementVec2(
 		const MouseState& mState,
-		float dt, float sensitivity,
-		glm::highp_u16vec2 resolution = { STANDARD_WIDTH , STANDARD_HEIGHT})
-	{
-
-		auto rec = 1.0f / dt;
-		glm::vec2 scaledRes = glm::vec2{ static_cast<float>(resolution.x), static_cast<float>(resolution.y) } * INPUT_RESO_SCALE_FACTOR;
-		return glm::vec2{
-			-(float)mState.lastPositionDelta.x * rec * sensitivity * scaledRes.x,
-			-(float)mState.lastPositionDelta.y * rec * sensitivity * scaledRes.y
-		};
-	}
-	INLINE static glm::vec3 scaledMouseMovementVec3(
-		const MouseState& mState,
-		float dt, float sensitivity,
+		T dt, U sensitivity,
 		glm::highp_u16vec2 resolution = { STANDARD_WIDTH , STANDARD_HEIGHT }) {
 
-		auto rec = 1.0f / dt * 0.001f;
+		//auto rec = 0.00025f / dt;
 		glm::vec2 scaledRes = glm::vec2{ static_cast<float>(resolution.x), static_cast<float>(resolution.y) } * INPUT_RESO_SCALE_FACTOR;
-		auto sense = rec * sensitivity * sensitivity;
-		return glm::vec3{
+		float sense = static_cast<float>(sensitivity * sensitivity);
+		return glm::vec2{
 			-(float)mState.lastPositionDelta.x * sense * scaledRes.x,
-			-(float)mState.lastPositionDelta.y * sense * scaledRes.y,
-			0.0f
+			-(float)mState.lastPositionDelta.y * sense * scaledRes.y
 		};
+	}
+	template <std::floating_point T, std::floating_point U>
+	INLINE static glm::vec3 scaledMouseMovementVec3(
+		const MouseState& mState,
+		T dt, U sensitivity,
+		glm::highp_u16vec2 resolution = { STANDARD_WIDTH , STANDARD_HEIGHT }) {
+		auto vec2 = scaledMouseMovementVec2(mState, dt, sensitivity, resolution);
+		return glm::vec3(vec2.x, vec2.y, 0.0f);
 	}
 };
 
