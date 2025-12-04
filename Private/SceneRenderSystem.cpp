@@ -87,46 +87,64 @@ ErrorCode SceneRenderSystem::createMeshFromModel(const std::string& path, Mesh* 
 
 	MeshComponent meshComp{};
 	auto ec = loadModel(path, &meshComp);
-	if (!EC_FAILED(ec)) {
-		Mesh newMesh{};
-		if (parent != entt::null) {
-			auto trans = m_reg->try_get<TransformComponent>(parent);
-			if (!trans)
-				throw std::exception("Meshes needs transforms!!");
-			meshComp = m_reg->emplace<MeshComponent>(parent, meshComp);
-			newMesh = Mesh{ m_reg, parent };
-			if (outMesh) {
-				*outMesh = newMesh;
-			}
-		} 
-
-		//float maxVol = 0.0f;
-		//entt::entity biggestSubEntity = entt::null;
-		for (size_t i = meshComp.subMeshOffset; i < meshComp.subMeshOffset + meshComp.subMeshCount; ++i) {
-			auto& subMesh = m_subMeshes[i];
-			subMesh.entity = parent != entt::null ? parent : m_reg->create();
-			//subMesh.parent = parent;
-			[[maybe_unused]] auto& newSubMeshComp = m_reg->emplace<SubMeshComponent>(subMesh.entity, SubMeshComponent{ static_cast<uint32_t>(i) });
-			
-			auto subVerts = std::span<BaseVSIn>(&m_vertices[subMesh.vertexOffset], subMesh.vertexCount);
-
-			Engine::getInstance()->getScene(m_sceneIndex)->transformSystem().registryEmplace(
-				subMesh.entity,
-				nullptr//parent == entt::null ? nullptr : static_cast<void*>(&subMesh.parent)
-			);
-
-			AABB box{};
-			box.encloseLocal(subVerts);
-			Engine::getInstance()->getScene(m_sceneIndex)->boundingSystem().registryEmplace(subMesh.entity, &box);
-			
-			//if (parent != entt::null) {
-			//	auto newTransform = Transform{ m_reg, subMesh.entity };
-			//	newTransform.setParent(parent);
-			//}
-		}
-
-	} else
+	if (EC_FAILED(ec))
 		return ec;
 
+	entt::entity meshEntity;
+	if (parent != entt::null) {
+		auto trans = m_reg->try_get<TransformComponent>(parent);
+		if (!trans)
+			throw std::exception("Meshes needs transforms!!");
+
+		meshEntity = parent;
+		meshComp = m_reg->emplace<MeshComponent>(parent, meshComp);
+
+	} else {
+
+		meshEntity = m_reg->create();
+		Engine::getInstance()->getScene(m_sceneIndex)->transformSystem().registryEmplace(
+			meshEntity,
+			nullptr
+		);
+
+		meshComp = m_reg->emplace<MeshComponent>(meshEntity, meshComp);
+	}
+
+
+	Mesh newMesh{m_reg, meshEntity };
+	if (outMesh) {
+		*outMesh = newMesh;
+	}
+
+	//float maxVol = 0.0f;
+	//entt::entity biggestSubEntity = entt::null;
+	for (size_t i = meshComp.subMeshOffset; i < meshComp.subMeshOffset + meshComp.subMeshCount; ++i) {
+
+		entt::entity subEnt = m_reg->create();
+		SubMeshData& subMesh = m_subMeshes[i];
+		subMesh.entity = subEnt;
+
+		//subMesh.entity = parent != entt::null ? parent : m_reg->create();
+		//subMesh.parent = parent;
+		//[[maybe_unused]] auto& newSubMeshComp = 
+
+		m_reg->emplace<SubMeshComponent>(subEnt, SubMeshComponent{ meshEntity, static_cast<uint32_t>(i) });
+
+		auto subVerts = std::span<BaseVSIn>(&m_vertices[subMesh.vertexOffset], subMesh.vertexCount);
+
+		Engine::getInstance()->getScene(m_sceneIndex)->transformSystem().registryEmplace(
+			subEnt,
+			parent == entt::null ? nullptr : static_cast<void*>(&meshEntity)
+		);
+
+		AABB box{};
+		box.encloseLocal(subVerts);
+		Engine::getInstance()->getScene(m_sceneIndex)->boundingSystem().registryEmplace(subEnt, &box);
+
+		//if (parent != entt::null) {
+		//	auto newTransform = Transform{ m_reg, subMesh.entity };
+		//	newTransform.setParent(parent);
+		//}
+	}
 	return ErrorCode::OK;
 }

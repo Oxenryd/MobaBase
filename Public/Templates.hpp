@@ -38,50 +38,51 @@ public:
         m_skyLight = m_reg.create();
         [[maybe_unused]] auto& lightRef = lightSystem().registerLight(dirLight, m_skyLight);
 
-        m_go1 = gameObjectSystem().createGameObject<GameObject>("MerryGoRound");
-        
-        size_t numOfObjects = 4096 * 64;
-        m_goList.reserve(numOfObjects);
-        auto step = MMath::fTAU / numOfObjects;
-        const std::string pathObject = std::format("{}{}", ASSETS_DIR, "Cube/cube.obj");
-        for (size_t i = 0; i < numOfObjects; ++i) {
-            m_goList.emplace_back(gameObjectSystem().createGameObject<GameObject>(std::format("Sphere_{}", i)));
-            Mesh objectMesh{};
-            sceneRender().createMeshFromModel(pathObject, &objectMesh, m_goList.back().entity());
-            auto trans = objectMesh.getTransform();
-            trans.modifyPosition() = glm::vec3{std::cos(step * i) * 12, std::sin(step * i) * 12, 0};
-            trans.modifyRotation() = MRandom::nextRotation();
-            auto scale = MRandom::nextFloat(0.3f, 1.6f);
-            m_startScales.push_back(scale);
-            trans.modifyScale() = glm::vec3{ scale ,scale ,scale };
-            m_radSpeeds.push_back(MRandom::nextFloat(1.3f, 8.f));
-            
+        //m_go1 = gameObjectSystem().createGameObject<GameObject>("MerryGoRound");       
+        //size_t numOfObjects = 4096 * 64;
+        //m_goList.reserve(numOfObjects);
+        //auto step = MMath::fTAU / numOfObjects;
+        //const std::string pathObject = std::format("{}{}", ASSETS_DIR, "Cube/cube.obj");
+        //for (size_t i = 0; i < numOfObjects; ++i) {
+        //    m_goList.emplace_back(gameObjectSystem().createGameObject<GameObject>(std::format("Cube_{}", i)));
+        //    Mesh objectMesh{};
+        //    sceneRender().createMeshFromModel(pathObject, &objectMesh, m_goList.back().entity());
+        //    auto trans = objectMesh.getTransform();
+        //    trans.modifyPosition() = glm::vec3{std::cos(step * i) * 12, std::sin(step * i) * 12, 0};
+        //    trans.modifyRotation() = MRandom::nextRotation();
+        //    auto scale = MRandom::nextFloat(0.3f, 1.6f);
+        //    m_startScales.push_back(scale);
+        //    trans.modifyScale() = glm::vec3{ scale ,scale ,scale };
+        //    m_radSpeeds.push_back(MRandom::nextFloat(1.3f, 8.f));
+        //    
 
-            m_goList.back().transform().setParent(m_go1);
-        }
+        //    m_goList.back().transform().setParent(m_go1);
+        //}
 
         
         //m_go2 = gameObjectSystem().createGameObject<GameObject>("Box");
         //m_go3 = gameObjectSystem().createGameObject<GameObject>("Box");
 
-        //"Cube/cube.obj" //"crytek-sponza-hd/sponza.obj" //"SmallRoom/smallRoom_mirror_window.obj"    //"Sphere/sphere.obj"
-        //const std::string path1 = std::format("{}{}", ASSETS_DIR, "SmallRoom/smallRoom_mirror_window.obj");
-        //Mesh modelMesh1{};
-        //sceneRender().createMeshFromModel(path1, &modelMesh1, m_go1.entity());
-        //float volume = 0.0f;
-        //entt::entity largestSubEntity = entt::null;
-        //for (auto& subMesh : modelMesh1.getSubmeshes()) {
-        //    BoundingVolume bVol{&registry(), subMesh.entity};
-        //    auto aabb = bVol.getCoarseAABB();
-        //    if (aabb.volume() > volume) {
-        //        volume = aabb.volume();
-        //        largestSubEntity = subMesh.entity;
-        //    }
-        //}
-        //if (largestSubEntity != entt::null)
-        //    registry().get<BoundingVolumeComponent>(largestSubEntity).flags = static_cast<uint32_t>(BoundingVolumeFlags::Occluder);
-        //
-        //
+        // "Cube/cube.obj" "crytek-sponza-hd/sponza.obj" "SmallRoom/smallRoom_mirror_window.obj"    "Sphere/sphere.obj"
+        m_go1 = gameObjectSystem().createGameObject<GameObject>("Model1");
+        const std::string path1 = std::format("{}{}", ASSETS_DIR, "crytek-sponza-hd/sponza.obj");
+        Mesh modelMesh1{};
+        sceneRender().createMeshFromModel(path1, &modelMesh1, m_go1.entity());
+        float volume = 0.0f;
+        entt::entity largestSubEntity = entt::null;
+        auto subMeshes = modelMesh1.getSubmeshes();
+        for (auto& subMesh : subMeshes) {
+            BoundingVolume bVol{&registry(), subMesh.entity};
+            auto aabb = bVol.getCoarseAABB();
+            if (aabb.volume() > volume) {
+                volume = aabb.volume();
+                largestSubEntity = subMesh.entity;
+            }
+        }
+        if (largestSubEntity != entt::null)
+            registry().get<BoundingVolumeComponent>(largestSubEntity).flags = static_cast<uint32_t>(BoundingVolumeFlags::Occluder);
+        
+        
         //const std::string path2 = std::format("{}{}", ASSETS_DIR, "Cube/cube.obj");
         //Mesh modelMesh2{};
         //sceneRender().createMeshFromModel(path2, &modelMesh2, m_go2.entity());
@@ -96,7 +97,6 @@ public:
 
         //modelMesh3.getTransform().modifyPosition() = { -12, 0, 0 };
         //modelMesh2.getTransform().modifyPosition() = { -12, 0, 0 };
-
         //auto& reg = registry();
 
         Engine::getInstance()->getInputManager()->onKeyHold.subscribe( [this](KeyCode code) -> void
@@ -186,6 +186,8 @@ public:
     }
 
     void update(double dt) {
+
+        return;
 
         m_time += Timing::deltaTimeF();
 

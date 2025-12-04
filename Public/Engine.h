@@ -110,7 +110,7 @@ private:
 	double m_baseSinD{};
 	size_t m_requestedSceneIndex = SIZE_INVALID;
 	uint32_t m_nextTraceId = 0;
-	uint32_t m_framesToTrace = 8;
+	uint32_t m_framesToTrace = 3;
 	uint32_t m_framesTraced = UINT32_INVALID;
 	bool m_pendingTrace = false;
 	

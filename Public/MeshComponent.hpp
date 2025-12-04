@@ -19,6 +19,7 @@
 
 struct SubMeshComponent
 {
+	entt::entity meshEntity;
 	uint32_t subMeshIndex{ UINT32_INVALID };
 };
 
