@@ -12,18 +12,23 @@ This repository primarily exists as a **personal project and technical showcase*
 ## Goals & Design Direction
 
 * **Cross-platform focus**
+
   Targeting **Windows / Linux**, using **Vulkan** with **GLFW** (Windows-only at the moment due to some direct Win32 calls).
 
 * **Pure C++ gameplay code**
+
   No embedded scripting languages or heavy runtime abstractions. Systems are written with explicit ownership and lifetime control.
 
 * **Multithreading from the ground up**
+
   Core systems are designed with concurrency in mind rather than retrofitted later.
 
 * **Data-oriented access patterns**
+
   Favoring value-type access and predictable memory layouts over deep object hierarchies.
 
 * **Flexible rendering architecture**
+
   Supporting multiple lighting models and shader-driven material reflection.
 
 ---
