@@ -21,11 +21,11 @@ This repository primarily exists as a **personal project and technical showcase*
 
 * **Multithreading from the ground up**
 
-  Core systems are designed with concurrency in mind rather than retrofitted later.
+  Core systems are designed with concurrency in mind.
 
-* **Data-oriented access patterns**
+* **Easy access patterns**
 
-  Favoring value-type access and predictable memory layouts over deep object hierarchies.
+  Philosophy to keep easier object access patterns using value type references over DOD archtecture for the best of two worlds.
 
 * **Flexible rendering architecture**
 
@@ -61,7 +61,7 @@ Implemented or partially implemented systems include:
 * Beginner-oriented APIs
 * Engine-as-a-product stability
 
-This project prioritizes **engine internals and architectural clarity** over usability or completeness.
+This project prioritizes **engine internals and architectural clarity** over usability or completeness... for now =)
 
 ---
 
@@ -71,13 +71,6 @@ MobaBase is primarily:
 
 * A long-running **personal engine project**
 * A place to explore **rendering, ECS-style data access, and multithreaded systems**
-* A **codebase for inspection**, not a turnkey engine
-
-If you're reviewing this as a recruiter or engineer, the intent is for you to:
-
-* Browse systems directly
-* Look at how data flows
-* Judge consistency, restraint, and technical direction
 
 ---
 
@@ -89,4 +82,4 @@ If you're reviewing this as a recruiter or engineer, the intent is for you to:
 
 ---
 
-*More documentation will be added as systems stabilize.*
+*More documentation will be added as we go.*
