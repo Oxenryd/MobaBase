@@ -3,7 +3,7 @@
 **MobaBase** is an aspiring **3D game engine** written in **C++**, with a **Vulkan-based rendering pipeline**.
 It started as a purpose-built engine for **Multiplayer Online Battle Arenas**, but has since evolved toward supporting more general game environments.
 
-This repository primarily exists as a **personal project and technical showcase** — intended for experienced developers and recruiters who want to browse code to understand architectural decisions, coding style, and long-term ambition.
+This repository primarily exists as a **personal project and technical showcase**.
 
 > ⚠️ **Status:** Work in progress. The engine is far from feature-complete and under active development.
 
