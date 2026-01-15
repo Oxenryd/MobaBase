@@ -28,18 +28,18 @@
 #define CONCAT_IMPL(x, y) x##y
 #define CONCAT(x, y) CONCAT_IMPL(x, y)
 
-constexpr std::size_t operator"" _KB(unsigned long long val) {
+constexpr std::size_t operator""_KB(const unsigned long long val) {
     return val * 1024ULL;
 }
 
-constexpr std::size_t operator"" _MB(unsigned long long val) {
+constexpr std::size_t operator""_MB(const unsigned long long val) {
     return val * 1024ULL * 1024ULL;
 }
 
-constexpr std::size_t operator"" _GB(unsigned long long val) {
+constexpr std::size_t operator""_GB(const unsigned long long val) {
     return val * 1024ULL * 1024ULL * 1024ULL;
 }
-constexpr std::size_t operator"" _TB(unsigned long long val) {
+constexpr std::size_t operator""_TB(const unsigned long long val) {
     return val * 1024ULL * 1024ULL * 1024ULL * 1024ULL;
 }
 
@@ -49,20 +49,22 @@ constexpr std::size_t operator"" _TB(unsigned long long val) {
 //#define KB(x) static_cast<size_t>(1024 * (x))
 
 template<typename T>
-inline constexpr T& deref(void* ptr, const char* errorMsg = "null pointer in deref") {
+static T& deref(void* ptr, const char* errorMsg = "null pointer in deref") {
     if (!ptr) {
         LOGLINE(LogType::Error, LogMod::Memory, errorMsg);
         assert(false && errorMsg);
-    }
-    return *static_cast<T*>(ptr);
+        // ReSharper disable once CppRedundantElseKeywordInsideCompoundStatement
+    } else
+        return *static_cast<T*>(ptr);
 }
 template<typename T>
-inline constexpr const T& deref(const void* ptr, const char* errorMsg = "null pointer in deref") {
+static const T& deref(const void* ptr, const char* errorMsg = "null pointer in deref") {
     if (!ptr) {
         LOGLINE(LogType::Error, LogMod::Memory, errorMsg);
         assert(false && errorMsg);
-    }
-    return *static_cast<const T*>(ptr);
+        // ReSharper disable once CppRedundantElseKeywordInsideCompoundStatement
+    } else
+        return *static_cast<const T*>(ptr);
 }
 
 #endif

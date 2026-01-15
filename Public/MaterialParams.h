@@ -33,7 +33,7 @@ enum class MatParamArrayType : uint8_t
 
 
 
-inline static constexpr const char* MatParamStageToString(MatParamStage stage) {
+static constexpr const char* MatParamStageToString(const MatParamStage stage) {
 	switch (stage) {
 		case MatParamStage::Vertex:   return "Vertex";
 		case MatParamStage::Fragment: return "Fragment";
@@ -42,7 +42,7 @@ inline static constexpr const char* MatParamStageToString(MatParamStage stage) {
 	}
 }
 
-inline constexpr MatParamStage MatParamStageFromString(const std::string& s) {
+constexpr MatParamStage MatParamStageFromString(const std::string& s) {
 	if (s == "Vertex")   return MatParamStage::Vertex;
 	if (s == "Fragment") return MatParamStage::Fragment;
 	if (s == "Both")     return MatParamStage::Both;
@@ -63,14 +63,14 @@ struct MatVar
 			uint64_t _ptr : 57;
 		};
 	};
-public:
-	MatVar() :
+
+	MatVar() : // NOLINT(*-pro-type-member-init)
 		_raw{ 0 } {}
-	explicit MatVar(const MatVar& other) :
+	MatVar(const MatVar& other) : // NOLINT(*-pro-type-member-init)
 		_raw{ other._raw } {}
-	explicit MatVar(const void* ptr, TypeBase type = TypeBase::Other) {
-		uint64_t p = reinterpret_cast<uint64_t>(ptr);
-		assert((p >> 57) == 0 && "MatVar: Pointer exceeds 57 bits!");
+	explicit MatVar(const void* ptr, TypeBase type = TypeBase::Other) { // NOLINT(*-pro-type-member-init)
+		const auto p = reinterpret_cast<uint64_t>(ptr);
+		assert(p >> 57 == 0 && "MatVar: Pointer exceeds 57 bits!");
 		_ptr = p;
 		_type = static_cast<uint64_t>(type);
 	}
@@ -87,6 +87,8 @@ public:
 		assert(_type == TypeBaseFromT<T>() && "MatVar: Wrong input type!");
 
 		*reinterpret_cast<T*>(_ptr) = rhs;
+
+		return *this;
 	}
 
 	friend bool operator==(const MatVar& lhs, const MatVar& rhs) {
@@ -101,10 +103,10 @@ public:
 	}
 
 
-	void* data() { return reinterpret_cast<void*>(_ptr); }
-	void* data() const { return reinterpret_cast<void*>(_ptr); }
-	TypeBase type() { return static_cast<TypeBase>(_type); }
-	TypeBase type() const { return static_cast<TypeBase>(_type); }
+	void* data() { return reinterpret_cast<void*>(_ptr); } // NOLINT(*-make-member-function-const)
+	[[nodiscard]] void* data() const { return reinterpret_cast<void*>(_ptr); }
+	TypeBase type() { return static_cast<TypeBase>(_type); } // NOLINT(*-make-member-function-const)
+	[[nodiscard]] TypeBase type() const { return static_cast<TypeBase>(_type); }
 
 	void setType(TypeBase type) { _type = static_cast<uint64_t>(type); }
 
@@ -155,11 +157,11 @@ struct alignas(8) MatParam
 		return !(lhs == rhs);
 	}
 
-	bool sharesDataExceptStage(const MatParam& rhs) const {
+	[[nodiscard]] bool sharesDataExceptStage(const MatParam& rhs) const {
 		return sharesData(rhs, false);
 	}
 
-	bool sharesData(const MatParam& rhs, bool includeStage) const {
+	[[nodiscard]] bool sharesData(const MatParam& rhs, const bool includeStage) const {
 		if (includeStage && rhs.stage != stage) return false;
 		if (rhs.nameIndex != nameIndex) return false;
 		if (rhs.parentNameIndex != parentNameIndex) return false;
@@ -175,12 +177,12 @@ struct alignas(8) MatParam
 		return true;
 	}
 
-	uint32_t varSize() const {
+	[[nodiscard]] uint32_t varSize() const {
 		return static_cast<uint32_t>(SizeOfTypeBase(type));
 	}
 
-	uint32_t paddedVarSize() const {
-		uint32_t size_ = static_cast<uint32_t>(SizeOfTypeBase(type));
+	[[nodiscard]] uint32_t paddedVarSize() const {
+		auto size_ = static_cast<uint32_t>(SizeOfTypeBase(type));
 		for (auto& member : members) {
 			size_ += member.varSize();
 		}
@@ -189,24 +191,26 @@ struct alignas(8) MatParam
 	}
 
 	std::string& name();
-	std::string& name() const;
+	[[nodiscard]] std::string& name() const;
 	std::string& parentName();
-	std::string& parentName() const;
+	[[nodiscard]] std::string& parentName() const;
 
-	bool isArray() const {
+	[[nodiscard]] bool isArray() const {
 		return count > 0;
 	}
 };
 
-static MatParam::ResourceType SpvResource_to_ResourceType(int32_t spcType) {
+static MatParam::ResourceType SpvResource_to_ResourceType(const int32_t spcType) {
 
-	return (MatParam::ResourceType)static_cast<uint8_t>(spcType);
+	return static_cast<MatParam::ResourceType>(static_cast<uint8_t>(spcType));
 }
 
 
-inline static VkShaderStageFlagBits MatParamStageToVkShaderStageFlagBits(MatParamStage stage, MatParam::ResourceType resourceType) {
+static VkShaderStageFlagBits MatParamStageToVkShaderStageFlagBits(
+	const MatParamStage stage, const MatParam::ResourceType resourceType)
+{
 
-	VkShaderStageFlagBits matStage = (VkShaderStageFlagBits)0;
+	auto matStage = static_cast<VkShaderStageFlagBits>(0);
 
 	switch (stage) {
 		case MatParamStage::Vertex:
@@ -215,13 +219,13 @@ inline static VkShaderStageFlagBits MatParamStageToVkShaderStageFlagBits(MatPara
 		case MatParamStage::Fragment:
 			matStage = VK_SHADER_STAGE_FRAGMENT_BIT; break;
 		case MatParamStage::Both:
-			matStage = (VkShaderStageFlagBits)(VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT); break;
+			matStage = static_cast<VkShaderStageFlagBits>(VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT); break;
 
 		default: break;// return (VkShaderStageFlagBits)0;
 	}
 
 	if (resourceType & MatParam::ResourceType::UAV)
-		matStage = (VkShaderStageFlagBits)(matStage | VK_SHADER_STAGE_COMPUTE_BIT);
+		matStage = static_cast<VkShaderStageFlagBits>(matStage | VK_SHADER_STAGE_COMPUTE_BIT);
 
 	return matStage;
 }
@@ -254,7 +258,6 @@ enum class MatBufferType : uint8_t
 
 class MaterialBuffer
 {
-private:
 	uint8_t* m_memory = nullptr;
 	uint32_t m_size;
 	uint32_t m_capacity;
@@ -268,11 +271,11 @@ private:
 	uint32_t m_nameIndex;
 	MatParamStage m_stage;
 
-	void _resize(uint32_t newSize) {
+	void _resize(const uint32_t newSize) {
 		if (newSize <= m_size)
 			return;
 
-		auto temp = new uint8_t[newSize * m_entrySize];
+		const auto temp = new uint8_t[newSize * m_entrySize];
 		if (m_memory) {
 			std::memcpy(temp, m_memory, m_size * m_entrySize);
 			delete[] m_memory;
@@ -286,16 +289,21 @@ public:
 		delete[] m_memory;
 	}
 	MaterialBuffer() = delete;
-	MaterialBuffer(const MatParam& structure);
-	MaterialBuffer(const MaterialBuffer& other) {
+	explicit MaterialBuffer(const MatParam& structure);
+	MaterialBuffer(const MaterialBuffer& other) { // NOLINT(*-pro-type-member-init)
 		m_size = other.m_size;
 		m_entrySize = other.m_entrySize;
 		if (other.m_capacity > 0) {
 			_resize(other.m_capacity);
+
+#ifdef BUILD_WIN
 #pragma warning(push)
 #pragma warning(disable : 6387)
+#endif
 			std::memcpy(m_memory, other.m_memory, other.m_size * other.m_entrySize);
+#ifdef BUILD_WIN
 #pragma warning(pop)
+#endif
 		} else {
 			m_memory = nullptr;
 			m_capacity = 0;
@@ -336,7 +344,7 @@ public:
 		if (m_capacity < (m_size + 1)) {
 			_resize(m_size * 2 + 2);
 		}
-		auto index = m_size++;
+		const auto index = m_size++;
 		return index;
 	}
 
@@ -344,13 +352,13 @@ public:
 		return m_entrySize;
 	}
 
-	void* const data() const { return m_memory; }
+	void* data() const { return m_memory; }
 
 	template <typename T>
 	T* getParameter(const std::string& paramName, uint32_t instanceIndex = 0) {
-		auto it = m_nameIndexMap.find(paramName);
+		const auto it = m_nameIndexMap.find(paramName);
 		if (it != m_nameIndexMap.end()) {
-			auto& param = m_structure[it->second];
+			const auto& param = m_structure[it->second];
 			uint8_t* ptr = m_memory + instanceIndex * m_entrySize + param.offset;
 			return reinterpret_cast<T*>(ptr);
 		}
@@ -358,74 +366,74 @@ public:
 	}
 
 	bool setParameter(const std::string& paramName, void* value, uint32_t instanceIndex = 0) {
-		auto it = m_nameIndexMap.find(paramName);
+		const auto it = m_nameIndexMap.find(paramName);
 		if (it != m_nameIndexMap.end()) {
-			auto& param = m_structure[it->second];
+			const auto& param = m_structure[it->second];
 			uint8_t* ptr = m_memory + instanceIndex * m_entrySize + param.offset;
 			switch (param.type) {
 				case TypeBase::UInt32:
-					*reinterpret_cast<uint32_t*>(ptr) = *reinterpret_cast<uint32_t*>(value); break;
+					*reinterpret_cast<uint32_t*>(ptr) = *static_cast<uint32_t*>(value); break;
 				case TypeBase::Int32:
-					*reinterpret_cast<int32_t*>(ptr) = *reinterpret_cast<int32_t*>(value); break;
+					*reinterpret_cast<int32_t*>(ptr) = *static_cast<int32_t*>(value); break;
 				case TypeBase::UInt64:
-					*reinterpret_cast<uint64_t*>(ptr) = *reinterpret_cast<uint64_t*>(value); break;
+					*reinterpret_cast<uint64_t*>(ptr) = *static_cast<uint64_t*>(value); break;
 				case TypeBase::Int64:
-					*reinterpret_cast<int64_t*>(ptr) = *reinterpret_cast<int64_t*>(value); break;
+					*reinterpret_cast<int64_t*>(ptr) = *static_cast<int64_t*>(value); break;
 
 				case TypeBase::UInt32Vector2:
-					*reinterpret_cast<glm::u32vec2*>(ptr) = *reinterpret_cast<glm::u32vec2*>(value); break;
+					*reinterpret_cast<glm::u32vec2*>(ptr) = *static_cast<glm::u32vec2*>(value); break;
 				case TypeBase::UInt32Vector3:
-					*reinterpret_cast<glm::u32vec3*>(ptr) = *reinterpret_cast<glm::u32vec3*>(value); break;
+					*reinterpret_cast<glm::u32vec3*>(ptr) = *static_cast<glm::u32vec3*>(value); break;
 				case TypeBase::UInt32Vector4:
-					*reinterpret_cast<glm::u32vec4*>(ptr) = *reinterpret_cast<glm::u32vec4*>(value); break;
+					*reinterpret_cast<glm::u32vec4*>(ptr) = *static_cast<glm::u32vec4*>(value); break;
 
 				case TypeBase::Int32Vector2:
-					*reinterpret_cast<glm::i32vec2*>(ptr) = *reinterpret_cast<glm::i32vec2*>(value); break;
+					*reinterpret_cast<glm::i32vec2*>(ptr) = *static_cast<glm::i32vec2*>(value); break;
 				case TypeBase::Int32Vector3:
-					*reinterpret_cast<glm::i32vec3*>(ptr) = *reinterpret_cast<glm::i32vec3*>(value); break;
+					*reinterpret_cast<glm::i32vec3*>(ptr) = *static_cast<glm::i32vec3*>(value); break;
 				case TypeBase::Int32Vector4:
-					*reinterpret_cast<glm::i32vec4*>(ptr) = *reinterpret_cast<glm::i32vec4*>(value); break;
+					*reinterpret_cast<glm::i32vec4*>(ptr) = *static_cast<glm::i32vec4*>(value); break;
 
 				case TypeBase::UInt64Vector2:
-					*reinterpret_cast<glm::u64vec2*>(ptr) = *reinterpret_cast<glm::u64vec2*>(value); break;
+					*reinterpret_cast<glm::u64vec2*>(ptr) = *static_cast<glm::u64vec2*>(value); break;
 				case TypeBase::UInt64Vector3:
-					*reinterpret_cast<glm::u64vec3*>(ptr) = *reinterpret_cast<glm::u64vec3*>(value); break;
+					*reinterpret_cast<glm::u64vec3*>(ptr) = *static_cast<glm::u64vec3*>(value); break;
 				case TypeBase::UInt64Vector4:
-					*reinterpret_cast<glm::u64vec4*>(ptr) = *reinterpret_cast<glm::u64vec4*>(value); break;
+					*reinterpret_cast<glm::u64vec4*>(ptr) = *static_cast<glm::u64vec4*>(value); break;
 
 				case TypeBase::Int64Vector2:
-					*reinterpret_cast<glm::i64vec2*>(ptr) = *reinterpret_cast<glm::i64vec2*>(value); break;
+					*reinterpret_cast<glm::i64vec2*>(ptr) = *static_cast<glm::i64vec2*>(value); break;
 				case TypeBase::Int64Vector3:
-					*reinterpret_cast<glm::i64vec3*>(ptr) = *reinterpret_cast<glm::i64vec3*>(value); break;
+					*reinterpret_cast<glm::i64vec3*>(ptr) = *static_cast<glm::i64vec3*>(value); break;
 				case TypeBase::Int64Vector4:
-					*reinterpret_cast<glm::i64vec4*>(ptr) = *reinterpret_cast<glm::i64vec4*>(value); break;
+					*reinterpret_cast<glm::i64vec4*>(ptr) = *static_cast<glm::i64vec4*>(value); break;
 
 				case TypeBase::Float:
-					*reinterpret_cast<float*>(ptr) = *reinterpret_cast<float*>(value); break;
+					*reinterpret_cast<float*>(ptr) = *static_cast<float*>(value); break;
 				case TypeBase::FloatVector2:
-					*reinterpret_cast<glm::vec2*>(ptr) = *reinterpret_cast<glm::vec2*>(value); break;
+					*reinterpret_cast<glm::vec2*>(ptr) = *static_cast<glm::vec2*>(value); break;
 				case TypeBase::FloatVector3:
-					*reinterpret_cast<glm::vec3*>(ptr) = *reinterpret_cast<glm::vec3*>(value); break;
+					*reinterpret_cast<glm::vec3*>(ptr) = *static_cast<glm::vec3*>(value); break;
 				case TypeBase::FloatVector4:
-					*reinterpret_cast<glm::vec4*>(ptr) = *reinterpret_cast<glm::vec4*>(value); break;
+					*reinterpret_cast<glm::vec4*>(ptr) = *static_cast<glm::vec4*>(value); break;
 
 				case TypeBase::Double:
-					*reinterpret_cast<double*>(ptr) = *reinterpret_cast<double*>(value); break;
+					*reinterpret_cast<double*>(ptr) = *static_cast<double*>(value); break;
 				case TypeBase::DoubleVector2:
-					*reinterpret_cast<glm::f64vec2*>(ptr) = *reinterpret_cast<glm::f64vec2*>(value); break;
+					*reinterpret_cast<glm::f64vec2*>(ptr) = *static_cast<glm::f64vec2*>(value); break;
 				case TypeBase::DoubleVector3:
-					*reinterpret_cast<glm::f64vec3*>(ptr) = *reinterpret_cast<glm::f64vec3*>(value); break;
+					*reinterpret_cast<glm::f64vec3*>(ptr) = *static_cast<glm::f64vec3*>(value); break;
 				case TypeBase::DoubleVector4:
-					*reinterpret_cast<glm::f64vec4*>(ptr) = *reinterpret_cast<glm::f64vec4*>(value); break;
+					*reinterpret_cast<glm::f64vec4*>(ptr) = *static_cast<glm::f64vec4*>(value); break;
 
 				case TypeBase::FloatMatrix3x3:
-					*reinterpret_cast<glm::mat3x3*>(ptr) = *reinterpret_cast<glm::mat3x3*>(value); break;
+					*reinterpret_cast<glm::mat3x3*>(ptr) = *static_cast<glm::mat3x3*>(value); break;
 				case TypeBase::FloatMatrix4x4:
-					*reinterpret_cast<glm::mat4x4*>(ptr) = *reinterpret_cast<glm::mat4x4*>(value); break;
+					*reinterpret_cast<glm::mat4x4*>(ptr) = *static_cast<glm::mat4x4*>(value); break;
 				case TypeBase::DoubleMatrix3x3:
-					*reinterpret_cast<glm::dmat3x3*>(ptr) = *reinterpret_cast<glm::dmat3x3*>(value); break;
+					*reinterpret_cast<glm::dmat3x3*>(ptr) = *static_cast<glm::dmat3x3*>(value); break;
 				case TypeBase::DoubleMatrix4x4:
-					*reinterpret_cast<glm::dmat4x4*>(ptr) = *reinterpret_cast<glm::dmat4x4*>(value); break;
+					*reinterpret_cast<glm::dmat4x4*>(ptr) = *static_cast<glm::dmat4x4*>(value); break;
 
 				default:
 					LOGLINE(LogType::Error, LogMod::Memory,

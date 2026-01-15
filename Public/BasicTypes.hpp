@@ -45,7 +45,7 @@ struct ColorRGBA_f
 	};
 
 	explicit operator glm::vec4() const {
-		return glm::vec4(r, g, b, a);
+		return {r, g, b, a};
 	}
 
 
@@ -170,10 +170,10 @@ struct ZRow
 {
 	union
 	{
-		glm::vec4 raw;
+		float raw[4];
 		struct
 		{
-			glm::vec3 n;
+			float n[3];
 			float w;
 		};
 	};
@@ -238,6 +238,7 @@ struct BSphere
 struct AABB
 {
 private:
+
 	INLINE void _getVerticesSoA(__m256& X, __m256& Y, __m256& Z, __m256& W) const {
 		const float xs[8] = { min.x, max.x, min.x, max.x, min.x, max.x, min.x, max.x };
 		const float ys[8] = { max.y, max.y, min.y, min.y, max.y, max.y, min.y, min.y };
@@ -250,15 +251,19 @@ private:
 
 public:
 	AABB() = default;
-	AABB(const glm::vec3& min, const glm::vec3& max) :
-		min{min}, max{max} {}
+	AABB(const glm::vec3& minVec, const glm::vec3& maxVec)
+	//: min{}, max{max}
+	{
+		MMath::toFloat<3>(min, minVec);
+		MMath::toFloat<3>(max, maxVec);
+	}
 	union
 	{
 		float raw[6]{ -0.5f, -0.5f, -0.5f,	0.5f, 0.5f, 0.5f };
 		struct
 		{
-			glm::vec3 min;
-			glm::vec3 max;
+			float min[3];
+			float max[3];
 		};
 	};
 

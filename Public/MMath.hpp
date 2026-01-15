@@ -26,6 +26,12 @@ namespace MMath
     constexpr double dSQR2Inv = 0.70710678118655;
     static const auto IDENTITY_MAT = glm::mat4x4{ 1 };
 
+    template <std::size_t N, glm::qualifier P = glm::defaultp>
+    constexpr void toFloat(float (&dst)[N], const glm::vec<N, float, P>& v) noexcept {
+        for (std::size_t i = 0; i < N; ++i)
+            dst[i] = v[static_cast<glm::length_t>(i)];
+    }
+
 
     static const glm::mat4x4& identityMat4() { 
         return IDENTITY_MAT;

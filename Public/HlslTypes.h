@@ -29,10 +29,10 @@ enum class LightType : uint8_t
 	Directional = 0,
 	Point = 1,
 	Spot = 2,
-	_ENUM_END
+	ENUM_END
 };
 
-constexpr static size_t NUM_OF_LIGHT_TYPES = (size_t)LightType::_ENUM_END;
+constexpr static size_t NUM_OF_LIGHT_TYPES = static_cast<size_t>(LightType::ENUM_END);
 
 //enum LightType : uint32_t
 //{
@@ -64,10 +64,10 @@ struct alignas(16) GPULight
 	// 0..15
 	union
 	{
-		glm::vec4 positionVS_radius{ 0.0f, 0.0f, 0.0f, 1.0f };
+		float positionVS_radius[4];
 		struct
 		{
-			glm::vec3 positionVS;
+			float positionVS[3];
 			float radius;
 		};
 	};
@@ -76,10 +76,10 @@ struct alignas(16) GPULight
 	// 16..31
 	union
 	{
-		glm::vec4 directionVS_spotInnerCos{ 0.0f, 0.0f, -1.0f, 1.0f };
+		float directionVS_spotInnerCos[4];
 		struct
 		{
-			glm::vec3 directionVS;
+			float directionVS[3];
 			float spotInnerCos;
 		};
 	};
@@ -88,39 +88,60 @@ struct alignas(16) GPULight
 	// 32..47
 	union
 	{
-		glm::vec4 color_intensity{ 1.0f, 1.0f, 1.0f, 1.0f };
+		float color_intensity[4];
 		struct
 		{
-			glm::vec3 color;
+			float color[3];
 			float intensity;
 		};
 	};
 
 
 	// 48..63
-	uint32_t type{ (uint32_t)LightType::Directional };
-	uint32_t flags{ (uint32_t)(LightFlags::Enabled | LightFlags::Static)};
-	uint32_t cookieIndex{ UINT32_INVALID };
-	uint32_t shadowIndex{ UINT32_INVALID };
+	uint32_t type;
+	uint32_t flags;
+	uint32_t cookieIndex;
+	uint32_t shadowIndex;
 
 	// 64..79
-	float spotOuterCos{ 1.0f };
-	float falloffExp{ 1.5f };
-	float invRange{ 1.0f };
-	float volumetricIntensity{ 1.0f };
+	float spotOuterCos;
+	float falloffExp;
+	float invRange;
+	float volumetricIntensity;
 
 	// 80..95
-	float volumetricFalloff{ 1.0f };
-	float shadowBias{ 0.0f };
-	float shadowNormalBias{ 0.0f };
-	float _reserved0{ 0 };
+	float volumetricFalloff;
+	float shadowBias;
+	float shadowNormalBias;
+	float _reserved0;
 
 	// 96..111
-	uint32_t shadowType{ 0 };
-	uint32_t shadowLayerCount{ 0 };
-	uint32_t _reserved1{ 0 };;
-	uint32_t _reserved2{ 0 };;
+	uint32_t shadowType;
+	uint32_t shadowLayerCount;
+	uint32_t _reserved1;
+	uint32_t _reserved2;
 
+	GPULight() : // NOLINT(*-pro-type-member-init)
+		positionVS_radius{ 0.0f, 0.0f, 0.0f, 1.0f },
+		directionVS_spotInnerCos{ 0.0f, 0.0f, -1.0f, 1.0f },
+		color_intensity{ 1.0f, 1.0f, 1.0f, 1.0f },
+		type{ static_cast<uint32_t>(LightType::Directional) },
+		flags{ (LightFlags::Enabled | LightFlags::Static)},
+		cookieIndex{ UINT32_INVALID },
+		shadowIndex{ UINT32_INVALID },
+		spotOuterCos{ 1.0f },
+		falloffExp{ 1.5f },
+		invRange{ 1.0f },
+		volumetricIntensity{ 1.0f },
+		volumetricFalloff{ 1.0f },
+		shadowBias{ 0.0f },
+		shadowNormalBias{ 0.0f },
+		_reserved0{ 0 },
+		shadowType{ 0 },
+		shadowLayerCount{ 0 },
+		_reserved1{ 0 },
+		_reserved2{ 0 }
+	{}
 };
 
 static_assert(sizeof(GPULight) == 112, "GPULight must be 112 bytes");
@@ -128,56 +149,75 @@ static_assert(sizeof(GPULight) == 112, "GPULight must be 112 bytes");
 
 namespace LightFactory
 {
-	static const GPULight Point(
+	constexpr GPULight Point(
 		const glm::vec3& pos,
-		float radius,
+		const float radius,
 		const glm::vec3& color = { 1.0f, 1.0f, 1.0f },
-		float intensity = 1.0f) {
+		const float intensity = 1.0f)
+	{
 		GPULight L{};
 		L.type = static_cast<uint32_t>(LightType::Point);
-		L.positionVS = pos;
+		L.positionVS[0] = pos[0];
+		L.positionVS[1] = pos[1];
+		L.positionVS[2] = pos[2];
 		L.radius = radius;
 		L.invRange = radius > 0.0f ? 1.0f / radius : 0.0f;
-		L.color = color;
+		L.color[0] = color[0];
+		L.color[1] = color[1];
+		L.color[2] = color[2];
 		L.intensity = intensity;
 		return L;
 	}
 
-	static const GPULight Spot(
+	constexpr GPULight Spot(
 		const glm::vec3& pos,
 		const glm::vec3& dir,
-		float radius,
-		float innerDeg,
-		float outerDeg,
+		const float radius,
+		const float innerDeg,
+		const float outerDeg,
 		const glm::vec3& color = { 1.0f, 1.0f, 1.0f },
-		float intensity = 1.0f) {
+		const float intensity = 1.0f)
+	{
 		GPULight L{};
 		L.type = static_cast<uint32_t>(LightType::Spot);
-		L.positionVS = pos;
-		L.directionVS = glm::normalize(dir);
+		L.positionVS[0] = pos[0];
+		L.positionVS[1] = pos[1];
+		L.positionVS[2] = pos[2];
+		auto normDir = glm::normalize(dir);
+		L.directionVS[0] = normDir[0];
+		L.directionVS[1] = normDir[1];
+		L.directionVS[2] = normDir[2];
 		L.radius = radius;
 		L.invRange = radius > 0.0f ? 1.0f / radius : 0.0f;
 		L.spotInnerCos = glm::cos(glm::radians(innerDeg));
 		L.spotOuterCos = glm::cos(glm::radians(outerDeg));
-		L.color = color;
+		L.color[0] = color[0];
+		L.color[1] = color[1];
+		L.color[2] = color[2];
 		L.intensity = intensity;
 		return L;
 	}
 
-	static const GPULight Directional(
+	constexpr GPULight Directional(
 		const glm::vec3& dir,
 		const glm::vec3& color = { 1.0f, 1.0f, 1.0f },
-		float intensity = 1.0f) {
+		const float intensity = 1.0f)
+	{
 		GPULight L{};
 		L.type = static_cast<uint32_t>(LightType::Directional);
-		L.directionVS = glm::normalize(dir);
+		auto normDir = glm::normalize(dir);
+		L.directionVS[0] = normDir[0];
+		L.directionVS[1] = normDir[1];
+		L.directionVS[2] = normDir[2];
 		L.radius = 0.0f;       // Infinite range
 		L.invRange = 0.0f;
-		L.color = color;
+		L.color[0] = color[0];
+		L.color[1] = color[1];
+		L.color[2] = color[2];
 		L.intensity = intensity;
 		return L;
 	}
-};
+}
 
 
 struct ShadowMatrix { glm::mat4 viewProj; };
@@ -382,7 +422,9 @@ struct CameraData
 		nearPlane = 0.1f;
 		farPlane = 1000.0f;
 		aspectRatio = 16.0f / 9.0f;
-		cameraPosition = { 0.0f, 0.0f, 5.0f};
+		cameraPosition[0] = 0.0f;
+		cameraPosition[1] = 0.0f;
+		cameraPosition[2] = 5.0f;
 		ambient = 0.00625f;
 		view = glm::lookAt(
 			glm::vec3(0.0f, 0.0f, 5.0f), // Camera position
@@ -415,21 +457,21 @@ struct CameraData
 
 	union
 	{
-		alignas (16) glm::vec4 camPos_amb;
+		alignas (16) float camPos_amb[4];
 		struct
 		{
-			glm::vec3 cameraPosition;
+			float cameraPosition[3];
 			float ambient;
 		};
 	};
 
 	union
 	{
-		alignas (16) glm::vec4 screenSizes{};
+		alignas (16) float screenSizes[4];
 		struct
 		{
-			glm::vec2 screenSize;
-			glm::vec2 invScreenSize;
+			float screenSize[2];
+			float invScreenSize[2];
 		};
 	};
 	

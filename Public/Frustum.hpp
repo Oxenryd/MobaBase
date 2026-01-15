@@ -10,7 +10,7 @@ struct FrustumPlane
 		float raw[4]{};
 		struct
 		{
-			glm::vec3 normal;
+			float normal[3];
 			float d;
 		};
 		struct

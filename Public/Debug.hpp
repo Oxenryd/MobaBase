@@ -5,16 +5,6 @@
 #include <thread>
 #include <chrono>
 
-inline void assume(bool cond) {
-#if defined(__clang__) || defined(__GNUC__)
-	if (!cond) std::__terminate();
-#elif defined(_MSC_VER)
-	__assume(cond);
-#else
-	(void)cond;
-#endif
-}
-
 namespace Console
 {
 	inline void printLine(const std::string& msg) {

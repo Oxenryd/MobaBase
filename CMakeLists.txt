@@ -129,7 +129,8 @@ message(STATUS "Available targets: ${all_targets}")
 
 
 # SOURCES -----------------------------------------------------------------------------
-add_executable (MobaBase)
+add_executable (MobaBase
+		Public/API.h)
 
 target_sources(MobaBase
 	PRIVATE
@@ -187,6 +188,7 @@ target_include_directories(MobaBase PRIVATE
 target_compile_options(MobaBase PRIVATE
   $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wall -Wextra -Wpedantic>
   $<$<CXX_COMPILER_ID:MSVC>:/W4 /wd4201 /wd4127 /wd4100 /wd4458 /wd4505 /wd4324 /wd6262>
+  $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-mavx>
 )
 
 
@@ -194,6 +196,7 @@ target_compile_options(MobaBase PRIVATE
 target_compile_definitions(MobaBase PRIVATE 
 	GLFW_INCLUDE_VULKAN
 	# BUILD_WIN
+	BUILD_DLL
 	BUILD_GLFW
 	# X11
 	WAYLAND

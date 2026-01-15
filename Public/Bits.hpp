@@ -3,9 +3,11 @@
 #pragma once
 
 #include <cstdint>
+#include <cassert>
 #include <vector>
 #include <limits>
 #include <type_traits>
+
 
 template<size_t NBits>
 struct BitMask
@@ -14,16 +16,16 @@ struct BitMask
     static constexpr size_t NWords = (NBits + WordBits - 1) / WordBits;
     uint64_t words[NWords]{};
 
-    void set(size_t index) {
-        words[index / WordBits] |= (uint64_t(1) << (index % WordBits));
+    void set(const size_t index) {
+        words[index / WordBits] |= static_cast<uint64_t>(1) << (index % WordBits);
     }
 
-    void clear(size_t index) {
-        words[index / WordBits] &= ~(uint64_t(1) << (index % WordBits));
+    void clear(const size_t index) {
+        words[index / WordBits] &= ~(static_cast<uint64_t>(1) << (index % WordBits));
     }
 
-    bool isSet(size_t index) const {
-        return (words[index / WordBits] & (uint64_t(1) << (index % WordBits))) != 0;
+    [[nodiscard]] bool isSet(const size_t index) const {
+        return (words[index / WordBits] & static_cast<uint64_t>(1) << (index % WordBits)) != 0;
     }
 
     void clearAll() {
@@ -33,7 +35,7 @@ struct BitMask
 
     void setAll() {
         for (size_t i = 0; i < NWords; ++i)
-            words[i] = ~uint64_t(0);
+            words[i] = ~static_cast<uint64_t>(0);
     }
 };
 
@@ -146,19 +148,19 @@ public:
         : m_field{ static_cast<T>(startMask) } {}
 
     // ----- set/clear by index (bit position) -----
-    constexpr void set(uint32_t index) noexcept {
+    constexpr void set(const uint32_t index) noexcept {
         assert(index < bit_count);
-        m_field |= (T(1) << index);
+        m_field |= T(1) << index;
     }
 
-    constexpr void clear(uint32_t index) noexcept {
+    constexpr void clear(const uint32_t index) noexcept {
         assert(index < bit_count);
         m_field &= ~(T(1) << index);
     }
 
-    constexpr void toggle(uint32_t index) noexcept {
+    constexpr void toggle(const uint32_t index) noexcept {
         assert(index < bit_count);
-        m_field ^= (T(1) << index);
+        m_field ^= T(1) << index;
     }
 
     // ----- set/clear by enum mask -----
@@ -189,13 +191,13 @@ public:
         return (m_field & static_cast<T>(mask)) != 0;
     }
 
-    [[nodiscard]] constexpr bool isSet(uint32_t index) const noexcept {
+    [[nodiscard]] constexpr bool isSet(const uint32_t index) const noexcept {
         assert(index < bit_count);
-        return (m_field & (T(1) << index)) != 0;
+        return (m_field & T(1) << index) != 0;
     }
 
     // ----- utilities -----
-    constexpr void setByBool(uint32_t index, bool target) noexcept {
+    constexpr void setByBool(const uint32_t index, const bool target) noexcept {
         target ? set(index) : clear(index);
     }
 
@@ -234,27 +236,27 @@ private:
 class BitField
 {
 public:
-    BitField(size_t numBits)
+    explicit BitField(const size_t numBits)
         : m_numBits{ numBits },
         m_words{ (numBits + WordBits - 1) / WordBits, 0 } {}
 
-    void set(size_t index) {
-        m_words[index / WordBits] |= (uint64_t(1) << (index % WordBits));
+    void set(const size_t index) {
+        m_words[index / WordBits] |= static_cast<uint64_t>(1) << (index % WordBits);
     }
 
-    void clear(size_t index) {
-        m_words[index / WordBits] &= ~(uint64_t(1) << (index % WordBits));
+    void clear(const size_t index) {
+        m_words[index / WordBits] &= ~(static_cast<uint64_t>(1) << (index % WordBits));
     }
 
-    void toggle(size_t index) {
-        m_words[index / WordBits] ^= (uint64_t(1) << (index % WordBits));
+    void toggle(const size_t index) {
+        m_words[index / WordBits] ^= static_cast<uint64_t>(1) << (index % WordBits);
     }
 
-    bool isSet(size_t index) const {
-        return (m_words[index / WordBits] & (uint64_t(1) << (index % WordBits))) != 0;
+    [[nodiscard]] bool isSet(const size_t index) const {
+        return (m_words[index / WordBits] & static_cast<uint64_t>(1) << (index % WordBits)) != 0;
     }
 
-    void setByBool(size_t index, bool target) {
+    void setByBool(const size_t index, const bool target) {
         if (target)
             set(index);
         else
@@ -268,10 +270,10 @@ public:
 
     void setAll() {
         for (auto& word : m_words)
-            word = ~uint64_t(0);
+            word = ~static_cast<uint64_t>(0);
     }
 
-    size_t size() const {
+    [[nodiscard]] size_t size() const {
         return m_numBits;
     }
 
@@ -286,24 +288,24 @@ private:
 class BitFieldView
 {
 public:
-    BitFieldView(uint64_t* data, size_t numBits)
+    BitFieldView(uint64_t* data, const size_t numBits)
         : m_data(data),
         m_numBits(numBits) {}
 
-    void set(size_t index) {
-        m_data[index / WordBits] |= (uint64_t(1) << (index % WordBits));
+    void set(const size_t index) {
+        m_data[index / WordBits] |= static_cast<uint64_t>(1) << (index % WordBits);
     }
 
-    void clear(size_t index) {
-        m_data[index / WordBits] &= ~(uint64_t(1) << (index % WordBits));
+    void clear(const size_t index) {
+        m_data[index / WordBits] &= ~(static_cast<uint64_t>(1) << (index % WordBits));
     }
 
-    void toggle(size_t index) {
-        m_data[index / WordBits] ^= (uint64_t(1) << (index % WordBits));
+    void toggle(const size_t index) {
+        m_data[index / WordBits] ^= (static_cast<uint64_t>(1) << (index % WordBits));
     }
 
-    bool isSet(size_t index) const {
-        return (m_data[index / WordBits] & (uint64_t(1) << (index % WordBits))) != 0;
+    [[nodiscard]] bool isSet(const size_t index) const {
+        return (m_data[index / WordBits] & (static_cast<uint64_t>(1) << (index % WordBits))) != 0;
     }
 
     void clearAll() {
@@ -315,10 +317,10 @@ public:
     void setAll() {
         const size_t numWords = (m_numBits + WordBits - 1) / WordBits;
         for (size_t i = 0; i < numWords; ++i)
-            m_data[i] = ~uint64_t(0);
+            m_data[i] = ~static_cast<uint64_t>(0);
     }
 
-    size_t size() const {
+    [[nodiscard]] size_t size() const {
         return m_numBits;
     }
 

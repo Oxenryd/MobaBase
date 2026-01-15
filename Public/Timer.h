@@ -1,7 +1,7 @@
-#include <cstdint>
-
 #ifndef TIMER_H
 #define TIMER_H
+
+#include <cstdint>
 
 class Engine;
 class Arena;
@@ -29,19 +29,17 @@ private:
 	friend class Engine;
 	uint32_t m_timerIndex;
 	TimerCountDirection m_direction;
-	Timer(const uint32_t index, const TimerCountDirection direction);
+	Timer(uint32_t index, TimerCountDirection direction);
 	Timer(const Timer& other);
 
 public:
 	Timer() = default;
-	~Timer() {
-
+	~Timer() {}
+	explicit operator uint32_t() const {
+		return m_timerIndex;
 	}
-	inline operator uint32_t() {
-		return static_cast<uint32_t>(m_timerIndex);
-	}
-	inline operator size_t() {
-		return static_cast<size_t>(m_timerIndex);
+	explicit operator std::size_t() const {
+		return m_timerIndex;
 	}
 
 	//float ratio();

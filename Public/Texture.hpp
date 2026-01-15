@@ -41,8 +41,6 @@ enum class TextureType : uint8_t
 
 class Texture2D
 {
-private:
-
 
 public:
 	~Texture2D() = default;
@@ -73,27 +71,26 @@ public:
 	};
 	
 
-	void* const texelData();
-	void* const texelData() const;
-	size_t texelCount() { return width * height; }
-	size_t texelCount() const { return width * height; }
-	VkTextureResource* const getResource();
+	void* texelData();
+	[[nodiscard]] void* texelData() const;
+	[[nodiscard]] size_t texelCount() const { return width * height; }
+	VkTextureResource* getResource();
 	ErrorCode tryAllocate();
 
 	bool operator==(const Texture2D& rhs);
 
 	static TextureType typeFrom_aiTextureType(aiTextureType aiType);
-	static constexpr const std::array<aiTextureType, 10> aiTypesList = {
-		aiTextureType::aiTextureType_BASE_COLOR,
-		aiTextureType::aiTextureType_DIFFUSE,
-		aiTextureType::aiTextureType_EMISSIVE,
-		aiTextureType::aiTextureType_HEIGHT,
-		aiTextureType::aiTextureType_CLEARCOAT,
-		aiTextureType::aiTextureType_METALNESS,
-		aiTextureType::aiTextureType_AMBIENT_OCCLUSION,
-		aiTextureType::aiTextureType_NORMALS,
-		aiTextureType::aiTextureType_SPECULAR,
-		aiTextureType::aiTextureType_DIFFUSE_ROUGHNESS
+	static constexpr std::array<aiTextureType, 10> aiTypesList = {
+		aiTextureType_BASE_COLOR,
+		aiTextureType_DIFFUSE,
+		aiTextureType_EMISSIVE,
+		aiTextureType_HEIGHT,
+		aiTextureType_CLEARCOAT,
+		aiTextureType_METALNESS,
+		aiTextureType_AMBIENT_OCCLUSION,
+		aiTextureType_NORMALS,
+		aiTextureType_SPECULAR,
+		aiTextureType_DIFFUSE_ROUGHNESS
 	};
 
 	void exportPNG(const std::string& filepath);
