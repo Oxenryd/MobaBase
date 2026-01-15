@@ -7,7 +7,7 @@
 
 
 
-constexpr const uint32_t AaBbTriIndices[36]{
+constexpr uint32_t AaBbTriIndices[36]{
 	// Front  (+Z)
 	0,2,1,  1,2,3,
 	// Back   (-Z)
@@ -22,16 +22,15 @@ constexpr const uint32_t AaBbTriIndices[36]{
 	2,6,3,  3,6,7
 };
 
-class BoundingSystem : public SystemECS
+class BoundingSystem final : public SystemECS
 {
-private:
 	ArenaVector<BSphere> m_bSpheres;
 	ArenaVector<AABB> m_aabbs;
 	ArenaVector<OBB> m_obbs;
 	ArenaVector<AABB> m_aabbLocals;
 
 public:
-	BoundingSystem(ArenaRegistry* const registry, Arena* const arena, uint16_t sceneIndex) :
+	BoundingSystem(ArenaRegistry* const registry, Arena* const arena, const uint16_t sceneIndex) :
 		SystemECS{registry, sceneIndex},
 		m_bSpheres{ ArenaAllocator<BSphere>{arena} },
 		m_aabbs{ ArenaAllocator<AABB>{arena} },
@@ -42,15 +41,15 @@ public:
 
 
 
-	virtual void registryEmplace(entt::entity entity, void* valuePtr = nullptr, void** valueOut = nullptr) override {
+	void registryEmplace(const entt::entity entity, void* valuePtr, void** valueOut) override {
 		
-		AABB* box = static_cast<AABB*>(valuePtr);
+		const auto* box = static_cast<AABB*>(valuePtr);
 
 		const auto indexLocal = static_cast<uint32_t>(m_aabbLocals.size());
 		const auto indexWorld = static_cast<uint32_t>(m_aabbs.size());
 		if (!box) {
-			m_aabbLocals.push_back({});
-			m_aabbs.push_back({});
+			m_aabbLocals.emplace_back(AABB{});
+			m_aabbs.emplace_back(AABB{});
 		}
 		else {
 			m_aabbLocals.push_back(*box);
@@ -66,11 +65,8 @@ public:
 			//*static_cast<BoundingVolumeComponent*>(valueOut) = comp;
 		}
 	}
-	virtual void registryRemove(entt::entity, void* valueOut) override {
-		throw std::exception("SystemECS::registryRemove() not implemented.");
-	}
 
-	void run();
+	void run() override;
 
 	ArenaVector<BSphere>& bSpheres() { return m_bSpheres; }
 	ArenaVector<AABB>& aabbs() { return m_aabbs; }

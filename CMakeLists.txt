@@ -1,8 +1,8 @@
-﻿cmake_minimum_required (VERSION 3.21)
+﻿cmake_minimum_required (VERSION 3.51)
 
 project ("MobaBase")
 
-set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 if (POLICY CMP0141)
@@ -31,15 +31,14 @@ include(FetchContent)
 FetchContent_Declare(
     glm
     GIT_REPOSITORY https://github.com/g-truc/glm.git
-    GIT_TAG 0.9.9.8
+    GIT_TAG 1.0.3
 )
 FetchContent_MakeAvailable(glm)
-
-#EnTT
+		#EnTT
 FetchContent_Declare(
   EnTT
   GIT_REPOSITORY https://github.com/skypjack/entt.git
-  GIT_TAG        v3.13.1  # or latest stable tag; check the GitHub repo
+  GIT_TAG        v3.16.0  # or latest stable tag; check the GitHub repo
 )
 FetchContent_MakeAvailable(EnTT)
 
@@ -49,6 +48,8 @@ FetchContent_Declare(
   GIT_REPOSITORY https://github.com/boostorg/sort.git
   GIT_TAG        boost-1.85.0
 )
+
+FetchContent_MakeAvailable(boost_sort)
 
 #SPIR-V reflect
 FetchContent_Declare(
@@ -155,7 +156,7 @@ target_sources(MobaBase
 		"Private/Mesh.cpp"
 		"Private/Light.cpp"
 		"Private/BoundingVolume.cpp"
-		"private/BoundingSystem.cpp"
+		"Private/BoundingSystem.cpp"
 		"Private/BVH.cpp"
 )
 
@@ -192,9 +193,12 @@ target_compile_options(MobaBase PRIVATE
 # DEFINES ----------------------------------------------------------------------------
 target_compile_definitions(MobaBase PRIVATE 
 	GLFW_INCLUDE_VULKAN
-	BUILD_WIN
+	# BUILD_WIN
 	BUILD_GLFW
+	# X11
+	WAYLAND
 	GLM_FORCE_SSE2
+	GLM_ENABLE_EXPERIMENTAL
 	DEBUGGING
 	# $<$<CONFIG:Debug>:LOGGING>
 	LOGGING

@@ -59,12 +59,18 @@ enum class TypeBase : uint8_t
 	Sampler,
 	PushConstStruct,
 	PushConst,
-	Other
+	Other,
+	UnimplementedMatrix,
+	FloatMatrix2x2,
+	DoubleMatrix2x2
 };
 
-inline constexpr bool TypeBaseIsAllocatable(TypeBase type) {
+constexpr bool TypeBaseIsAllocatable(const TypeBase type) {
 
 	switch (type) {
+		default:
+			return true;
+
 		case TypeBase::None:
 		case TypeBase::Invalid:
 		case TypeBase::VertexInput:
@@ -73,21 +79,16 @@ inline constexpr bool TypeBaseIsAllocatable(TypeBase type) {
 		case TypeBase::Texture2D:
 		case TypeBase::RuntimeArray:
 		case TypeBase::Sampler:
-		case TypeBase::Other:
-		{
 			return false;
-		}
 	}
-
-	return true;
 }
 
-inline constexpr const TypeBase TypeBaseFromUint64(uint64_t value) {
+constexpr TypeBase TypeBaseFromUint64(uint64_t value) {
 	return static_cast<TypeBase>(value);
 }
 
 // Detect std::vector
-template<typename T>
+template<typename>
 struct is_std_vector : std::false_type {};
 
 template<typename T, typename Alloc>
@@ -106,7 +107,7 @@ struct array_size<std::array<T, N>>
 	static constexpr std::size_t value = N;
 };
 
-template<typename T>
+template<typename>
 struct is_std_array : std::false_type {};
 
 template<typename T, std::size_t N>
@@ -175,10 +176,10 @@ template<TypeBase E>
 using TypeBase_t = std::tuple_element_t<static_cast<size_t>(E), TypeBaseList>;
 
 template<uint64_t E>
-using TypeBase_t_uint = std::tuple_element_t<static_cast<size_t>(E), TypeBaseList>;
+using TypeBase_t_uint = std::tuple_element_t<E, TypeBaseList>;
 
 template <typename T>
-inline static constexpr TypeBase TypeBaseFromT() {
+static constexpr TypeBase TypeBaseFromT() {
 
 	if constexpr (std::is_same_v<T, uint32_t>) return TypeBase::UInt32;
 	if constexpr (std::is_same_v<T, int32_t>) return TypeBase::Int32;
@@ -216,16 +217,16 @@ inline static constexpr TypeBase TypeBaseFromT() {
 
 
 template <typename T>
-inline static T ReadValueAs(void* ptr) {
+static T ReadValueAs(void* ptr) {
 	return *static_cast<T*>(ptr);
 }
 template <typename T>
-inline static T& ReadRefAs(void* ptr) {
+static T& ReadRefAs(void* ptr) {
 	return *static_cast<T*>(ptr);
 }
 
 template <typename T>
-inline static constexpr std::pair<size_t, size_t> allocSizeAlignment() {
+static constexpr std::pair<size_t, size_t> allocSizeAlignment() {
 
 	if constexpr (TypeBaseFromT<T>() != TypeBase::Other) {
 		return {sizeof(T), alignof(T)};
@@ -234,7 +235,7 @@ inline static constexpr std::pair<size_t, size_t> allocSizeAlignment() {
 	return {sizeof(void*), alignof(void*)};
 }
 
-inline static constexpr const char* TypeBaseToString(TypeBase base) {
+static constexpr const char* TypeBaseToString(const TypeBase base) {
 	switch (base) {
 		case TypeBase::None:			return "None";
 		case TypeBase::Invalid:			return "Invalid";
@@ -285,7 +286,7 @@ inline static constexpr const char* TypeBaseToString(TypeBase base) {
 	}
 }
 
-inline constexpr TypeBase stringToTypeBase(const std::string& s) {
+constexpr TypeBase stringToTypeBase(const std::string& s) {
 	if (s == "None")			return TypeBase::None;
 	if (s == "Invalid")			return TypeBase::Invalid;
 	if (s == "Struct")			return TypeBase::Struct;
@@ -335,7 +336,7 @@ inline constexpr TypeBase stringToTypeBase(const std::string& s) {
 }
 
 
-inline static constexpr size_t SizeOfTypeBase(TypeBase type) {
+static constexpr size_t SizeOfTypeBase(const TypeBase type) {
 	switch (type) {
 		case TypeBase::None:			return 0;
 		case TypeBase::Invalid:			return 0;
@@ -382,7 +383,7 @@ inline static constexpr size_t SizeOfTypeBase(TypeBase type) {
 	}
 }
 
-inline static constexpr size_t AlignOfTypeBase(TypeBase type) {
+static constexpr size_t AlignOfTypeBase(const TypeBase type) {
 	switch (type) {
 		case TypeBase::None:			return 0;
 		case TypeBase::Invalid:			return 0;
@@ -429,7 +430,7 @@ inline static constexpr size_t AlignOfTypeBase(TypeBase type) {
 	}
 }
 
-inline static std::pair<size_t, size_t> allocSizeAlignment(TypeBase type) {
+static std::pair<size_t, size_t> allocSizeAlignment(const TypeBase type) {
 
 	if (type != TypeBase::Other) {
 		return { SizeOfTypeBase(type), AlignOfTypeBase(type)};
@@ -442,51 +443,49 @@ struct VarType
 {
 private:
 	void* _ptr;
-	const struct
-	{
-		uint64_t _type : 8;
-		uint64_t _count : 56;
-	};
+	uint64_t _type : 8;
+	uint64_t _count : 56;
+
 	
 
 public:
 	VarType() = default;
-	~VarType() {};
+	~VarType() {}
 
 	VarType(void* ptr, const std::vector<VarType>& members) :
 		_ptr{ptr},
 		_type{static_cast<uint64_t>(TypeBase::Struct)},
 		_count{members.size()} {}
 
-	VarType(void* ptr, TypeBase type, size_t count) :
+	VarType(void* ptr, const TypeBase type, const size_t count) :
 		_ptr{ptr},
 		_type{static_cast<uint64_t>(type)},
-		_count{static_cast<uint64_t>(count)} {}
+		_count{count} {}
 
-	VarType(TypeBase type, size_t count, Arena& arena, size_t alignPad) {
+	VarType(TypeBase type, const size_t count, Arena& arena, const size_t alignPad) {
 		_type = static_cast<uint64_t>(type);
 		_count = count;
-		auto align = AlignOfTypeBase(type);
+		const auto align = AlignOfTypeBase(type);
 		_ptr = arena.allocate(
 			SizeOfTypeBase(type) * _count,
 			alignPad <= align ? align : alignPad);
 	}
 
 	template <typename T>
-	VarType(const T& value, Arena& arena, size_t alignPad) {
+	VarType(const T& value, Arena& arena, const size_t alignPad) {
 
 		if constexpr (is_array_like_v<T>) {
 			
-			using ElementT = typename T::value_type;
+			using ElementT = T::value_type;
 			_type = static_cast<uint64_t>(TypeBaseFromT<ElementT>());
 
 			if constexpr (is_std_array<T>()) {
 				constexpr std::size_t size = array_size_v<T>;
 				_count = size;
-				std::pair<size_t, size_t> allocData = allocSizeAlignment(static_cast<TypeBase>(_type));
+				const auto [tSize, tAlign] = allocSizeAlignment(static_cast<TypeBase>(_type));
 				_ptr = arena.allocate(
-					allocData.first * _count,
-					alignPad <= allocData.second ? allocData.second : alignPad);
+					tSize * _count,
+					alignPad <= tAlign ? tAlign : alignPad);
 				auto* typedPtr = static_cast<ElementT*>(_ptr);
 				for (size_t i = 0; i < _count; ++i) {
 					typedPtr[i] = value[i];
@@ -494,10 +493,10 @@ public:
 			} else {
 				const std::vector<ElementT>* vector = static_cast<const std::vector<ElementT>*>(&value);
 				_count = vector->size();
-				std::pair<size_t, size_t> allocData = allocSizeAlignment(static_cast<TypeBase>(_type));
+				auto [tSize, tAlign] = allocSizeAlignment(static_cast<TypeBase>(_type));
 				_ptr = arena.allocate(
-					allocData.first * _count,
-					alignPad <= allocData.second ? allocData.second : alignPad);
+					tSize * _count,
+					alignPad <= tAlign ? tAlign : alignPad);
 				ElementT* typedPtr = static_cast<ElementT*>(_ptr);
 				for (size_t i = 0; i < _count; ++i) {
 					typedPtr[i] = vector->at(i);
@@ -506,10 +505,10 @@ public:
 		} else {
 			_type = static_cast<uint64_t>(TypeBaseFromT<T>());
 			_count = 1;
-			std::pair<size_t, size_t> allocData = allocSizeAlignment(static_cast<TypeBase>(_type));
+			auto [tSize, tAlign] = allocSizeAlignment(static_cast<TypeBase>(_type));
 			_ptr = arena.allocate(
-				allocData.first,
-				alignPad <= allocData.second ? allocData.second : alignPad);
+				tSize,
+				alignPad <= tAlign ? tAlign : alignPad);
 			auto* typedPtr = static_cast<T*>(_ptr);
 			*typedPtr = value;
 			
@@ -534,14 +533,14 @@ public:
 		return *this;
 	}
 
-	void* allocate(TypeBase type, Arena& arena, size_t count = 1, size_t alignPad = 0) {
+	void* allocate(TypeBase type, Arena& arena, const size_t count = 1, const size_t alignPad = 0) {
 		_type = static_cast<uint64_t>(type);
 		if (TypeBaseIsAllocatable(type)) {
 			_count = count;
-			std::pair<size_t, size_t> allocData = allocSizeAlignment(static_cast<TypeBase>(_type));
+			auto [tSize, tAlign] = allocSizeAlignment(static_cast<TypeBase>(_type));
 			_ptr = arena.allocate(
-				allocData.first * _count,
-				alignPad <= allocData.second ? allocData.second : alignPad);			
+				tSize * _count,
+				alignPad <= tAlign ? tAlign : alignPad);
 		} else {
 			_ptr = nullptr;
 			_count = 0;
@@ -549,13 +548,13 @@ public:
 		return _ptr;
 	}
 
-	void* allocate(Arena& arena, size_t count = 1, size_t alignPad = 0) {
+	void* allocate(Arena& arena, const size_t count = 1, const size_t alignPad = 0) {
 		if (TypeBaseIsAllocatable(static_cast<TypeBase>(_type))) {
 			_count = count;
-			std::pair<size_t, size_t> allocData = allocSizeAlignment(static_cast<TypeBase>(_type));
+			auto [tSize, tAlign] = allocSizeAlignment(static_cast<TypeBase>(_type));
 			_ptr = arena.allocate(
-				allocData.first * _count,
-				alignPad <= allocData.second ? allocData.second : alignPad);
+				tSize * _count,
+				alignPad <= tAlign ? tAlign : alignPad);
 		} else {
 			_ptr = nullptr;
 			_count = 0;
@@ -563,15 +562,15 @@ public:
 		return _ptr;
 	}
 
-	void setType(TypeBase type) {
+	void setType(const TypeBase type) {
 		_type = static_cast<uint64_t>(type);
 	}
-	void setCount(size_t count) {
+	void setCount(const size_t count) {
 		_count = count;
 	}
 
 	template <typename T>
-	operator T() const {
+	explicit operator T() const {
 
 		if constexpr (TypeBaseFromT<T>() == TypeBase::None)
 			throw std::bad_cast();
@@ -613,10 +612,10 @@ public:
 		return std::span<const T>(static_cast<const T*>(_ptr), _count);
 	}
 
-	bool operator==(const VarType& rhs) {
+	bool operator==(const VarType& rhs) const {
 		return _ptr == rhs._ptr && _type == rhs._type && _count == rhs._count;
 	}
-	bool operator!=(const VarType& rhs) {
+	bool operator!=(const VarType& rhs) const {
 		return !(*this == rhs);
 	}
 };

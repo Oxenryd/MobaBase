@@ -3,8 +3,17 @@
 
 #include <iostream>
 #include <thread>
-#include <cstdint>
 #include <chrono>
+
+inline void assume(bool cond) {
+#if defined(__clang__) || defined(__GNUC__)
+	if (!cond) std::__terminate();
+#elif defined(_MSC_VER)
+	__assume(cond);
+#else
+	(void)cond;
+#endif
+}
 
 namespace Console
 {
@@ -15,7 +24,7 @@ namespace Console
 
 namespace Debug
 {
-	inline void sleepBlock(uint32_t milliseconds) {
+	inline void sleepBlock(const uint32_t milliseconds) {
 		std::this_thread::sleep_for(std::chrono::milliseconds(milliseconds));
 	}
 }

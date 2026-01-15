@@ -18,13 +18,13 @@
 
 namespace MMath
 {
-    constexpr const float fPI = 3.14159265359f;
-    constexpr const float fTAU = 2 * 3.14159265359f;
-    constexpr const double dPI = 3.14159265359;
-    constexpr const double dTAU = 2 * 3.14159265359;
-    constexpr const float fSQR2Inv = 0.707106781f;
-    constexpr const double dSQR2Inv = 0.70710678118655;
-    static const glm::mat4x4 IDENTITY_MAT = glm::mat4x4{ 1 };
+    constexpr float fPI = 3.14159265359f;
+    constexpr float fTAU = 2 * 3.14159265359f;
+    constexpr double dPI = 3.14159265359;
+    constexpr double dTAU = 2 * 3.14159265359;
+    constexpr float fSQR2Inv = 0.707106781f;
+    constexpr double dSQR2Inv = 0.70710678118655;
+    static const auto IDENTITY_MAT = glm::mat4x4{ 1 };
 
 
     static const glm::mat4x4& identityMat4() { 
@@ -33,9 +33,7 @@ namespace MMath
 
     template <std::integral U, std::integral V, std::integral W, std::integral Z, std::integral X>
     INLINE size_t getChunkSetRange(W threadCount, X size, Z currentThreadIndex, U& start, V& count) {
-        size_t offset = static_cast<size_t>(
-            std::ceil(static_cast<float>(size / static_cast<float>(threadCount)))
-            );
+        size_t offset = std::ceil(static_cast<float>(size / static_cast<float>(threadCount)));
         start = currentThreadIndex * offset;
         count = (currentThreadIndex == threadCount - 1 && size % offset != 0)
             ? size % offset
@@ -115,8 +113,8 @@ namespace MMath
         return _mm_cvtss_f32(t);
     }
     inline void hminmax8(__m256 v, float& mn, float& mx) {
-        __m128 lo = _mm256_castps256_ps128(v);
-        __m128 hi = _mm256_extractf128_ps(v, 1);
+        const __m128 lo = _mm256_castps256_ps128(v);
+        const __m128 hi = _mm256_extractf128_ps(v, 1);
         mn = hmin4(_mm_min_ps(lo, hi));
         mx = hmax4(_mm_max_ps(lo, hi));
     }

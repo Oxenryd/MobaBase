@@ -7,6 +7,9 @@
     #endif
 #endif
 
+#ifdef BUILD_GLFW
+#endif
+
 #include "MMath.hpp"
 
 #include <cstdint>
@@ -20,16 +23,7 @@
 
 
 
-
-
-//struct RawKeyEvent
-//{
-//    USHORT virtualKey;
-//    USHORT scanCode;
-//    bool isPressed;
-//    bool isExtended;
-//};
-
+#ifdef BUILD_WIN
 
 struct MouseDataRaw
 {
@@ -43,8 +37,8 @@ struct WindowSurface
 {
     union alignas (4) KeysBitfield
     {
-        KeysBitfield(uint32_t field) : value{ field } {}
-        KeysBitfield& operator=(uint32_t field) {
+        explicit KeysBitfield(const uint32_t field) : value{ field } {}
+        KeysBitfield& operator=(const uint32_t field) {
             value = field;
             return *this;
         }
@@ -111,7 +105,6 @@ struct WindowSurface
 
     WindowSurface() = default;
     ~WindowSurface() {}
-#ifdef BUILD_WIN
     
     WindowSurface(const WindowSurface& other) : 
         windowHandle{ other.windowHandle }
@@ -162,14 +155,10 @@ struct WindowSurface
         return ErrorCode::OK;
     }
 
-
-
-
-#endif // BUILD_WIN
 };
 
 
-#ifdef BUILD_WIN
+
 
 static LRESULT CALLBACK WindowProc(
     HWND hwnd,
@@ -429,5 +418,24 @@ static ErrorCode createSurface(
 //}
 
 #endif // BUILD_WIN
+
+
+#ifdef BUILD_GLFW
+
+#ifdef WAYLAND
+class WindowSurface {
+    std::string m_appName{};
+    wl_display* m_display{nullptr};
+    wl_surface* m_surface{nullptr};
+public:
+    std::string& appName() { return m_appName; }
+    const char* appName_c_str() const { return m_appName.c_str(); }
+    wl_display* display() { return m_display; }
+    wl_surface* surface() { return m_surface; }
+};
+
+#endif
+
+#endif
 
 #endif // WINDOWSURFACE_HPP

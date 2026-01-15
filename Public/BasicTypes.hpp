@@ -16,7 +16,13 @@ struct ColorRGBA_f
 {
 	~ColorRGBA_f() = default;
 	ColorRGBA_f() = default;
-	ColorRGBA_f(float R, float G, float B, float A = 1.0f) {
+	explicit ColorRGBA_f(const float all, const float A = 1.0f) {
+		r = all;
+		g = all;
+		b = all;
+		a = A;
+	}
+	ColorRGBA_f(const float R, const float G, const float B, const float A = 1.0f) {
 		r = R;
 		b = B;
 		g = G;
@@ -38,13 +44,12 @@ struct ColorRGBA_f
 		};
 	};
 
-	operator glm::vec4() {
+	explicit operator glm::vec4() const {
 		return glm::vec4(r, g, b, a);
 	}
 
 
-	float& operator[] (size_t idx) {
-		if (idx > 3) idx = 3;
+	float& operator[] (const size_t idx) {
 		switch (idx) {
 			case 0:
 				return r;
@@ -52,13 +57,12 @@ struct ColorRGBA_f
 				return g;
 			case 2:
 				return b;
-			case 3:
+			default:
 				return a;
 		}
 	}
 
-	float operator[] (size_t idx) const {
-		if (idx > 3) idx = 3;
+	float operator[] (const size_t idx) const {
 		switch (idx) {
 			case 0:
 				return r;
@@ -66,16 +70,16 @@ struct ColorRGBA_f
 				return g;
 			case 2:
 				return b;
-			case 3:
+			default:
 				return a;
 		}
 	}
 };
 
 template <std::integral T>
-INLINE ColorRGBA_f colorCycle(T step, float a) {
-	auto s = step % 18;
-	switch (s) {
+INLINE ColorRGBA_f colorCycle(const T step, const float a) {
+
+	switch (const auto s = step % 18; s) {
 
 		case 0:  return	ColorRGBA_f{ 1.0f,		0.0f,		0.0f,		a };
 		case 1: return	ColorRGBA_f{ 0.951185f,	0.117851f,	0.0f,		a };
@@ -110,13 +114,13 @@ struct ColorRGBA
 
 	~ColorRGBA() = default;
 	ColorRGBA() = default;
-	ColorRGBA(const ColorRGBA_f& color_f) {
+	explicit ColorRGBA(const ColorRGBA_f& color_f) {
 		r = static_cast<uint8_t>(std::max(color_f.r, 1.0f) * 255);
 		g = static_cast<uint8_t>(std::max(color_f.g, 1.0f) * 255);
 		b = static_cast<uint8_t>(std::max(color_f.b, 1.0f) * 255);
 		a = static_cast<uint8_t>(std::max(color_f.a, 1.0f) * 255);
 	}
-	ColorRGBA(const aiTexel& texel) {
+	explicit ColorRGBA(const aiTexel& texel) {
 		r = texel.r;
 		g = texel.g;
 		b = texel.b;
@@ -126,8 +130,7 @@ struct ColorRGBA
 	ColorRGBA& operator=(const ColorRGBA& other) = default;
 
 
-	uint8_t& operator[] (size_t idx) {
-		if (idx > 3) idx = 3;
+	uint8_t& operator[] (const size_t idx) {
 		switch (idx) {
 			case 0:
 				return r;
@@ -135,13 +138,12 @@ struct ColorRGBA
 				return g;
 			case 2:
 				return b;
-			case 3:
+			default:
 				return a;
 		}
 	}
 
-	uint8_t operator[] (size_t idx) const {
-		if (idx > 3) idx = 3;
+	uint8_t operator[] (const size_t idx) const {
 		switch (idx) {
 			case 0:
 				return r;
@@ -149,12 +151,12 @@ struct ColorRGBA
 				return g;
 			case 2:
 				return b;
-			case 3:
+			default:
 				return a;
 		}
 	}
 
-	ColorRGBA_f asColorRGBA_f() {
+	ColorRGBA_f asColorRGBA_f() const {
 		ColorRGBA_f arr;
 		arr[0] = static_cast<float>(r) / 255.0f;
 		arr[1] = static_cast<float>(g) / 255.0f;
@@ -196,8 +198,12 @@ struct Ray
 	glm::vec3 direction;
 	glm::vec3 invDirection;
 	
-	bool operator==(const Ray& rhs) {
+	bool operator==(const Ray& rhs) const {
 		return origin == rhs.origin && direction == rhs.direction;
+	}
+
+	bool operator!=(const Ray& rhs) const {
+		return !(*this == rhs);
 	}
 };
 
@@ -273,24 +279,24 @@ public:
 
 	INLINE AABB transformed_noPerspective(const glm::mat4x4& trs) const {
 
-		glm::vec3 c = 0.5f * (min + max);
-		glm::vec3 e = 0.5f * (max - min);
-		glm::mat3 A = glm::mat3(trs);
-		glm::vec3 nc = glm::vec3(trs * glm::vec4(c, 1.0f));
+		const glm::vec3 c = 0.5f * (min + max);
+		const glm::vec3 e = 0.5f * (max - min);
+		const auto A = glm::mat3(trs);
+		const auto nc = glm::vec3(trs * glm::vec4(c, 1.0f));
 
-		glm::mat3 B = glm::mat3(glm::abs(A[0]), glm::abs(A[1]), glm::abs(A[2]));
-		glm::vec3 ne = B * e;
+		const auto B = glm::mat3(glm::abs(A[0]), glm::abs(A[1]), glm::abs(A[2]));
+		const glm::vec3 ne = B * e;
 		return AABB(nc - ne, nc + ne);
 	}
 
 	INLINE AABB& transform_noPerspective(const glm::mat4x4& trs) {
-		glm::vec3 c = 0.5f * (min + max);
-		glm::vec3 e = 0.5f * (max - min);
-		glm::mat3 A = glm::mat3(trs);
-		glm::vec3 nc = glm::vec3(trs * glm::vec4(c, 1.0f));
+		const glm::vec3 c = 0.5f * (min + max);
+		const glm::vec3 e = 0.5f * (max - min);
+		const auto A = glm::mat3(trs);
+		const auto nc = glm::vec3(trs * glm::vec4(c, 1.0f));
 
-		glm::mat3 B = glm::mat3(glm::abs(A[0]), glm::abs(A[1]), glm::abs(A[2]));
-		glm::vec3 ne = B * e;
+		const auto B = glm::mat3(glm::abs(A[0]), glm::abs(A[1]), glm::abs(A[2]));
+		const glm::vec3 ne = B * e;
 
 		min = nc - ne;
 		max = nc + ne;
@@ -298,13 +304,13 @@ public:
 	}
 
 	INLINE static AABB transformed_noPerspective(const AABB& box, const glm::mat4x4& trs) {
-		glm::vec3 c = 0.5f * (box.min + box.max);
-		glm::vec3 e = 0.5f * (box.max - box.min);
-		glm::mat3 A = glm::mat3(trs);
-		glm::vec3 nc = glm::vec3(trs * glm::vec4(c, 1.0f));
+		const glm::vec3 c = 0.5f * (box.min + box.max);
+		const glm::vec3 e = 0.5f * (box.max - box.min);
+		const auto A = glm::mat3(trs);
+		const auto nc = glm::vec3(trs * glm::vec4(c, 1.0f));
 
-		glm::mat3 B = glm::mat3(glm::abs(A[0]), glm::abs(A[1]), glm::abs(A[2]));
-		glm::vec3 ne = B * e;
+		const auto B = glm::mat3(glm::abs(A[0]), glm::abs(A[1]), glm::abs(A[2]));
+		const glm::vec3 ne = B * e;
 		return AABB(nc - ne, nc + ne);
 	}
 
@@ -324,7 +330,9 @@ public:
 #if defined(__FMA__) || (defined(_MSC_VER) && defined(__AVX2__))
 		auto fmadd = [](__m256 a, __m256 b, __m256 c) { return _mm256_fmadd_ps(a, b, c); };
 #else
-		auto fmadd = [](__m256 a, __m256 b, __m256 c) { return _mm256_add_ps(_mm256_mul_ps(a, b), c); };
+		auto fmadd = [](const __m256 a, const __m256 b, const __m256 c) {
+			return _mm256_add_ps(_mm256_mul_ps(a, b), c);
+		};
 #endif
 
 		const __m256 Xp = fmadd(r0x, X, fmadd(r0y, Y, fmadd(r0z, Z, _mm256_mul_ps(r0w, W))));
@@ -354,7 +362,7 @@ public:
 	}
 
 	INLINE AABB& transform_perspective(const glm::mat4x4& M) {
-		auto newAABB = transformed_perspective(M);
+		const auto newAABB = transformed_perspective(M);
 		min = newAABB.min;
 		max = newAABB.max;
 		return *this;
@@ -379,14 +387,13 @@ public:
 	}
 
 	INLINE bool intersects(const AABB& box) const {
-		return (
+		return
 			min.x <= box.max.x &&
 			max.x >= box.min.x &&
 			min.y <= box.max.y &&
 			max.y >= box.min.y &&
 			min.z <= box.max.z &&
-			max.z >= box.min.z
-			);
+			max.z >= box.min.z;
 	}
 
 	INLINE bool intersects(const Ray& r) const {
@@ -434,8 +441,8 @@ public:
 		const glm::vec3 c = 0.5f * (local.min + local.max);
 		const glm::vec3 e = 0.5f * (local.max - local.min);
 
-		const glm::vec3 wc = glm::vec3(trs * glm::vec4(c, 1.0f));
-		const glm::mat3 M = glm::mat3(trs);
+		const auto wc = glm::vec3(trs * glm::vec4(c, 1.0f));
+		const auto M = glm::mat3(trs);
 		auto A = glm::mat3(
 			glm::abs(M[0]),
 			glm::abs(M[1]),
@@ -473,7 +480,7 @@ public:
 		return max - min;
 	}
 	INLINE float surfaceArea() const {
-		glm::vec3 extent = max - min;
+		const glm::vec3 extent = max - min;
 		return 2.0f * (extent.x * extent.y + extent.x * extent.z + extent.y * extent.z);
 	}
 
@@ -481,8 +488,12 @@ public:
 		return raw;
 	}
 
-	bool operator==(const AABB& rhs) {
+	bool operator==(const AABB& rhs) const {
 		return min == rhs.min && max == rhs.max;
+	}
+
+	bool operator!=(const AABB& rhs) const {
+		return !(*this == rhs);
 	}
 };
 
@@ -520,7 +531,7 @@ struct BoundingVolumeComponent
 		coarseIndexLocal{ UINT32_INVALID },
 		coarseIndexWorld{ UINT32_INVALID }
 	{
-		flags = (uint32_t)BoundingVolumeFlags::Occludee;
+		flags = static_cast<uint32_t>(BoundingVolumeFlags::Occludee);
 	}
 
 	BoundingVolumeComponent(const uint32_t coarseIndexLocal, const uint32_t coarseIndexWorld) :
@@ -528,7 +539,7 @@ struct BoundingVolumeComponent
 		coarseIndexLocal{coarseIndexLocal},
 		coarseIndexWorld{ coarseIndexWorld }
 	{
-		flags = (uint32_t)BoundingVolumeFlags::Occludee;
+		flags = static_cast<uint32_t>(BoundingVolumeFlags::Occludee);
 	}
 
 	//BoundingVolumeComponent(const uint32_t coarseIndex, const BoundingShape firstShape, const uint32_t firstFineIndex) :
@@ -625,14 +636,14 @@ struct BoundingVolumeComponent
 		return shapes;
 	}
 
-	void enabledFine(const uint8_t index, bool onOff) {
+	void enabledFine(const uint8_t index, const bool onOff) {
 		switch (index) {
 			default: return;
 			case 0: if (fineCount >= 1) fineEnabled0 = onOff ? 1 : 0; return;
 			case 1: if (fineCount >= 2) fineEnabled1 = onOff ? 1 : 0; return;
 			case 2: if (fineCount >= 3) fineEnabled2 = onOff ? 1 : 0; return;
-			case 3: if (fineCount >= 4) fineEnabled3 = onOff ? 1 : 0; return;
-			//case 4: if (fineCount >= 5) fineEnabled4 = onOff ? 1 : 0; return;
+			case 3: if (fineCount >= 4) fineEnabled3 = onOff ? 1 : 0;
+			// return; case 4: if (fineCount >= 5) fineEnabled4 = onOff ? 1 : 0; return;
 			//case 5: if (fineCount >= 6) fineEnabled5 = onOff ? 1 : 0; return;
 		}
 	}
@@ -640,18 +651,18 @@ struct BoundingVolumeComponent
 	bool enabled(const uint8_t index) const {
 		switch (index) {
 			default: return false;
-			case 0: return (fineEnabled0 ==  1 ? true : false) && fineCount >= 1;
-			case 1: return (fineEnabled1 ==  1 ? true : false) && fineCount >= 2;
-			case 2: return (fineEnabled2 ==  1 ? true : false) && fineCount >= 3;
-			case 3: return (fineEnabled3 ==  1 ? true : false) && fineCount >= 4;
+			case 0: return fineEnabled0 ==  1 && fineCount >= 1;
+			case 1: return fineEnabled1 ==  1 && fineCount >= 2;
+			case 2: return fineEnabled2 ==  1 && fineCount >= 3;
+			case 3: return fineEnabled3 ==  1 && fineCount >= 4;
 			//case 4: return (fineEnabled4 ==  1 ? true : false) && fineCount >= 5;
 			//case 5: return (fineEnabled5 ==  1 ? true : false) && fineCount >= 6;
 		}
 	}
 
-	bool addFine(const BoundingShape& shape, uint32_t index) {
-		auto lastCount = fineCount;
-		fineCount = std::min(fineCount + 1, (uint32_t)4); // max here
+	bool addFine(const BoundingShape& shape, const uint32_t index) {
+		const auto lastCount = fineCount;
+		fineCount = std::min(fineCount + 1u, static_cast<uint32_t>(4)); // max here
 		switch (fineCount) {
 			default: fineCount = lastCount; return false;
 

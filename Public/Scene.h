@@ -1,7 +1,6 @@
 #ifndef SCENE_H
 #define SCENE_H
 
-#include <cstdint>
 #include <entt/entt.hpp>
 #include <concepts>
 #include <type_traits>
@@ -11,7 +10,7 @@
 #include "GameObjectSystem.hpp"
 #include "TagSystem.hpp"
 #include "SceneRenderSystem.hpp"
-#include "lightSystem.hpp"
+#include "LightSystem.hpp"
 #include "BVH.hpp"
 
 enum class SceneTransitionStatus
@@ -33,7 +32,6 @@ enum class SceneTransitionMode : uint8_t
 class Engine;
 class SceneBase
 {
-private:
     friend Engine;
     static constexpr size_t DEFAULT_HEAP_SIZE = 64 * 1024 * 1024;
 
@@ -67,17 +65,16 @@ public:
     SceneBase& operator=(const SceneBase&) = delete;
     SceneBase(SceneBase&&) = delete;
     SceneBase& operator=(SceneBase&&) = delete;
-    SceneBase(size_t arenaSize, uint16_t sceneIndex) :
-        
+    SceneBase(const size_t arenaSize, const uint16_t sceneIndex) :
         m_arena{ arenaSize },
+        m_sceneIndex{sceneIndex},
         m_reg{ ArenaAllocator<entt::entity>{&m_arena} },
+        m_renderSys{ &m_reg, &m_arena, sceneIndex },
         m_boundingSys{ &m_reg, &m_arena, sceneIndex },
         m_transformSys{&m_reg, sceneIndex, &m_arena},
         m_gameObjectSys{ sceneIndex, &m_reg},
-        m_renderSys{ &m_reg, &m_arena, sceneIndex },  
-        m_sceneIndex{sceneIndex},
-        m_lightSys{&m_reg, sceneIndex},
-        m_bvhSys{m_reg}
+        m_bvhSys{m_reg},
+        m_lightSys{&m_reg, sceneIndex}
     {
         m_reg.storage<TransformComponent>().reserve(ECS_BASE_COMPONENTS_RESERVATION_COUNT);
         m_reg.storage<EnabledTag>().reserve(ECS_BASE_COMPONENTS_RESERVATION_COUNT);
@@ -95,8 +92,8 @@ public:
     const bool& isFirstFrame() const { return m_firstFrame; }
 
 
-    virtual void updateDispatch(double deltaTime) {}
-    virtual void lateUpdateDispatch(double deltaTime) {}
+    virtual void updateDispatch(const double) {}
+    virtual void lateUpdateDispatch(const double) {}
     virtual void fixedUpdateDispatch() {}
     virtual void loadDispatch() {}
     virtual void startDispatch() {}
@@ -123,9 +120,9 @@ template<typename Derived>
 class Scene : public SceneBase
 {
 public:
-    virtual ~Scene() {}
+    ~Scene() override {}
     Scene() = delete;
-    Scene(size_t arenaSize, uint16_t index) : SceneBase(arenaSize, index) {}
+    Scene(const size_t arenaSize, const uint16_t index) : SceneBase(arenaSize, index) {}
     //static SceneBase* defaultCreation(void* arg) {
     //    return new Derived{};
     //}
@@ -183,12 +180,12 @@ public:
     }
 };
 
-class DefaultScene : public Scene<DefaultScene>
+class DefaultScene final : public Scene<DefaultScene>
 {
 public:
-    DefaultScene(size_t arenaSize, uint16_t index)
-        : Scene<DefaultScene>{ arenaSize, index } {}
-    static SceneBase* createDefault(size_t arenaSize, uint16_t index, void* arg) {
+    DefaultScene(const size_t arenaSize, const uint16_t index)
+        : Scene{ arenaSize, index } {}
+    static SceneBase* createDefault(const size_t arenaSize, const uint16_t index, void*) {
         return new DefaultScene{ arenaSize, index};
     }
 };

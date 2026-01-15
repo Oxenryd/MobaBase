@@ -22,15 +22,15 @@ decltype(std::declval<ArenaRegistry&>()
          .group<TransformComponent, BoundingVolumeComponent, EnabledTag>());
 
 
-
+#ifdef MSVC
 #pragma warning(push)
 #pragma warning(disable : 26495)
+#endif
+
 struct BVHNode //alignas(64)
 {
     AABB bounds{};
 
-
-    
     // glm::vec3 center{};
     //glm::vec3 extent{};
 
@@ -58,8 +58,8 @@ struct BVHNode //alignas(64)
 
     bool isLeaf() const { return flags & 0x01; }
     bool isDirty() const { return flags & 0x02; }
-    void setLeaf(bool leaf) { flags = leaf ? (flags | 0x01) : (flags & ~0x01); }
-    void setDirty(bool dirty) { flags = dirty ? (flags | 0x02) : (flags & ~0x02); }
+    void setLeaf(const bool leaf) { flags = leaf ? flags | 0x01 : flags & ~0x01; }
+    void setDirty(const bool dirty) { flags = dirty ? flags | 0x02 : flags & ~0x02; }
 
     //INLINE glm::vec3 min() const {
     //    return center - 0.5f * extent;
@@ -82,7 +82,9 @@ struct BVHNode //alignas(64)
 
 };
 
+#ifdef MSVC
 #pragma warning(pop)
+#endif
 
 // Primitive reference for BVH
 struct BVHPrimitive
@@ -101,7 +103,7 @@ struct BVHPrimitive
     //AABB worldBounds;       // Cached transformed bounds
     
     BVHPrimitive() : 
-        entity{ entt::null }, bounds{}//aabbIndex{UINT32_INVALID}, sceneIndex{UINT16_INVALID}
+        entity{ entt::null }//aabbIndex{UINT32_INVALID}, sceneIndex{UINT16_INVALID}
     {}
     BVHPrimitive(const BVHPrimitive& other) :
         entity{ other.entity }, bounds{ other.bounds }//sceneIndex{other.sceneIndex}, aabbIndex{other.aabbIndex}
@@ -133,7 +135,7 @@ struct BVHPrimitive
     //BVHPrimitive(entt::entity e, uint32_t dataIndex, uint16_t scene) :
     //    entity{ e }, sceneIndex{ scene }, aabbIndex{ dataIndex } //frameUpdated{ UINT32_INVALID } 
     //{}
-    BVHPrimitive(entt::entity e, const AABB& aabb) :
+    BVHPrimitive(const entt::entity e, const AABB& aabb) :
         entity{e}, bounds{aabb}
     {}
 
@@ -148,11 +150,9 @@ struct Frustum;
 
 class DualBVH
 {
-private:
-
-    struct TestResult { 
-        TestResult(uint8_t mask, uint8_t state) :
-            state{state}, mask{mask} {}
+    struct TestResult {
+        TestResult(const uint8_t mask, const uint8_t state) :
+            mask{mask}, state{state} {}
        
         union
         {
@@ -165,7 +165,7 @@ private:
         };
     };
 
-    inline TestResult frustumTest_centerExtent(const glm::vec3& c, const glm::vec3& e,
+    static TestResult frustumTest_centerExtent(const glm::vec3& c, const glm::vec3& e,
                                                const FrustumPlane* F) {
         // For each plane: s = dot(n, c) + d; r = dot(|n|, e).
         // Outside if s + r < 0, Inside if s - r >= 0, else Intersect.
@@ -173,45 +173,47 @@ private:
         bool anyIntersect = false;
 
         for (int i = 0; i < 6; ++i) {
-            const glm::vec3 n = glm::vec3(F[i].vec);
+            const auto n = glm::vec3(F[i].vec);
             const float d = F[i].vec.w;
             const float s = glm::dot(n, c) + d;
             const float r = glm::dot(glm::abs(n), e);
             if (s + r < 0.0f)
                 return { 0, /*Outside*/0 };
             if (s - r < 0.0f) {
-                anyIntersect = true; mask |= (1u << i);
+                anyIntersect = true; mask |= 1u << i;
             }
         }
 
-        return { mask, anyIntersect ? /*Intersect*/(uint8_t)1 : /*Inside*/(uint8_t)2 };
+        return { mask,
+            anyIntersect ? /*Intersect*/static_cast<uint8_t>(1) : /*Inside*/static_cast<uint8_t>(2) };
     }
-    inline TestResult frustumTest_centerExtent_masked(const glm::vec3& c, const glm::vec3& e,
-                                               const FrustumPlane* F, uint8_t planeMask) {
+    static TestResult frustumTest_centerExtent_masked(const glm::vec3& c, const glm::vec3& e,
+                                               const FrustumPlane* F, const uint8_t) {
         // For each plane: s = dot(n, c) + d; r = dot(|n|, e).
         // Outside if s + r < 0, Inside if s - r >= 0, else Intersect.
         uint8_t mask = 0;
         bool anyIntersect = false;
 
         for (int i = 0; i < 6; ++i) {
-            const glm::vec3 n = glm::vec3(F[i].vec);
+            const auto n = glm::vec3(F[i].vec);
             const float d = F[i].vec.w;
             const float s = glm::dot(n, c) + d;
             const float r = glm::dot(glm::abs(n), e);
             if (s + r < 0.0f) return { 0, /*Outside*/0 };
             if (s - r < 0.0f) { anyIntersect = true; mask |= (1u << i); }
         }
-        return { mask, anyIntersect ? /*Intersect*/(uint8_t)1 : /*Inside*/(uint8_t)2 };
+        return { mask,
+            anyIntersect ? /*Intersect*/static_cast<uint8_t>(1) : /*Inside*/static_cast<uint8_t>(2) };
     }
 
 
 
 
     INLINE void _tSafe_insertionSort(uint32_t* primitiveIds, uint32_t primCount, int bestAxis, uint8_t index);
-    static constexpr const unsigned int NUM_BUILD_THREADS = 6;
-    static constexpr const unsigned int NUM_RUN_THREADS = 16;
-    std::array<FrameArena*, NUM_RUN_THREADS + 1> cullArenas[2]{ nullptr, nullptr };
-    std::array<std::binary_semaphore*, NUM_RUN_THREADS> runSems[2]{ nullptr, nullptr };
+    static constexpr unsigned int NUM_BUILD_THREADS = 6;
+    static constexpr unsigned int NUM_RUN_THREADS = 16;
+    std::array<FrameArena*, NUM_RUN_THREADS + 1> cullArenas[2]{ {nullptr}, {nullptr} };
+    std::array<std::binary_semaphore*, NUM_RUN_THREADS> runSems[2]{ {nullptr}, {nullptr}  };
     std::atomic<TransformGroup*> m_groupPtr = nullptr;
     ArenaRegistry& m_reg;
 
@@ -243,7 +245,7 @@ public:
     {
         ~WorkerPkg() = default;
         WorkerPkg() = default;
-        WorkerPkg(Arena* arena) :
+        explicit WorkerPkg(Arena* arena) :
             primitiveIds{ArenaAllocator<uint32_t>{arena}} {}
         WorkerPkg(const WorkerPkg& other) = default;
         WorkerPkg& operator=(WorkerPkg& rhs) {
@@ -295,6 +297,7 @@ public:
         uint32_t maxLeafPrimitives = MAX_LEAF_PRIMITIVES;
         bool useMedianSplit = true;  // false = SAH, true = median
         float rebuildThreshold = REBUILD_THRESHOLD;
+        explicit BuildSettings() {}
     };
 
     struct TraversalResult
@@ -335,8 +338,8 @@ public:
         //    : entity(e), bounds(b), depth(d), isOccluder(occluder), volume( v ) {}
         //OccluderData(entt::entity e, const AABB& b, float d, uint32_t cornerOffset, uint32_t primitiveIndex)
         //    : entity(e), bounds(b), depth(d), cornersOffset(cornerOffset), primIndex(primitiveIndex) {} //isOccluder(occluder) {}
-        OccluderData(entt::entity e, float d, uint32_t cornerOffset, uint32_t primitiveIndex)
-            : entity(e), depth(d), cornersOffset(cornerOffset), primIndex(primitiveIndex) {} //isOccluder(occluder) {}
+        OccluderData(const entt::entity e, const float d, const uint32_t cornerOffset, const uint32_t primitiveIndex)
+            : entity(e), primIndex(primitiveIndex), depth(d), cornersOffset(cornerOffset) {} //isOccluder(occluder) {}
     };
 
     enum class OcclusionMethod
@@ -392,25 +395,26 @@ public:
     AABB computeBounds(const uint32_t* primitiveIds, uint32_t primCount, uint8_t index);
 
     // Update methods
-    void updatePrimitive(uint32_t primIndex, const glm::mat4x4& transform, uint8_t index) {
-        //BVHPrimitive& prim = primitives[index][primIndex];
-        //AABB primWorldBounds = prim.bounds;
-        //AABB newWorldBounds = prim.bounds.getCoarseAABB_local().transformed_noPerspective(transform);
+    // static void updatePrimitive(uint32_t primIndex, const glm::mat4x4& transform, uint8_t index) {
+    //     BVHPrimitive& prim = primitives[index][primIndex];
+    //     AABB primWorldBounds = prim.bounds;
+    //     AABB newWorldBounds = prim.bounds.getCoarseAABB_local().transformed_noPerspective(transform);
+    //
+    //     // Check if bounds actually changed significantly
+    //     if (!boundsChanged(primWorldBounds, newWorldBounds)) {
+    //         prim.frameUpdated = currentFrame;
+    //         return;
+    //     }
+    //
+    //     prim.bounds.setCoarseAABB(newWorldBounds);
+    //     prim.frameUpdated = currentFrame;
+    //
+    //      Mark nodes as dirty up the hierarchy
+    //      Note: This is simplified - in practice you'd want to track which
+    //      leaf each primitive belongs to for faster updates
+    //     dirtyCount++;
+    // }
 
-        //// Check if bounds actually changed significantly
-        //if (!boundsChanged(primWorldBounds, newWorldBounds)) {
-        //    prim.frameUpdated = currentFrame;
-        //    return;
-        //}
-
-        //prim.bounds.setCoarseAABB(newWorldBounds);
-        //prim.frameUpdated = currentFrame;
-
-        // Mark nodes as dirty up the hierarchy
-        // Note: This is simplified - in practice you'd want to track which 
-        // leaf each primitive belongs to for faster updates
-        //dirtyCount++;
-    }
     //void refitBottomUp(uint32_t nodeIndex, uint8_t index) {
     //    if (nodeIndex == 0) return;
 
@@ -448,11 +452,11 @@ public:
     //}
 
     // Helper methods
-    bool boundsChanged(const AABB& oldBounds, const AABB& newBounds, float threshold = 0.01f) const {
-        glm::vec3 oldSize = oldBounds.size();
-        glm::vec3 newSize = newBounds.size();
-        glm::vec3 oldCenter = oldBounds.center();
-        glm::vec3 newCenter = newBounds.center();
+    static bool boundsChanged(const AABB& oldBounds, const AABB& newBounds, float threshold = 0.01f) {
+        const glm::vec3 oldSize = oldBounds.size();
+        const glm::vec3 newSize = newBounds.size();
+        const glm::vec3 oldCenter = oldBounds.center();
+        const glm::vec3 newCenter = newBounds.center();
 
         return glm::length(oldSize - newSize) > threshold ||
             glm::length(oldCenter - newCenter) > threshold;
@@ -463,12 +467,12 @@ public:
                           const Frustum& frustum,
                           std::vector<OccluderData>& occluders) const;
 
-    bool isOccludedRaycast(const AABB& bounds, const AABB& occluder,
-                                const glm::vec3& cameraPos) const {
+    static bool isOccludedRaycast(const AABB& bounds, const AABB& occluder,
+                                const glm::vec3& cameraPos) {
 
-       auto verts = occluder.getVertices();
+       const auto verts = occluder.getVertices();
        for (auto& vert : verts) {
-           auto dir = vert - cameraPos;
+           const auto dir = vert - cameraPos;
            Ray r{ cameraPos, dir };
            if (bounds.intersects(r))
                return false;
@@ -478,14 +482,14 @@ public:
     }
 
         // Enhanced ray-AABB intersection that returns distance
-    bool rayAABBIntersectWithDistance(const glm::vec3& origin, const glm::vec3& direction,
-                                      const AABB& aabb, float& tNear, float& tFar) const {
-        glm::vec3 invDir = 1.0f / direction;
-        glm::vec3 t1 = (aabb.min - origin) * invDir;
-        glm::vec3 t2 = (aabb.max - origin) * invDir;
+    static bool rayAABBIntersectWithDistance(const glm::vec3& origin, const glm::vec3& direction,
+                                      const AABB& aabb, float& tNear, float& tFar) {
+        const glm::vec3 invDir = 1.0f / direction;
+        const glm::vec3 t1 = (aabb.min - origin) * invDir;
+        const glm::vec3 t2 = (aabb.max - origin) * invDir;
 
-        glm::vec3 tmin = glm::min(t1, t2);
-        glm::vec3 tmax = glm::max(t1, t2);
+        const glm::vec3 tmin = glm::min(t1, t2);
+        const glm::vec3 tmax = glm::max(t1, t2);
 
         tNear = glm::max(glm::max(tmin.x, tmin.y), tmin.z);
         tFar = glm::min(glm::min(tmax.x, tmax.y), tmax.z);
@@ -496,16 +500,16 @@ public:
     bool isOccludedRaycast(const AABB& bounds, const std::vector<OccIndexCornerIndexDepthTuple>& occluders,
                            const glm::vec3& cameraPos, float objectDepth, uint8_t index) const;
 
-    bool isOccluded(const AABB& bounds, const std::vector<AABB>& occluders,
-                    const glm::vec3& cameraPos, float objectDepth) const {
+    static bool isOccluded(const AABB& bounds, const std::vector<AABB>& occluders,
+                    const glm::vec3& cameraPos, const float objectDepth) {
 
-        glm::vec3 objectCenter = bounds.center();
-        glm::vec3 viewDir = glm::normalize(objectCenter - cameraPos);
+        //const glm::vec3 objectCenter = bounds.center();
+        //glm::vec3 viewDir = glm::normalize(objectCenter - cameraPos);
 
         // Simple occlusion test: check if any occluder blocks the view to this object
         for (const auto& occluder : occluders) {
-            glm::vec3 occluderCenter = occluder.center();
-            float occluderDepth = glm::length(occluderCenter - cameraPos);
+            const glm::vec3 occluderCenter = occluder.center();
+            const float occluderDepth = glm::length(occluderCenter - cameraPos);
 
             // Only test occluders that are closer
             if (occluderDepth >= objectDepth - 0.5f)
@@ -520,28 +524,26 @@ public:
         return false;
     }
 
-    bool isShadowedBy(const AABB& object, const AABB& occluder, const glm::vec3& cameraPos) const {
-        // Simplified shadow volume test
-        // In practice, you'd want more sophisticated occlusion testing
+    static bool isShadowedBy(const AABB& object, const AABB& occluder, const glm::vec3& cameraPos) {
 
-        glm::vec3 objCenter = object.center();
-        glm::vec3 occCenter = occluder.center();
-        glm::vec3 objSize = object.size();
-        glm::vec3 occSize = occluder.size();
+        const glm::vec3 objCenter = object.center();
+        const glm::vec3 occCenter = occluder.center();
+        //const glm::vec3 objSize = object.size();
+        const glm::vec3 occSize = occluder.size();
 
         // Check if object is behind occluder from camera's perspective
-        glm::vec3 camToOcc = occCenter - cameraPos;
-        glm::vec3 camToObj = objCenter - cameraPos;
+        const glm::vec3 camToOcc = occCenter - cameraPos;
+        const glm::vec3 camToObj = objCenter - cameraPos;
 
         if (glm::dot(camToObj, camToOcc) <= 0) return false; // Object not behind occluder
 
         // Project occluder bounds onto the plane containing the object
-        float t = glm::length(camToObj) / glm::length(camToOcc);
-        glm::vec3 projectedOccCenter = cameraPos + camToOcc * t;
-        glm::vec3 projectedOccSize = occSize * t; // Approximate projection scaling
+        const float t = glm::length(camToObj) / glm::length(camToOcc);
+        const glm::vec3 projectedOccCenter = cameraPos + camToOcc * t;
+        const glm::vec3 projectedOccSize = occSize * t; // Approximate projection scaling
 
         // Check if projected occluder overlaps with object (simplified 2D test)
-        AABB projectedOccluder(projectedOccCenter - projectedOccSize * 0.5f,
+        const AABB projectedOccluder(projectedOccCenter - projectedOccSize * 0.5f,
                                projectedOccCenter + projectedOccSize * 0.5f);
 
         return projectedOccluder.intersects(object);
@@ -620,8 +622,8 @@ public:
         rebuildThreads = nullptr;
         //rebuildThreads[1] = nullptr;
     }
-    explicit DualBVH(ArenaRegistry& registry, const BuildSettings& settings = {}) :
-        settings(settings), m_reg{registry}
+    explicit DualBVH(ArenaRegistry& registry, const BuildSettings& settings = BuildSettings{}) :
+        m_reg{registry}, settings(settings)
         //, primitivesStartSema{ std::binary_semaphore{0}, std::binary_semaphore{0} },
         //primitivesLock{ std::binary_semaphore{1}, std::binary_semaphore{1} }
     {
@@ -638,7 +640,7 @@ public:
 
         //_threadRunning = true;
         rebuildThread = new std::thread{
-            DualBVH::_buildThreadMethod,
+            _buildThreadMethod,
             this,
             std::ref(registry) };
 
@@ -666,7 +668,7 @@ public:
         //rebuildThreads[1] = new std::thread{ DualBVH::_updatePrimitives, this, 1u };
     }
 
-    void startRebuild(ArenaRegistry& registry) {
+    void startRebuild(ArenaRegistry&) {
 
         primitivesStartSema.release();
     }
@@ -683,11 +685,11 @@ public:
     // Queries - these can run concurrently
     //void frustumCull(DualBVH::TraversalResult& result, const Frustum& f) const;
 
-    void frustumCullWithOcclusion(DualBVH::TraversalResult& result, const Frustum& f,
+    void frustumCullWithOcclusion(TraversalResult& result, const Frustum& f,
                                              const glm::vec3& cameraPos,
                                              const glm::vec3& camWorldForward,
                                              const float& camForwardPosDot,
-                                             ArenaRegistry* const registry,
+                                             ArenaRegistry* registry,
                                              OcclusionMethod method, uint8_t index);
 
     TraversalResult broadPhaseCollision(uint8_t index) const;
@@ -784,8 +786,8 @@ public:
     // Thread-safe accessors
     std::vector<BVHNode>& getCurrentNodes() { return nodes[_threadIndexToUse.load()]; }
     uint32_t getNodeCount() const { return nodeCount[_threadIndexToUse.load()]; }
-    uint32_t getPrimitiveCount(uint8_t index) const { return static_cast<uint32_t>(primitives[index].size()); }
-    bool isEmpty(uint8_t index) const { return primitives[index].empty(); }
+    uint32_t getPrimitiveCount(const uint8_t index) const { return static_cast<uint32_t>(primitives[index].size()); }
+    bool isEmpty(const uint8_t index) const { return primitives[index].empty(); }
 
     // Debug/profiling methods
     //void printStats(uint8_t index) const {
@@ -864,20 +866,19 @@ public:
     struct Job { uint32_t nodeIndex; uint8_t planeMask; uint8_t state; };
 };
 
-// Usage example system
+
 class BVHSystem
 {
-private:
     DualBVH m_bvh;
-    uint32_t lastUpdateFrame = UINT32_INVALID;
-    float counter = 4333424.0f;
+    //uint32_t lastUpdateFrame = UINT32_INVALID;
+    //const float counter = 4333424.0f;
     uint8_t currentIndex = UINT8_INVALID;
 
 public:
-    BVHSystem(ArenaRegistry& registry) :
+    explicit BVHSystem(ArenaRegistry& registry) :
         m_bvh{registry} {}
     // Called once per frame in main thread
-    void updateBVH(ArenaRegistry& registry, double dt, double time) {
+    void updateBVH(ArenaRegistry& registry, const double dt, const double time) {
             //bvh.incrementalUpdate(registry);
             
         m_bvh.setPendingUpdate(currentIndex);
@@ -907,7 +908,7 @@ public:
         if (!cam)
             return;
 
-        auto zRow = cam->getZRow();
+        const auto zRow = cam->getZRow();
         return m_bvh.frustumCullWithOcclusion(
             result, cam->getFrustum(), cam->getPosition(), zRow.n, zRow.w, registry, method, currentIndex);
     }

@@ -15,7 +15,7 @@ struct FrustumPlane
 		};
 		struct
 		{
-			float x, y, z, d;
+			float x, y, z;
 		};
 		glm::vec4 vec;
 	};

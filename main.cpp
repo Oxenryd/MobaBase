@@ -7,8 +7,6 @@
 
 
 #ifdef BUILD_WIN
-
-
 	#ifdef DEBUGGING
 		#include "MemDebugFilter.hpp"
 		#include <stdlib.h>	

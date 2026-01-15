@@ -17,7 +17,6 @@
 #include <spirv_reflect.h>
 
 
-
 struct ShaderIO
 {
     struct Attribute
@@ -144,10 +143,12 @@ public:
         SpvReflectNumericTraits numeric = typeDesc->traits.numeric;
 
         switch (typeDesc->op) {
+            default: return TypeBase::Invalid;
             case SpvOp::SpvOpTypeStruct:
             {
                 if (vkDescType) {
                     switch (*vkDescType) {
+                        default: return TypeBase::Invalid;
                         case VkDescriptorType::VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
                             return TypeBase::CBuffer;
 
@@ -172,6 +173,7 @@ public:
             {
                 if (vkDescType) {
                     switch (*vkDescType) {
+                        default: return TypeBase::Invalid;
                         case VkDescriptorType::VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
                             return TypeBase::Texture2DArray;
 
@@ -187,34 +189,36 @@ public:
 
             case SpvOp::SpvOpTypeMatrix:
             {
-                auto& rows = numeric.matrix.row_count;
-                auto& cols = numeric.matrix.column_count;
-
-                switch (cols) {
+                const auto& rows = numeric.matrix.row_count;
+                switch (const auto& cols = numeric.matrix.column_count) {
+                    default: __builtin_unreachable();
+                    case 2:
+                    {
+                        if (rows == 2) {
+                            if (numeric.scalar.width == 32) return TypeBase::FloatMatrix2x2;
+                            return TypeBase::DoubleMatrix2x2;
+                        }
+                        return TypeBase::UnimplementedMatrix;
+                    } break;
                     case 3:
                     {
-                        switch (rows) {
-                            case 3:
-                            {
-                                if (numeric.scalar.width == 32) return TypeBase::FloatMatrix3x3;
-                                else return TypeBase::DoubleMatrix3x3;
-                            } 
+                        if (rows == 3) {
+                            if (numeric.scalar.width == 32) return TypeBase::FloatMatrix3x3;
+                            return TypeBase::DoubleMatrix3x3;
                         }
-                    } break;
+                        return TypeBase::UnimplementedMatrix;
+                    }
 
                     case 4:
                     {
-                        switch (rows) {
-                            case 4:
-                            {
-                                if (numeric.scalar.width == 32) return TypeBase::FloatMatrix4x4;
-                                else return TypeBase::DoubleMatrix4x4;
-                            }
+                        if (rows == 4) {
+                            if (numeric.scalar.width == 32) return TypeBase::FloatMatrix4x4;
+                            return TypeBase::DoubleMatrix4x4;
                         }
-                    } break;
+                        return TypeBase::UnimplementedMatrix;
+                    }
                 }
-
-            } break;
+            }
 
             case SpvOp::SpvOpTypeFloat:
             {
@@ -233,38 +237,37 @@ public:
                     Int = 1,
                 };
 
-                bool isFloating = typeDesc->type_flags & SPV_REFLECT_TYPE_FLAG_FLOAT;
-
-                if (!isFloating)
+                if (const bool isFloating = typeDesc->type_flags & SPV_REFLECT_TYPE_FLAG_FLOAT;
+                    !isFloating)
                 {
                     switch (numeric.scalar.signedness)
                     {
-
+                        default:
                         case UInt:
                         {
                             switch (numeric.vector.component_count) {
                                 default:
                                 {
                                     if (numeric.scalar.width <= 32) return TypeBase::UInt32;
-                                    else return TypeBase::UInt64;
+                                    return TypeBase::UInt64;
                                 }
 
                                 case 2:
                                 {
                                     if (numeric.scalar.width <= 32) return TypeBase::UInt32Vector2;
-                                    else return TypeBase::UInt64Vector2;
+                                    return TypeBase::UInt64Vector2;
                                 }
 
                                 case 3:
                                 {
                                     if (numeric.scalar.width <= 32) return TypeBase::UInt32Vector3;
-                                    else return TypeBase::UInt64Vector3;
+                                    return TypeBase::UInt64Vector3;
                                 }
 
                                 case 4:
                                 {
                                     if (numeric.scalar.width <= 32) return TypeBase::UInt32Vector4;
-                                    else return TypeBase::UInt64Vector4;
+                                    return TypeBase::UInt64Vector4;
                                 }
                             }
                         }
@@ -275,25 +278,25 @@ public:
                                 default:
                                 {
                                     if (numeric.scalar.width <= 32) return TypeBase::Int32;
-                                    else return TypeBase::Int64;
+                                    return TypeBase::Int64;
                                 }
 
                                 case 2:
                                 {
                                     if (numeric.scalar.width <= 32) return TypeBase::Int32Vector2;
-                                    else return TypeBase::Int64Vector2;
+                                    return TypeBase::Int64Vector2;
                                 }
 
                                 case 3:
                                 {
                                     if (numeric.scalar.width <= 32) return TypeBase::Int32Vector3;
-                                    else return TypeBase::Int64Vector3;
+                                    return TypeBase::Int64Vector3;
                                 }
 
                                 case 4:
                                 {
                                     if (numeric.scalar.width <= 32) return TypeBase::Int32Vector4;
-                                    else return TypeBase::Int64Vector4;
+                                    return TypeBase::Int64Vector4;
                                 }
                             }
                         }
@@ -303,30 +306,29 @@ public:
                         default:
                         {
                             if (numeric.scalar.width <= 32) return TypeBase::Float;
-                            else return TypeBase::Double;
+                            return TypeBase::Double;
                         }
 
                         case 2:
                         {
                             if (numeric.scalar.width <= 32) return TypeBase::FloatVector2;
-                            else return TypeBase::DoubleVector2;
+                            return TypeBase::DoubleVector2;
                         }
 
                         case 3:
                         {
                             if (numeric.scalar.width <= 32) return TypeBase::FloatVector3;
-                            else return TypeBase::DoubleVector3;
+                            return TypeBase::DoubleVector3;
                         }
 
                         case 4:
                         {
                             if (numeric.scalar.width <= 32) return TypeBase::FloatVector4;
-                            else return TypeBase::DoubleVector4;
+                            return TypeBase::DoubleVector4;
                         }
                     }
                 }
-
-            } break;
+            }
 
             case SpvOp::SpvOpTypeBool:
             {
@@ -343,7 +345,6 @@ public:
                 }
             }
         }
-        return TypeBase::None;
     }
 
     inline static VkDescriptorType parseMatParamToVkDescriptorType(const MatParam& param) {
