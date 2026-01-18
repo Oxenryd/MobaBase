@@ -56,8 +56,8 @@ struct BVHNode //alignas(64)
     uint8_t depth{ 0 };
     std::array<uint32_t, 6> primIndices;
 
-    bool isLeaf() const { return flags & 0x01; }
-    bool isDirty() const { return flags & 0x02; }
+    [[nodiscard]] bool isLeaf() const { return flags & 0x01; }
+    [[nodiscard]] bool isDirty() const { return flags & 0x02; }
     void setLeaf(const bool leaf) { flags = leaf ? flags | 0x01 : flags & ~0x01; }
     void setDirty(const bool dirty) { flags = dirty ? flags | 0x02 : flags & ~0x02; }
 
@@ -70,11 +70,11 @@ struct BVHNode //alignas(64)
     //INLINE AABB bounds() const {
     //    return AABB{ min(), max() };
     //}
-    INLINE glm::vec3& min() const {
-        return const_cast<glm::vec3&>(bounds.min);
+    [[nodiscard]] INLINE glm::vec3 min() const {
+        return bounds.min;
     }
-    INLINE glm::vec3& max() const {
-        return const_cast<glm::vec3&>(bounds.max);
+    [[nodiscard]] INLINE glm::vec3 max() const {
+        return bounds.max;
     }
     //INLINE AABB& bounds()  {
     //    return bounds;;
@@ -173,8 +173,8 @@ class DualBVH
         bool anyIntersect = false;
 
         for (int i = 0; i < 6; ++i) {
-            const auto n = glm::vec3(F[i].vec);
-            const float d = F[i].vec.w;
+            const auto n = xyz(F[i].raw);
+            const float d = F[i].raw.w;
             const float s = glm::dot(n, c) + d;
             const float r = glm::dot(glm::abs(n), e);
             if (s + r < 0.0f)
@@ -195,8 +195,8 @@ class DualBVH
         bool anyIntersect = false;
 
         for (int i = 0; i < 6; ++i) {
-            const auto n = glm::vec3(F[i].vec);
-            const float d = F[i].vec.w;
+            const auto n = xyz(F[i].raw);
+            const float d = F[i].raw.w;
             const float s = glm::dot(n, c) + d;
             const float r = glm::dot(glm::abs(n), e);
             if (s + r < 0.0f) return { 0, /*Outside*/0 };
@@ -386,13 +386,13 @@ public:
     //bool _threadRunning = true;
 
     // Building methods
-    uint8_t _getIndexToUseThisFrame();
+    uint8_t _getIndexToUseThisFrame() const;
     static void _buildThreadMethod(DualBVH* _this, ArenaRegistry& registry);
     void rebuildPrimitives(ArenaRegistry& registry, uint8_t index);
     uint32_t buildRecursive(uint32_t* primitiveIds, uint32_t primCount, uint8_t depth, uint32_t parent, uint8_t index);
 
     uint32_t findBestSplit(const uint32_t* primitiveIds, uint32_t primCount, int& bestAxis, float& bestPos, uint8_t index);
-    AABB computeBounds(const uint32_t* primitiveIds, uint32_t primCount, uint8_t index);
+    AABB computeBounds(const uint32_t* primitiveIds, uint32_t primCount, uint8_t index) const;
 
     // Update methods
     // static void updatePrimitive(uint32_t primIndex, const glm::mat4x4& transform, uint8_t index) {
@@ -463,9 +463,9 @@ public:
     }
 
     // Occlusion culling helper methods
-    void collectOccluders(const glm::vec3& cameraPos,
-                          const Frustum& frustum,
-                          std::vector<OccluderData>& occluders) const;
+    // void collectOccluders(const glm::vec3& cameraPos,
+    //                       const Frustum& frustum,
+    //                       std::vector<OccluderData>& occluders) const;
 
     static bool isOccludedRaycast(const AABB& bounds, const AABB& occluder,
                                 const glm::vec3& cameraPos) {
@@ -910,7 +910,7 @@ public:
 
         const auto zRow = cam->getZRow();
         return m_bvh.frustumCullWithOcclusion(
-            result, cam->getFrustum(), cam->getPosition(), zRow.n, zRow.w, registry, method, currentIndex);
+            result, cam->getFrustum(), cam->getPosition(), zRow.getN(), zRow.w, registry, method, currentIndex);
     }
 
     // Called from physics thread (can be concurrent with frustum culling)

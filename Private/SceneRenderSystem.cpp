@@ -65,13 +65,13 @@ uint32_t SceneRenderSystem::addCamera(CameraData* initData) {
 	auto& scene = *Engine::getInstance()->getScene(m_sceneIndex);
 	auto& cams = scene.gameObjectSystem().getAllOfType<Camera>();
 	auto index = cams.size();
-	std::string name = std::format("Camera_{}.{}", index, m_sceneIndex);
+	std::string name = std::format("Camera_{}.{}", index, static_cast<uint32_t>(m_sceneIndex));
 
 	auto& newCam = scene.gameObjectSystem().createGameObject<Camera>(name);
 	
 	auto& comp = m_reg->get<TransformComponent>(newCam.m_entity);
 	auto camIndex = CamIndex{ m_sceneIndex, static_cast<uint32_t>(index) };
-	comp.callbackUserData = reinterpret_cast<void*>(camIndex._raw);
+	comp.callbackUserData = reinterpret_cast<void*>(camIndex.camIndex);
 	comp.onDirtyCallback = [](void* ctx) -> void {
 		CamIndex camIndex = CamIndex{ reinterpret_cast<uint64_t>(ctx) };
 		auto& this_ = Engine::getInstance()->getScene(camIndex.sceneIndex)->gameObjectSystem()
@@ -94,7 +94,7 @@ ErrorCode SceneRenderSystem::createMeshFromModel(const std::string& path, Mesh* 
 	if (parent != entt::null) {
 		auto trans = m_reg->try_get<TransformComponent>(parent);
 		if (!trans)
-			throw std::exception("Meshes needs transforms!!");
+			throw std::runtime_error("Meshes needs transforms!!");
 
 		meshEntity = parent;
 		meshComp = m_reg->emplace<MeshComponent>(parent, meshComp);
@@ -104,7 +104,7 @@ ErrorCode SceneRenderSystem::createMeshFromModel(const std::string& path, Mesh* 
 		meshEntity = m_reg->create();
 		Engine::getInstance()->getScene(m_sceneIndex)->transformSystem().registryEmplace(
 			meshEntity,
-			nullptr
+			nullptr, nullptr
 		);
 
 		meshComp = m_reg->emplace<MeshComponent>(meshEntity, meshComp);
@@ -134,12 +134,12 @@ ErrorCode SceneRenderSystem::createMeshFromModel(const std::string& path, Mesh* 
 
 		Engine::getInstance()->getScene(m_sceneIndex)->transformSystem().registryEmplace(
 			subEnt,
-			parent == entt::null ? nullptr : static_cast<void*>(&meshEntity)
+			parent == entt::null ? nullptr : static_cast<void*>(&meshEntity), nullptr
 		);
 
 		AABB box{};
 		box.encloseLocal(subVerts);
-		Engine::getInstance()->getScene(m_sceneIndex)->boundingSystem().registryEmplace(subEnt, &box);
+		Engine::getInstance()->getScene(m_sceneIndex)->boundingSystem().registryEmplace(subEnt, &box, nullptr);
 
 		//if (parent != entt::null) {
 		//	auto newTransform = Transform{ m_reg, subMesh.entity };

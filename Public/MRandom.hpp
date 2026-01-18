@@ -243,7 +243,7 @@ public:
         return d(engine_());
     }
 
-    // Signed ints in [min,max] — works for int8_t/int16_t/etc. on MSVC
+    // Signed ints in [min,max] ï¿½ works for int8_t/int16_t/etc. on MSVC
     template <class Int,
         std::enable_if_t<std::is_integral_v<Int>&& std::is_signed_v<Int>, int> = 0>
     static inline Int nextInt(Int min, Int max) {
@@ -260,25 +260,25 @@ public:
     static inline int64_t nextI64(int64_t min, int64_t max) { return nextInt<int64_t>(min, max); }
 
     // Gaussian / Normal
-    static inline float  nextGaussianF(const float& mu = 0.0f, const float& sigma = 1.0f) {
+    INLINE static float  nextGaussianF(const float& mu = 0.0f, const float& sigma = 1.0f) {
         std::normal_distribution<float>  d(mu, sigma);
         return d(engine_());
     }
-    static inline double nextGaussian(const double& mu = 0.0, const double& sigma = 1.0) {
+    INLINE static double nextGaussian(const double& mu = 0.0, const double& sigma = 1.0) {
         std::normal_distribution<double> d(mu, sigma);
         return d(engine_());
     }
 
-    static INLINE glm::vec3 nextDir() {
+    INLINE static glm::vec3 nextDir() {
         return glm::normalize(glm::vec3{ nextFloat(-1.0f, 1.0f), nextFloat(-1.0f, 1.0f),nextFloat(-1.0f, 1.0f) });
     }
 
-    static INLINE glm::vec3 nextVector(float minLength, float maxLength) {
+    INLINE static glm::vec3 nextVector(float minLength, float maxLength) {
         const auto len = nextFloat(minLength, maxLength);
         return nextDir() * len;
     }
 
-    static INLINE glm::quat nextRotation() {
+   INLINE static glm::quat nextRotation() {
         auto anglesDeg = glm::vec3{ nextFloat(-360.0f, 360.0f), nextFloat(-360.0f, 360.0f) , nextFloat(-360.0f, 360.0f) };
         return glm::quat{ glm::radians(anglesDeg) };
 

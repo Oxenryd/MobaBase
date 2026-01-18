@@ -58,10 +58,10 @@ public:
 	AABB getCoarseAABB() const;
 	AABB getCoarseAABB_local() const;
 	
-	INLINE explicit operator BoundingVolumeComponent& () const {
+	INLINE operator BoundingVolumeComponent& () const {
 		return m_reg->get<BoundingVolumeComponent>(m_entity);
 	}
-	INLINE explicit operator const BoundingVolumeComponent& () const {
+	INLINE operator const BoundingVolumeComponent& () const {
 		return m_reg->get<BoundingVolumeComponent>(m_entity);
 	}
 

@@ -10,6 +10,7 @@
 #endif
 
 
+#include "Format_fixes.hpp"
 #include "VulkanContext.hpp"
 
 #include <cstdint>

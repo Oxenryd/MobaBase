@@ -147,7 +147,7 @@ public:
 			m_texIndexNameMap[index] = name;
 			m_texNameIndexMap[name] = index;
 		} else
-			throw std::exception("Error in texture indices!");
+			throw std::runtime_error("Error in texture indices!");
 		return newTex;
 	}
 	std::vector<std::string>& paramNames() { return m_paramNames; }

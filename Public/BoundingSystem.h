@@ -66,7 +66,7 @@ public:
 		}
 	}
 
-	void run() override;
+	void run();
 
 	ArenaVector<BSphere>& bSpheres() { return m_bSpheres; }
 	ArenaVector<AABB>& aabbs() { return m_aabbs; }

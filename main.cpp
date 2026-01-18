@@ -1,12 +1,13 @@
 ﻿// main.cpp : Defines the entry point for the application.
 //
 
-#include "Engine.h"
-#include "Templates.hpp"
+
 
 
 
 #ifdef BUILD_WIN
+	#include "Engine.h"
+	#include "Templates.hpp"
 	#ifdef DEBUGGING
 		#include "MemDebugFilter.hpp"
 		#include <stdlib.h>	
@@ -102,4 +103,15 @@ int __stdcall main(HINSTANCE hInstance, HINSTANCE instance, LPSTR str, int nCmdS
 	return 0;
 }
 
+#else
+
+#include <format>
+#include <string>
+
+int main(int argc, char* argv[]) {
+	const std::string path1 = std::format("{}{}", "dir/", "file.obj");
+}
+
+
 #endif // BUILD_WIN
+

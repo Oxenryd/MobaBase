@@ -8,6 +8,9 @@
 #endif
 
 #ifdef BUILD_GLFW
+
+
+
 #endif
 
 #include "MMath.hpp"
@@ -428,10 +431,13 @@ class WindowSurface {
     wl_display* m_display{nullptr};
     wl_surface* m_surface{nullptr};
 public:
+    uint16_t width{0};
+    uint16_t height{0};
     std::string& appName() { return m_appName; }
-    const char* appName_c_str() const { return m_appName.c_str(); }
+    [[nodiscard]] const char* appName_c_str() const { return m_appName.c_str(); }
     wl_display* display() { return m_display; }
     wl_surface* surface() { return m_surface; }
+
 };
 
 #endif

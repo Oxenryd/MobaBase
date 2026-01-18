@@ -5,7 +5,7 @@
 #include "Timing.h"
 #include "Engine.h" // DELETE DELETE
 
-class GameScene : public Scene<GameScene>
+class GameScene final : public Scene<GameScene>
 {
 private:
     float m_time = 0;
@@ -34,7 +34,9 @@ public:
 
 
         auto dirLight = LightFactory::Directional(glm::vec3{-1, -0.85, -0.25});
-        dirLight.positionVS = glm::vec3{0, 20, 0};
+        dirLight.positionVS[0] = 0;
+        dirLight.positionVS[1] = 20;
+        dirLight.positionVS[2] = 0;
         m_skyLight = m_reg.create();
         [[maybe_unused]] auto& lightRef = lightSystem().registerLight(dirLight, m_skyLight);
 
@@ -70,8 +72,8 @@ public:
         sceneRender().createMeshFromModel(path1, &modelMesh1, m_go1.entity());
         float volume = 0.0f;
         entt::entity largestSubEntity = entt::null;
-        auto subMeshes = modelMesh1.getSubmeshes();
-        for (auto& subMesh : subMeshes) {
+        const auto subMeshes = modelMesh1.getSubmeshes();
+        for (const auto& subMesh : subMeshes) {
             BoundingVolume bVol{&registry(), subMesh.entity};
             auto aabb = bVol.getCoarseAABB();
             if (aabb.volume() > volume) {
@@ -116,6 +118,7 @@ public:
                                    cam->translate(cam->transform().up() * m_camSpeed * dt); break;
                                case KeyCode::E:
                                    cam->translate(-cam->transform().up() * m_camSpeed * dt); break;
+                               default: break;
                            }
                               
                        });
@@ -156,19 +159,19 @@ public:
                                           {
                                               Engine::getInstance()->armFrameTrace();
                                           } break;
-
+                                          default: break;
                                       }
                                   });
 
 
-        Engine::getInstance()->getInputManager()->
-            onMouseRightDown.subscribe([](MouseState state) -> void {
-            Engine::getInstance()->getInputManager()->enableRelativeMouse();
-                                       });
-        Engine::getInstance()->getInputManager()->
-            onMouseRightUp.subscribe([](MouseState state) -> void {
-            Engine::getInstance()->getInputManager()->disableRelativeMouse();
-                                     });
+        // Engine::getInstance()->getInputManager()->
+        //     onMouseRightDown.subscribe([](MouseState state) -> void {
+        //     Engine::getInstance()->getInputManager()->enableRelativeMouse();
+        //                                });
+        // Engine::getInstance()->getInputManager()->
+        //     onMouseRightUp.subscribe([](MouseState state) -> void {
+        //     Engine::getInstance()->getInputManager()->disableRelativeMouse();
+        //                              });
 
         Engine::getInstance()->getInputManager()->
             onMouseRightHold.subscribe([this](MouseState state) -> void 

@@ -28,7 +28,7 @@ public:
 		throw std::runtime_error("SystemECS::registryRemove() not implemented.");
 	}
 	virtual ~SystemECS() = default;
-	//virtual void run() {}
+	virtual void run() {}
 
 	SceneBase* getScene();
 };

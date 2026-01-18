@@ -580,7 +580,7 @@ public:
 
 
 
-	INLINE void registryEmplace(const entt::entity entity, void* valueInPtr, void**) override {
+	INLINE void registryEmplace(const entt::entity entity, [[maybe_unused]] void* valueInPtr, [[maybe_unused]] void** valueOutPtr) override {
 		auto& transComp = m_reg->emplace_or_replace<TransformComponent>(entity, TransformComponent{});
 		
 		const auto matrixIndex = static_cast<uint32_t>(m_modelTransforms.size());

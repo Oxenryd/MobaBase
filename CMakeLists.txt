@@ -2,8 +2,10 @@
 
 project ("MobaBase")
 
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 
 if (POLICY CMP0141)
   cmake_policy(SET CMP0141 NEW)
@@ -130,7 +132,8 @@ message(STATUS "Available targets: ${all_targets}")
 
 # SOURCES -----------------------------------------------------------------------------
 add_executable (MobaBase
-		Public/API.h)
+		Public/API.h
+		Public/Format_fixes.hpp)
 
 target_sources(MobaBase
 	PRIVATE
@@ -186,14 +189,13 @@ target_include_directories(MobaBase PRIVATE
 )
 
 target_compile_options(MobaBase PRIVATE
-  $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wall -Wextra -Wpedantic>
+  $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wall -Wextra  -mavx2 -mfma> #-Wpedantic
   $<$<CXX_COMPILER_ID:MSVC>:/W4 /wd4201 /wd4127 /wd4100 /wd4458 /wd4505 /wd4324 /wd6262>
-  $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-mavx>
 )
 
 
 # DEFINES ----------------------------------------------------------------------------
-target_compile_definitions(MobaBase PRIVATE 
+target_compile_definitions(MobaBase PRIVATE
 	GLFW_INCLUDE_VULKAN
 	# BUILD_WIN
 	BUILD_DLL
@@ -207,7 +209,7 @@ target_compile_definitions(MobaBase PRIVATE
 	LOGGING
 	PROFILER
 	#IGPU_PRIO	
-	SHADER_HOTRELOAD
+	#SHADER_HOTRELOAD
 
 	# VULKAN SPECIFICS
 	VULKAN_GLOBAL_DESCRIPTOR_SETS=3

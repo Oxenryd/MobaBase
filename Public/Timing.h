@@ -1,6 +1,8 @@
 #ifndef TIMING_H
 #define TIMING_H
 
+#include <cstddef>
+
 
 class Timing
 {
@@ -11,7 +13,7 @@ public:
 	static float fixedDeltaTimeF();
 	static double totalTime();
 	static float totalTimeF();
-	static size_t totalFrames();
+	static std::size_t totalFrames();
 };
 
 #endif

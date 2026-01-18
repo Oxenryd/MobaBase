@@ -43,7 +43,7 @@ public:
             comp.callbackUserData = nullptr;
         }
     }
-    Camera(CameraData& initData) :
+    explicit Camera(const CameraData& initData) :
         GameObject{},
         m_camData{initData}
     {}
@@ -53,21 +53,24 @@ public:
 
     }
 
-    INLINE const glm::mat4& worldToView() {
+    const glm::mat4& worldToView() {
         if (m_viewDirty) {
 
-            auto transform = this->transform();
+            const auto transform = this->transform();
 
             const glm::vec3& pos = transform.position();
             const glm::quat& rot = transform.rotation();
 
-            glm::quat invRot = glm::conjugate(rot);
-            glm::vec3 invPos = -(invRot * pos);
+            const glm::quat invRot = glm::conjugate(rot);
+            const glm::vec3 invPos = -(invRot * pos);
 
             glm::mat4 rotMatrix = glm::mat4_cast(invRot);
             rotMatrix[3] = glm::vec4(invPos, 1.0f);
 
-            m_camData.cameraPosition = glm::vec4{ pos, 1.0f };
+            m_camData.cameraPosition[0] = pos[0];// = glm::vec4{ pos, 1.0f };
+            m_camData.cameraPosition[1] = pos[1];
+            m_camData.cameraPosition[2] = pos[2];
+            m_camData.ambient = 1.0f;
 
             m_camData.view = rotMatrix;
             m_viewDirty = false;
@@ -76,6 +79,7 @@ public:
         }
         return m_camData.view;
     }
+
     INLINE glm::mat4 viewToWorld() const {
         auto transform = this->transform();
         
@@ -139,7 +143,9 @@ public:
         m_camData.farPlane = farPlane;
         m_projDirty = true;
     }
-    INLINE glm::vec3 getPosition() const { return m_camData.cameraPosition; }
+    [[nodiscard]] INLINE glm::vec3 getPosition() const {
+	    return glm::make_vec3(m_camData.cameraPosition);
+	}
 
     INLINE void translate(const glm::vec3& direction) {
         transform().translate(direction);
@@ -151,21 +157,24 @@ public:
         transform().rotateLocalWorldYaw(eulerDegreesDelta);
     }
 
-    INLINE float getFOV() const { return m_camData.vFov; }
-    INLINE float getAspectRatio() const { return m_camData.aspectRatio; }
-    INLINE float getNearPlane() const { return m_camData.nearPlane; }
-    INLINE float getFarPlane() const { return m_camData.farPlane; }
+    [[nodiscard]] INLINE float getFOV() const { return m_camData.vFov; }
+    [[nodiscard]] INLINE float getAspectRatio() const { return m_camData.aspectRatio; }
+    [[nodiscard]] INLINE float getNearPlane() const { return m_camData.nearPlane; }
+    [[nodiscard]] INLINE float getFarPlane() const { return m_camData.farPlane; }
 
     INLINE CameraData& cameraData() { 
         _checkDirty();
         return m_camData;
     }
 
-    INLINE ZRow getZRow() const {
+    [[nodiscard]] INLINE ZRow getZRow() const {
         auto trans = transform();
         ZRow z{};
-        z.n = trans.forward();
-        z.w = -glm::dot(z.n, trans.position());
+	    const auto fw = trans.forward();
+	    z.n[0] = fw[0];
+	    z.n[1] = fw[1];
+	    z.n[2] = fw[2];
+        z.w = -glm::dot(z.getN(), trans.position());
         return z;
     }
 
@@ -173,7 +182,7 @@ public:
 
         return m_cachedFrustum;
     }
-    INLINE Frustum& getFrustum() const {
+    [[nodiscard]] INLINE Frustum& getFrustum() const {
 
         return const_cast<Frustum&>(m_cachedFrustum);
     }

@@ -5,7 +5,7 @@
 #endif
 #include "stb_image_write.h"
 
-void* const Texture2D::texelData() {
+void* Texture2D::texelData() {
 	if (texelCount() == 0)
 		return nullptr;
 	if (texelOffset == UINT32_INVALID)
@@ -16,7 +16,7 @@ void* const Texture2D::texelData() {
 	return &Engine::getInstance()->getRenderManager()->texels()[texelOffset];
 }
 
-void* const Texture2D::texelData() const {
+void* Texture2D::texelData() const {
 	if (texelCount() == 0) 
 		return nullptr;
 	if (texelOffset == UINT32_INVALID)
@@ -27,7 +27,7 @@ void* const Texture2D::texelData() const {
 	return &Engine::getInstance()->getRenderManager()->texels()[texelOffset];
 }
 
-VkTextureResource* const Texture2D::getResource() {
+VkTextureResource* Texture2D::getResource() {
 	return nullptr;
 }
 

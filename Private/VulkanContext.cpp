@@ -348,7 +348,7 @@ void VulkanContext::draw(const DrawContext& ctx) {
 								0, nullptr);
 
 		// Compute proper group counts from clusters and shader local size
-		//constexpr uint32_t LOCAL_X = VULKAN_LIGHT_CLUSTER_THREADS_X; // matches [numthreads(…)]
+		//constexpr uint32_t LOCAL_X = VULKAN_LIGHT_CLUSTER_THREADS_X; // matches [numthreads(ï¿½)]
 		//constexpr uint32_t LOCAL_Y = VULKAN_LIGHT_CLUSTER_THREADS_Y;
 		//constexpr uint32_t LOCAL_Z = VULKAN_LIGHT_CLUSTER_THREADS_Z;
 		//auto ceilDiv = [](uint32_t a, uint32_t b) { return (a + b - 1) / b; };
@@ -386,19 +386,21 @@ void VulkanContext::draw(const DrawContext& ctx) {
 
 		// Camera
 		mainCam = Engine::getInstance()->mainCamera();
-		auto& camData = mainCam->cameraData();
-		camData.numLights = static_cast<uint32_t>(lightsData.size());
-		camData.screenSize = { viewport.width, viewport.height };
-		camData.invScreenSize = { 1.0f / camData.screenSize.x, 1.0f / camData.screenSize.y };
-		camData.clustersX = VULKAN_LIGHT_CLUSTERS_X;
-		camData.clustersY = VULKAN_LIGHT_CLUSTERS_Y;
-		camData.clustersZ = VULKAN_LIGHT_CLUSTERS_Z;
+		auto& cam_data = mainCam->cameraData();
+		cam_data.numLights = static_cast<uint32_t>(lightsData.size());
+		cam_data.screenSize[0] = viewport.width;
+		cam_data.screenSize[1] = viewport.height;
+		cam_data.invScreenSize[0] = 1.0f / cam_data.screenSize[0];
+		cam_data.invScreenSize[1] = 1.0f / cam_data.screenSize[1];
+		cam_data.clustersX = VULKAN_LIGHT_CLUSTERS_X;
+		cam_data.clustersY = VULKAN_LIGHT_CLUSTERS_Y;
+		cam_data.clustersZ = VULKAN_LIGHT_CLUSTERS_Z;
 		f = &mainCam->getFrustum();
 
 		// Update CameraData cBuffer
 		void* mappedData = nullptr;
 		vkMapMemory(m_vkDevice, camDataMemory[currentFrame], 0, sizeof(CameraData), 0, &mappedData);
-		memcpy(mappedData, &camData, sizeof(CameraData));
+		memcpy(mappedData, &cam_data, sizeof(CameraData));
 		vkUnmapMemory(m_vkDevice, camDataMemory[currentFrame]);
 
 

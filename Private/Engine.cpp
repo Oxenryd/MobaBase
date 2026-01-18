@@ -102,7 +102,7 @@ ErrorCode Engine::_initShaderManager() {
 
 ErrorCode Engine::_initInputManager() {
 	m_inputMan = baseArena().construct<InputManager>(m_wnd);
-	m_wnd->enableRawInput();
+	//m_wnd->enableRawInput();
 	return ErrorCode::OK;
 }
 
@@ -217,7 +217,7 @@ void Engine::start() {
 	m_status = EngineStatus::PendingRun;
 	onStartInitiated.notify(this);
 	
-	m_wnd->showWindow(SW_NORMAL);
+	//m_wnd->showWindow(SW_NORMAL);
 
 	m_status = EngineStatus::Running;
 	onStarted.notify(this);
@@ -328,7 +328,7 @@ inline void Engine::_run() {
 	}
 	m_scenes.clear();
 
-	m_wnd->destroyWindow();
+	//m_wnd->destroyWindow();
 
 	
 

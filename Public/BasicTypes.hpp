@@ -10,6 +10,7 @@
 
 #include "GlobalMacros.h"
 #include "MMath.hpp"
+#include "glm/gtc/type_ptr.hpp"
 
 
 struct ColorRGBA_f
@@ -156,7 +157,7 @@ struct ColorRGBA
 		}
 	}
 
-	ColorRGBA_f asColorRGBA_f() const {
+	[[nodiscard]] ColorRGBA_f asColorRGBA_f() const {
 		ColorRGBA_f arr;
 		arr[0] = static_cast<float>(r) / 255.0f;
 		arr[1] = static_cast<float>(g) / 255.0f;
@@ -177,6 +178,10 @@ struct ZRow
 			float w;
 		};
 	};
+
+	[[nodiscard]] glm::vec3 getN() const {
+		return glm::make_vec3(n);
+	}
 };
 
 struct Ray
@@ -235,41 +240,118 @@ struct BSphere
 	}
 };
 
-struct AABB
+
+
+struct alignas(16) AABB
 {
 private:
+	INLINE void _getVerticesSoA(__m256& X, __m256& Y, __m256& Z, __m256& W) const noexcept {
+		// const float xs[8] = {
+		// 	min[0],
+		// 	max[0],
+		// 	min[0],
+		// 	max[0],
+		// 	min[0],
+		// 	max[0],
+		// 	min[0],
+		// 	max[0]
+		// };
+		// const float ys[8] = {
+		// 	max[1],
+		// 	max[1],
+		// 	min[1],
+		// 	min[1],
+		// 	max[1],
+		// 	max[1],
+		// 	min[1],
+		// 	min[1]
+		// };
+		// const float zs[8] = {
+		// 	max[2],
+		// 	max[2],
+		// 	max[2],
+		// 	max[2],
+		// 	min[2],
+		// 	min[2],
+		// 	min[2],
+		// 	min[2]
+		// };
+		// X = _mm256_loadu_ps(xs);
+		// Y = _mm256_loadu_ps(ys);
+		// Z = _mm256_loadu_ps(zs);
+		const float minx = min.x, maxx = max.x;
+		const float miny = min.y, maxy = max.y;
+		const float minz = min.z, maxz = max.z;
 
-	INLINE void _getVerticesSoA(__m256& X, __m256& Y, __m256& Z, __m256& W) const {
-		const float xs[8] = { min.x, max.x, min.x, max.x, min.x, max.x, min.x, max.x };
-		const float ys[8] = { max.y, max.y, min.y, min.y, max.y, max.y, min.y, min.y };
-		const float zs[8] = { max.z, max.z, max.z, max.z, min.z, min.z, min.z, min.z };
-		X = _mm256_loadu_ps(xs);
-		Y = _mm256_loadu_ps(ys);
-		Z = _mm256_loadu_ps(zs);
+		X = _mm256_setr_ps(minx, maxx, minx, maxx, minx, maxx, minx, maxx);
+		Y = _mm256_setr_ps(maxy, maxy, miny, miny, maxy, maxy, miny, miny);
+		Z = _mm256_setr_ps(maxz, maxz, maxz, maxz, minz, minz, minz, minz);
 		W = _mm256_set1_ps(1.0f);
 	}
 
 public:
-	AABB() = default;
+	AABB() noexcept = default;
+
 	AABB(const glm::vec3& minVec, const glm::vec3& maxVec)
-	//: min{}, max{max}
 	{
-		MMath::toFloat<3>(min, minVec);
-		MMath::toFloat<3>(max, maxVec);
+		min = minVec;
+		max = maxVec;
+
+		//MMath::toFloat<3,3>(minVec3, minVec);
+		//MMath::toFloat<3,3>(maxVec3, maxVec);
 	}
-	union
-	{
-		float raw[6]{ -0.5f, -0.5f, -0.5f,	0.5f, 0.5f, 0.5f };
-		struct
-		{
-			float min[3];
-			float max[3];
-		};
-	};
+	// union
+	// {
+	// 	float raw[8]{ -0.5f, -0.5f, -0.5f, 1.0f, 0.5f, 0.5f, 0.5f, 1.0f };
+	// 	struct
+	// 	{
+	// 		float minVec3[3];
+	// 		float _pad0;
+	// 		float maxVec3[3];
+	// 		float _pad1;
+	// 	};
+	// 	struct
+	// 	{
+	// 		float minVec4[4], maxVec4[4];
+	// 	};
+	// 	struct
+	// 	{
+	// 		float minX, minY, minZ, minW;
+	// 		float maxX, maxY, maxZ, maxW;
+	// 	};
+	// };
+	glm::vec3 min{-0.5f, -0.5f, -0.5f};
+	glm::vec3 max{0.5f, 0.5f, 0.5f};
 
-	INLINE std::array<glm::vec3, 8> getVertices() const {
+	// [[nodiscard]] INLINE glm::vec3 min() const {
+	// 	return glm::make_vec3(minVec3);
+	// }
+	//
+	// [[nodiscard]] INLINE glm::vec3 max() const {
+	// 	return glm::make_vec3(maxVec3);
+	// }
+	//
+	// [[nodiscard]] INLINE glm::vec4 minPoint() const {
+	// 	return glm::make_vec4(minVec4);
+	// }
+	// [[nodiscard]] INLINE glm::vec4 maxPoint() const {
+	// 	return glm::make_vec4(maxVec4);
+	// }
 
-		std::array<glm::vec3, 8> verts;
+	// INLINE void setMin(const glm::vec3& minVec) {
+	// 	minX = minVec.x;
+	// 	minY = minVec.y;
+	// 	minZ = minVec.z;
+	// }
+	// INLINE void setMax(const glm::vec3& maxVec) {
+	// 	maxX = maxVec.x;
+	// 	maxY = maxVec.y;
+	// 	maxZ = maxVec.z;
+	// }
+
+	[[nodiscard]] INLINE std::array<glm::vec3, 8> getVertices() const {
+
+		std::array<glm::vec3, 8> verts; // NOLINT(*-pro-type-member-init)
 		verts[0] = glm::vec3{ min.x, max.y, max.z };
 		verts[1] = glm::vec3{ max.x, max.y, max.z };
 		verts[2] = glm::vec3{ min.x, min.y, max.z };
@@ -282,7 +364,7 @@ public:
 		return verts;
 	}
 
-	INLINE AABB transformed_noPerspective(const glm::mat4x4& trs) const {
+	[[nodiscard]] INLINE AABB transformed_noPerspective(const glm::mat4x4& trs) const {
 
 		const glm::vec3 c = 0.5f * (min + max);
 		const glm::vec3 e = 0.5f * (max - min);
@@ -291,7 +373,7 @@ public:
 
 		const auto B = glm::mat3(glm::abs(A[0]), glm::abs(A[1]), glm::abs(A[2]));
 		const glm::vec3 ne = B * e;
-		return AABB(nc - ne, nc + ne);
+		return {nc - ne, nc + ne};
 	}
 
 	INLINE AABB& transform_noPerspective(const glm::mat4x4& trs) {
@@ -305,10 +387,11 @@ public:
 
 		min = nc - ne;
 		max = nc + ne;
+
 		return *this;
 	}
 
-	INLINE static AABB transformed_noPerspective(const AABB& box, const glm::mat4x4& trs) {
+	[[nodiscard]] INLINE static AABB transformed_noPerspective(const AABB& box, const glm::mat4x4& trs) {
 		const glm::vec3 c = 0.5f * (box.min + box.max);
 		const glm::vec3 e = 0.5f * (box.max - box.min);
 		const auto A = glm::mat3(trs);
@@ -316,10 +399,10 @@ public:
 
 		const auto B = glm::mat3(glm::abs(A[0]), glm::abs(A[1]), glm::abs(A[2]));
 		const glm::vec3 ne = B * e;
-		return AABB(nc - ne, nc + ne);
+		return {nc - ne, nc + ne};
 	}
 
-	INLINE AABB transformed_perspective(const glm::mat4x4& M) const {
+	[[nodiscard]] INLINE AABB transformed_perspective(const glm::mat4x4& M) const noexcept {
 		
 		__m256 X, Y, Z, W; _getVerticesSoA(X, Y, Z, W);
 		const float m00 = M[0][0], m01 = M[1][0], m02 = M[2][0], m03 = M[3][0];
@@ -332,12 +415,20 @@ public:
 		const __m256 r2x = _mm256_set1_ps(m20), r2y = _mm256_set1_ps(m21), r2z = _mm256_set1_ps(m22), r2w = _mm256_set1_ps(m23);
 		const __m256 r3x = _mm256_set1_ps(m30), r3y = _mm256_set1_ps(m31), r3z = _mm256_set1_ps(m32), r3w = _mm256_set1_ps(m33);
 
-#if defined(__FMA__) || (defined(_MSC_VER) && defined(__AVX2__))
-		auto fmadd = [](__m256 a, __m256 b, __m256 c) { return _mm256_fmadd_ps(a, b, c); };
+// //#if defined(__FMA__) || (defined(_MSC_VER) && defined(__AVX2__))
+// 		auto fmadd = [](const __m256 a, const __m256 b, const __m256 c) { return _mm256_fmadd_ps(a, b, c); };
+// // #else
+// // 		auto fmadd = [](const __m256 a, const __m256 b, const __m256 c) {
+// // 			return _mm256_add_ps(_mm256_mul_ps(a, b), c);
+// // 		};
+// // #endif
+
+
+//NOLINTBEGIN(portability-simd-intrinsics)
+#if defined(__FMA__)
+#define fmadd(a,b,c) _mm256_fmadd_ps((a),(b),(c))
 #else
-		auto fmadd = [](const __m256 a, const __m256 b, const __m256 c) {
-			return _mm256_add_ps(_mm256_mul_ps(a, b), c);
-		};
+#define fmadd(a,b,c) _mm256_add_ps(_mm256_mul_ps((a),(b)), (c))
 #endif
 
 		const __m256 Xp = fmadd(r0x, X, fmadd(r0y, Y, fmadd(r0z, Z, _mm256_mul_ps(r0w, W))));
@@ -363,13 +454,20 @@ public:
 		MMath::hminmax8(Yn, ymin, ymax);
 		MMath::hminmax8(Zn, zmin, zmax);
 
-		return AABB(glm::vec3{ xmin, ymin, zmin }, glm::vec3{ xmax, ymax, zmax });
+		return {glm::vec3{ xmin, ymin, zmin }, glm::vec3{ xmax, ymax, zmax }};
+//NOLINTEND(portability-simd-intrinsics)
 	}
 
 	INLINE AABB& transform_perspective(const glm::mat4x4& M) {
 		const auto newAABB = transformed_perspective(M);
-		min = newAABB.min;
-		max = newAABB.max;
+
+		min.x = newAABB.min.x;
+		min.y = newAABB.min.y;
+		min.z = newAABB.min.z;
+		max.x = newAABB.max.x;
+		max.y = newAABB.max.y;
+		max.z = newAABB.max.z;
+
 		return *this;
 	}
 
@@ -387,11 +485,11 @@ public:
 			vmax = glm::max(vmax, v.pos);
 		}
 
-		min = { vmin.x, vmin.y, vmin.z };
-		max = { vmax.x, vmax.y, vmax.z };
+		min = vmin;
+		max = vmax;
 	}
 
-	INLINE bool intersects(const AABB& box) const {
+	[[nodiscard]] INLINE bool intersects(const AABB& box) const {
 		return
 			min.x <= box.max.x &&
 			max.x >= box.min.x &&
@@ -401,8 +499,8 @@ public:
 			max.z >= box.min.z;
 	}
 
-	INLINE bool intersects(const Ray& r) const {
-		double tmin = -INFINITY, tmax = INFINITY;
+	[[nodiscard]] INLINE bool intersects(const Ray& r) const {
+		double tmin = -HUGE_VAL, tmax = HUGE_VAL;
 
 		for (int i = 0; i < 3; ++i) {
 			double t1 = (min[i] - r.origin[i]) * r.invDirection[i];
@@ -415,14 +513,14 @@ public:
 		return tmax > std::max(tmin, 0.0);
 	}
 
-	INLINE bool contains(const glm::vec3& point) const {
+	[[nodiscard]] INLINE bool contains(const glm::vec3& point) const {
 		return
 			point.x >= min.x && point.x <= max.x &&
 			point.y >= min.y && point.y <= max.y &&
 			point.z >= min.z && point.z <= max.z;
 	}
 
-	INLINE bool contains(const AABB& box) const {
+	[[nodiscard]] INLINE bool contains(const AABB& box) const {
 		return
 			box.min.x >= min.x && box.max.x <= max.x &&
 			box.min.y >= min.y && box.max.y <= max.y &&
@@ -455,46 +553,59 @@ public:
 		);
 		const glm::vec3 we = A * e;
 
-		const glm::vec3 wmin = wc - we;
-		const glm::vec3 wmax = wc + we;
+		const glm::vec4 wmin = {wc - we, 1.0f};
+		const glm::vec4 wmax = {wc + we, 1.0f};
 
 		min = wmin;
 		max = wmax;
 	}
 	INLINE void encloseWorld_fromLocal(const glm::mat4x4& trs) { encloseWorld(*this, trs); }
 
-	INLINE float width() const {
+	[[nodiscard]] INLINE float width() const {
 		return max.x - min.x;
 	}
-	INLINE float height() const {
+	[[nodiscard]] INLINE float height() const {
 		return max.y - min.y;
 	}
-	INLINE float depth() const {
+	[[nodiscard]] INLINE float depth() const {
 		return max.z - min.z;
 	}
-	INLINE float volume() const {
+	[[nodiscard]] INLINE float volume() const {
 		return width() * height() * depth();
 	}
-	INLINE glm::vec3 center() const {
-		return min + (max - min) * 0.5f;
+	[[nodiscard]] INLINE glm::vec3 center() const {
+		return {
+			min.x + (max.x - min.x) * 0.5f,
+			min.y + (max.y - min.y) * 0.5f,
+			min.z + (max.z - min.z) * 0.5f
+			};
 	}
-	INLINE glm::vec3 size() const {
+	[[nodiscard]] INLINE glm::vec3 size() const {
+		return {
+			max.x - min.x,
+			max.y - min.y,
+			max.z - min.z
+		};
+	}
+	[[nodiscard]] INLINE glm::vec3 extent() const {
 		return max - min;
 	}
-	INLINE glm::vec3 extent() const {
-		return max - min;
-	}
-	INLINE float surfaceArea() const {
+	[[nodiscard]] INLINE float surfaceArea() const {
 		const glm::vec3 extent = max - min;
 		return 2.0f * (extent.x * extent.y + extent.x * extent.z + extent.y * extent.z);
 	}
 
-	INLINE void* data() {
-		return raw;
+	INLINE void* data() noexcept {
+		return &min;
+	}
+	[[nodiscard]] INLINE const void* data() const noexcept {
+		return &min;
 	}
 
+	static constexpr size_t byteSize() noexcept { return sizeof(AABB); }
+
 	bool operator==(const AABB& rhs) const {
-		return min == rhs.min && max == rhs.max;
+		return min == max && rhs.min == max;
 	}
 
 	bool operator!=(const AABB& rhs) const {
@@ -504,15 +615,8 @@ public:
 
 struct OBB
 {
-	union
-	{
-		float raw[6]{ -0.5f, 0.5f, 0.5f,	0.5f, -0.5f, -0.5f };
-		struct
-		{
-			glm::vec3 frontTopLeft;
-			glm::vec3 backBottomRight;
-		};
-	};
+	glm::vec3 frontTopLeft{-0.5f, 0.5f, 0.5f};
+	glm::vec3 backBottomRight{0.5f, -0.5f, -0.5f };
 	glm::quat rotation;
 	static constexpr BoundingShape shape() { return BoundingShape::OBB; }
 };
@@ -531,7 +635,7 @@ struct BoundingVolumeComponent
 	using BoundVolumePair = std::pair<BoundingShape, uint32_t>;
 
 	~BoundingVolumeComponent() = default;
-	BoundingVolumeComponent() :
+	BoundingVolumeComponent() : // NOLINT(*-pro-type-member-init)
 		rawData{ 0 },
 		coarseIndexLocal{ UINT32_INVALID },
 		coarseIndexWorld{ UINT32_INVALID }
@@ -539,7 +643,7 @@ struct BoundingVolumeComponent
 		flags = static_cast<uint32_t>(BoundingVolumeFlags::Occludee);
 	}
 
-	BoundingVolumeComponent(const uint32_t coarseIndexLocal, const uint32_t coarseIndexWorld) :
+	BoundingVolumeComponent(const uint32_t coarseIndexLocal, const uint32_t coarseIndexWorld) : // NOLINT(*-pro-type-member-init)
 		rawData{ 0 },
 		coarseIndexLocal{coarseIndexLocal},
 		coarseIndexWorld{ coarseIndexWorld }
@@ -556,7 +660,7 @@ struct BoundingVolumeComponent
 	//	fineType0 = static_cast<uint32_t>(firstShape);
 	//	fineEnabled0 = 1;
 	//}
-	BoundingVolumeComponent(const BoundingVolumeComponent& other) {
+	BoundingVolumeComponent(const BoundingVolumeComponent& other) { // NOLINT(*-pro-type-member-init)
 		rawData = other.rawData;
 		coarseIndexLocal = other.coarseIndexLocal;
 		coarseIndexWorld = other.coarseIndexWorld;
@@ -581,7 +685,7 @@ struct BoundingVolumeComponent
 			coarseIndexWorld == rhs.coarseIndexWorld;
 	}
 
-	std::vector<BoundingShape> getFineShapes() const {
+	[[nodiscard]] std::vector<BoundingShape> getFineShapes() const {
 		std::vector<BoundingShape> shapes;
 		uint8_t count = 0;
 		if (fineCount == count)
@@ -611,25 +715,25 @@ struct BoundingVolumeComponent
 		return shapes;
 	}
 
-	std::vector<BoundVolumePair> getBoundingVolumePairs() const {
+	[[nodiscard]] std::vector<BoundVolumePair> getBoundingVolumePairs() const {
 		std::vector<BoundVolumePair> shapes;
 		uint8_t count = 0;
 		if (fineCount == count)
 			return shapes;
 		count++;
-		shapes.push_back( { static_cast<BoundingShape>(fineType0), fineIndex[0] } );
+		shapes.emplace_back( static_cast<BoundingShape>(fineType0), fineIndex[0] );
 		if (fineCount == count)
 			return shapes;
 		count++;
-		shapes.push_back({ static_cast<BoundingShape>(fineType1), fineIndex[1] });
+		shapes.emplace_back(static_cast<BoundingShape>(fineType1), fineIndex[1]);
 		if (fineCount == count)
 			return shapes;
 		count++;
-		shapes.push_back({ static_cast<BoundingShape>(fineType2), fineIndex[2] });
+		shapes.emplace_back(static_cast<BoundingShape>(fineType2), fineIndex[2]);
 		if (fineCount == count)
 			return shapes;
 		count++;
-		shapes.push_back({ static_cast<BoundingShape>(fineType3), fineIndex[3] });
+		shapes.emplace_back(static_cast<BoundingShape>(fineType3), fineIndex[3]);
 		if (fineCount == count)
 			return shapes;
 		//count++;
@@ -653,7 +757,7 @@ struct BoundingVolumeComponent
 		}
 	}
 
-	bool enabled(const uint8_t index) const {
+	[[nodiscard]] bool enabled(const uint8_t index) const {
 		switch (index) {
 			default: return false;
 			case 0: return fineEnabled0 ==  1 && fineCount >= 1;
@@ -739,7 +843,8 @@ struct BoundingVolumeComponent
 
 
 INLINE void aabbViewZRange(const AABB& b, const glm::vec3& n, const float& w,
-						   float& zmin, float& zmax) {
+						   float& zmin, float& zmax)
+{
 	const glm::vec3 c = 0.5f * (b.min + b.max);          // center
 	const glm::vec3 e = 0.5f * (b.max - b.min);          // half-extent
 

@@ -76,7 +76,7 @@ enum class MButton : uint8_t
     Middle = 0x10,
     M4 = 0x20,
     M5 = 0x40,
-    _ENUM_END = 0x80
+    ENUM_END = 0x80
 };
 
 //template<typename A, typename B>
@@ -94,26 +94,25 @@ enum class MButton : uint8_t
 
 struct MouseState
 {
-
     glm::ivec2 relativePosition{};
     glm::ivec2 lastPositionDelta{};
     glm::ivec2 absoluteScreenPosition{};
     glm::i16vec2 wheel{};
     SizedBitField<uint8_t> buttonState{};
 
-    std::string to_String() {
-        return std::format("\n absPos: {},{}\trelPos: {},{}\twhDelta: {},{}\tpDelta: {},{}\tbState: {}",
-                           absoluteScreenPosition.x,
-                           absoluteScreenPosition.y,
-                           relativePosition.x,
-                           relativePosition.y,
-                           wheel.x,
-                           wheel.y,
-                           lastPositionDelta.x,
-                           lastPositionDelta.y,
-                           buttonState.getField());
-    }
-
+    // std::string to_String() {
+    //     return std::format("\n absPos: {},{}\trelPos: {},{}\twhDelta: {},{}\tpDelta: {},{}\tbState: {}",
+    //                        absoluteScreenPosition.x,
+    //                        absoluteScreenPosition.y,
+    //                        relativePosition.x,
+    //                        relativePosition.y,
+    //                        wheel.x,
+    //                        wheel.y,
+    //                        lastPositionDelta.x,
+    //                        lastPositionDelta.y,
+    //                        buttonState.getField()
+    //                        );
+    // }
 };
 
 enum class KeyAction : uint8_t
@@ -130,6 +129,7 @@ struct KeyEvent
     KeyAction action;
 };
 
+#ifdef BUILD_WIN
 INLINE static KeyCode VkeyToKeyCode(USHORT vkey, USHORT makeCode, USHORT flags) {
     //const bool isE0 = (flags & RI_KEY_E0);
     //const bool isE1 = (flags & RI_KEY_E1);  // rarely used
@@ -247,6 +247,7 @@ INLINE static KeyCode VkeyToKeyCode(USHORT vkey, USHORT makeCode, USHORT flags) 
     return KeyCode::Unknown;
 }
 
+
 INLINE static KeyEvent MapRawKeyboardEvent(const RAWKEYBOARD& keyboard) {
     const USHORT vkey = keyboard.VKey;
     const USHORT makeCode = keyboard.MakeCode;
@@ -282,5 +283,7 @@ INLINE static KeyEvent MapRawKeyboardEvent(const RAWKEYBOARD& keyboard) {
         .action = action
     };
 }
+
+#endif
 
 #endif

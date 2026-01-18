@@ -60,7 +60,7 @@ namespace MWork
     };
 
     template <class Fn>
-    static inline CallablePayload make_callable(Fn&& f, FrameArena* arena) {
+    static CallablePayload make_callable(Fn&& f, FrameArena* arena) {
         using F = std::decay_t<Fn>;
         void* mem = arena->allocate(sizeof(F), alignof(F));
         F* obj = new (mem) F(std::forward<Fn>(f));
@@ -179,11 +179,11 @@ namespace MWork
     class JobSystem
     {
     public:
-        JobSystem(uint32_t threads, std::size_t queueCapacityPow2, FrameArena* arena)
+        JobSystem(const uint32_t threads, const std::size_t queueCapacityPow2, FrameArena* arena)
             : m_threads(threads),
             m_queue(queueCapacityPow2),
-            m_arena(arena),
-            m_taskSem(0) {
+            m_taskSem(0),
+            m_arena(arena) {
             m_shutdown.store(false, std::memory_order_relaxed);
             for (uint32_t i = 0; i < threads; ++i) {
                 m_threads[i] = std::thread([this, i] { workerLoop(i); });
@@ -203,7 +203,7 @@ namespace MWork
 
         // ----------------- API: single job -----------------
         template <class Fn>
-        JobHandle job(std::size_t shards, JobAwaitPoint ap, Fn&& fn) {
+        JobHandle job(const std::size_t shards, const JobAwaitPoint ap, Fn&& fn) {
             // Store callable once in the group; each shard references it.
             const CallablePayload payload = make_callable(std::forward<Fn>(fn), m_arena);
 
@@ -290,13 +290,21 @@ namespace MWork
             }
         };
 
-
+        // template <class Fn>
+        // JobHandle for_range(const std::size_t begin,
+        //                     const std::size_t end,
+        //                     const std::size_t shardCount,
+        //                     JobAwaitPoint ap,
+        //                     Fn&& body)
+        // {
+        //
+        // }
 
         template <class Fn>
-        JobHandle for_range_chunked(std::size_t begin,
-                                    std::size_t end,
-                                    std::size_t chunk,
-                                    std::size_t shardCount,      // number of worker shards to run (e.g., = threads)
+        JobHandle for_range_chunked(const std::size_t begin,
+                                    const std::size_t end,
+                                    const std::size_t chunk,
+                                    const std::size_t shardCount,      // number of worker shards to run (e.g., = threads)
                                     JobAwaitPoint ap,
                                     Fn&& body)
         {
@@ -317,7 +325,7 @@ namespace MWork
                 // base = floor(N / S), rem = N % S
                 // shard k gets count = base + (k < rem ? 1 : 0)
                 // shard S-1 has count = base (the least, when rem > 0)
-                auto staticFn = [=](std::size_t shardIdx, std::size_t totalShards, std::size_t /*tid*/) {
+                auto staticFn = [=](const std::size_t shardIdx, const std::size_t totalShards, std::size_t /*tid*/) {
                     const std::size_t S = totalShards;
                     if (shardIdx >= S) return;
 
@@ -367,7 +375,7 @@ namespace MWork
 
     private:
         // Worker loop
-        void workerLoop(std::size_t threadIndex) {
+        void workerLoop(const std::size_t threadIndex) {
             // Optional: set affinity here for cache locality.
             for (;;) {
                 m_taskSem.acquire();
@@ -401,7 +409,7 @@ namespace MWork
             }
         }
 
-        JobGroup* allocGroup(uint32_t shards, JobAwaitPoint ap, const CallablePayload& payload) {
+        JobGroup* allocGroup(const uint32_t shards, const JobAwaitPoint ap, const CallablePayload& payload) {
             void* mem = m_arena->allocate(sizeof(JobGroup), alignof(JobGroup));
             return new (mem) JobGroup(shards, ap, payload);
         }
@@ -420,7 +428,6 @@ namespace MWork
 
     };
 
-    // ----------------- Simple façade (matches your examples) -----------------
     namespace detail
     {
         inline JobSystem*& instance() {
@@ -429,7 +436,7 @@ namespace MWork
         }
     }
 
-    inline void init(uint32_t threads, std::size_t queueCapacityPow2, FrameArena* arena) {
+    inline void init(const uint32_t threads, const std::size_t queueCapacityPow2, FrameArena* arena) {
         detail::instance() = new JobSystem{ threads, queueCapacityPow2, arena };
     }
 
@@ -449,19 +456,19 @@ namespace MWork
     // In practice a "parallel for" using 'shards' as the split count.
     // The lambda signature should be: void(shardIndex, shardCount, threadIndex)
     template <class Fn>
-    inline JobHandle job(std::size_t shards, JobAwaitPoint ap, Fn&& fn) {
+    JobHandle job(std::size_t shards, JobAwaitPoint ap, Fn&& fn) {
         return detail::instance()->job(shards, ap, std::forward<Fn>(fn));
     }
 
-    // Range-based parallel for convenience. body(i, shardIndex).
-    template <class Fn>
-    inline JobHandle for_range(std::size_t begin, std::size_t end, std::size_t shards,
-                               JobAwaitPoint ap, Fn&& body) {
-        return detail::instance()->for_range(begin, end, shards, ap, std::forward<Fn>(body));
-    }
+    // // Range-based parallel for convenience. body(i, shardIndex).
+    // template <class Fn>
+    // JobHandle for_range(std::size_t begin, std::size_t end, std::size_t shards,
+    //                            JobAwaitPoint ap, Fn&& body) {
+    //     return detail::instance()->for_range(begin, end, shards, ap, std::forward<Fn>(body));
+    // }
 
     template <class Fn>
-    inline JobHandle for_range_chunked(std::size_t begin, std::size_t end, std::size_t chunk, std::size_t shards,
+    JobHandle for_range_chunked(std::size_t begin, std::size_t end, std::size_t chunk, std::size_t shards,
                                JobAwaitPoint ap, Fn&& body) {
         if (ap == JobAwaitPoint::Immediate) {
             JobHandle result = detail::instance()->for_range_chunked(begin, end, chunk, shards, ap, std::forward<Fn>(body));
@@ -472,7 +479,7 @@ namespace MWork
     }
 
     template <class Fn>
-    inline JobHandle for_loop(std::size_t begin, std::size_t end, std::size_t shards, Fn&& body) {
+    JobHandle for_loop(std::size_t begin, std::size_t end, std::size_t shards, Fn&& body) {
         PROFILE_SCOPE("MWork::for_loop");
         return MWork::for_range_chunked(begin, end, 0, shards, MWork::JobAwaitPoint::Immediate, body);
     }
