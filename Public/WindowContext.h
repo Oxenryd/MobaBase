@@ -1,5 +1,6 @@
 #ifndef WINDOWSURFACE_HPP
 #define WINDOWSURFACE_HPP
+#include "ErrorCodes.hpp"
 
 #ifdef BUILD_WIN
     #ifndef _INC_WINAPIFAMILY
@@ -7,14 +8,10 @@
     #endif
 #endif
 
-#ifdef BUILD_GLFW
 
-
-
-#endif
+#ifdef BUILD_WIN
 
 #include "MMath.hpp"
-
 #include <cstdint>
 #include <glm/glm.hpp>
 
@@ -23,10 +20,6 @@
 #include "ErrorCodes.hpp"
 #include "Bits.hpp"
 #include "InputTypes.h"
-
-
-
-#ifdef BUILD_WIN
 
 struct MouseDataRaw
 {
@@ -422,25 +415,72 @@ static ErrorCode createSurface(
 
 #endif // BUILD_WIN
 
-
 #ifdef BUILD_GLFW
 
-#ifdef WAYLAND
-class WindowSurface {
+#ifndef GLFW_INCLUDE_VULKAN
+    #define GLFW_INCLUDE_VULKAN
+#endif
+
+#include <GLFW/glfw3.h>
+
+class WindowContext {
+    GLFWwindow* m_window{nullptr};
     std::string m_appName{};
-    wl_display* m_display{nullptr};
-    wl_surface* m_surface{nullptr};
+    std::string m_windowTitle{};
+
+
+
 public:
     uint16_t width{0};
     uint16_t height{0};
     std::string& appName() { return m_appName; }
+
+    WindowContext() = default;
+    WindowContext(WindowContext&& other) = default;
+    WindowContext(const WindowContext&) = delete;
+    WindowContext& operator=(const WindowContext&) = delete;
+
+    template <std::integral I>
+    static ErrorCode create(
+        const char* appName, const char* wndTitle, const I width, const I height,
+        WindowContext* outCtx)
+    {
+        if (outCtx == nullptr)
+            return ErrorCode::GLFW_CONTEXT_IS_NULL;
+
+        if (!glfwInit())
+            return ErrorCode::GLFW_UNKNOWN_INIT_ERROR;
+
+        glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+        glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
+
+        outCtx->m_window = glfwCreateWindow(width, height, wndTitle, nullptr, nullptr);
+        if (!outCtx->m_window )
+            return ErrorCode::GLFW_FAILED_WND_CREATION;
+
+        outCtx->m_appName = std::string{appName};
+        outCtx->m_windowTitle = std::string{wndTitle};
+        outCtx->width = static_cast<uint16_t>(width);
+        outCtx->height = static_cast<uint16_t>(height);
+
+        return ErrorCode::OK;
+    }
+
     [[nodiscard]] const char* appName_c_str() const { return m_appName.c_str(); }
-    wl_display* display() { return m_display; }
-    wl_surface* surface() { return m_surface; }
 
+    GLFWwindow* window() const { return m_window; }
+    GLFWwindow* window() { return m_window; }
+
+    static std::vector<const char*> getVulkanInstanceExtensions() {
+        uint32_t count = 0;
+        const char** exts = glfwGetRequiredInstanceExtensions(&count);
+        return std::vector(exts, exts + count);
+    }
+
+    VkResult createSurface(const VkInstance instance, VkSurfaceKHR* out) const {
+        return glfwCreateWindowSurface(instance, m_window, nullptr, out);
+    }
 };
-
-#endif
 
 #endif
 

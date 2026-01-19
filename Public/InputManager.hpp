@@ -1,14 +1,12 @@
 #ifndef INPUTMANAGER_HPP
 #define INPUTMANAGER_HPP
 
-
-
-#include "WindowSurface.h"
-#include "Delegate.hpp"
 #include <glm/glm.hpp>
+#include "WindowContext.h"
+#include "Delegate.hpp"
+#include "InputTypes.h"
+
 //#include "GlobalMacros.h"
-
-
 
 //Event<uint8_t, KeysBitfield> onKeyDown;
 //Event<uint8_t, KeysBitfield> onKeyUp;
@@ -28,7 +26,7 @@
 class InputManager
 {
 private:
-	WindowSurface* m_ws;
+	WindowContext* m_ws;
 	std::set<uint16_t> m_keyButtonDownMap;
 	uint8_t m_mButtonsDown = 0;
 	bool m_ignoreNextMouseDelta = false;
@@ -88,7 +86,7 @@ private:
 
 public:
     ~InputManager() {}
-	InputManager(WindowSurface* surface) :
+	InputManager(WindowContext* surface) :
 		m_ws{surface} {
 #ifdef BUILD_WIN
 		m_ws->onMouseRaw.subscribe( [this](MouseDataRaw raw) -> void

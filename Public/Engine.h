@@ -19,7 +19,7 @@
 #include <algorithm>
 #include <utility>
 
-#include "WindowSurface.h"
+#include "WindowContext.h"
 #include "InputManager.hpp"
 #include "Debug.hpp"
 #include "Delegate.hpp"
@@ -52,6 +52,7 @@ struct CamIndex
 {
 	uint16_t sceneIndex;
 	uint32_t camIndex;
+	CamIndex() : sceneIndex(UINT16_INVALID), camIndex(UINT32_INVALID) {}
 	explicit CamIndex(const CamIndex& camIndex) :
 		sceneIndex{camIndex.sceneIndex},
 		camIndex{camIndex.camIndex}
@@ -120,13 +121,13 @@ class Engine
 	INLINE ErrorCode _initShaderManager();
 	INLINE ErrorCode _initInputManager();
 	INLINE ErrorCode _initGraphics();
-	INLINE ErrorCode _initBaseShaders();
+	INLINE ErrorCode _initBaseShaders() const;
 	INLINE ErrorCode _initBaseCallbacks();
 	INLINE ErrorCode _initJobSystem();
 
 	// Base Systems
 	RenderManager* m_renderMan = nullptr;
-	WindowSurface* m_wnd = nullptr;
+	WindowContext* m_wnd = nullptr;
 	InputManager* m_inputMan = nullptr;
 	VulkanContext* m_vkCtx = nullptr;
 	FrameArena* m_workArena = nullptr;
@@ -139,9 +140,9 @@ class Engine
 
 public:
 	~Engine();
-	Engine(const std::string& appName, size_t heapSize);
+	Engine(const char* appName, size_t heapSize);
 	
-	Camera* mainCamera();
+	Camera* mainCamera() const;
 
 	// EVENTS
 	Event<Engine*> onStartInitiated;
@@ -218,8 +219,8 @@ public:
 	}
 
 	void setMainCamera(uint16_t sceneIndex, uint32_t camIndex);
-	ErrorCode init();
-	INLINE WindowSurface* getWndSurface() const { return m_wnd; }
+	ErrorCode init(WindowContext* wndCtx = nullptr);
+	INLINE WindowContext* getWndSurface() const { return m_wnd; }
 	INLINE InputManager* getInputManager() const { return m_inputMan; }
 	INLINE VulkanContext* getVulkanContext() const { return m_vkCtx; }
 

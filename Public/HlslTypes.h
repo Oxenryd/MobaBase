@@ -2,6 +2,7 @@
 #define HLSLTYPES_H
 
 #include <cstdint>
+#include <cstring>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtx/quaternion.hpp>
@@ -415,7 +416,7 @@ struct BaseMatPush
 	uint32_t boneCount{ 0 };
 };
 
-struct CameraData
+struct alignas (16) CameraData
 {
 	CameraData() {
 		vFov = 60.f;
@@ -455,9 +456,9 @@ struct CameraData
 
 	alignas (16) glm::mat4x4 invProj;
 
-	union
+	union alignas (16)
 	{
-		alignas (16) float camPos_amb[4];
+		float camPos_amb[4];
 		struct
 		{
 			float cameraPosition[3];
@@ -465,9 +466,9 @@ struct CameraData
 		};
 	};
 
-	union
+	union alignas (16)
 	{
-		alignas (16) float screenSizes[4];
+		float screenSizes[4];
 		struct
 		{
 			float screenSize[2];

@@ -1,9 +1,4 @@
 ﻿// main.cpp : Defines the entry point for the application.
-//
-
-
-
-
 
 #ifdef BUILD_WIN
 	#include "Engine.h"
@@ -105,11 +100,43 @@ int __stdcall main(HINSTANCE hInstance, HINSTANCE instance, LPSTR str, int nCmdS
 
 #else
 
-#include <format>
-#include <string>
+#include "Engine.h"
+#include "WindowContext.h"
+#include "Templates.hpp"
 
-int main(int argc, char* argv[]) {
-	const std::string path1 = std::format("{}{}", "dir/", "file.obj");
+
+auto APP_NAME = "VulkanTest";
+auto WINDOW_TITLE = "VulkanTest";
+constexpr unsigned short WND_WIDTH = 1280;
+constexpr unsigned short WND_HEIGHT = 800;
+
+int main(int, char*)
+{
+	ErrorCode EC{};
+
+	// Setup logger
+	Log::init<DefaultTerminalLogger>();
+
+	// Create Engine
+	Engine engine{ APP_NAME, 256_MB };
+
+	// Create Window Context
+	WindowContext wndCtx{};
+	EC = WindowContext::create(APP_NAME, WINDOW_TITLE, WND_WIDTH, WND_HEIGHT, &wndCtx);
+	if (EC_FAILED(EC)) {
+		LOGLINE(LogType::Error, LogMod::Window, "Could not create Window Surface... ");
+		return static_cast<int>(EC);
+	}
+	// Setup rest of engine
+	EC = engine.init(&wndCtx);
+	EC_RETURN_FAILED_INT(EC);
+
+	// Start Engine
+	// engine.createNewScene<GameScene>(512_MB, nullptr);
+	// engine.setTargetUpdateDeltaTime(0.0);
+	// engine.start();
+
+	return 0;
 }
 
 

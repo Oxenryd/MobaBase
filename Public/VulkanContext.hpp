@@ -44,7 +44,7 @@
 #include <queue>
 
 #include "DrawCommand.hpp"
-#include "WindowSurface.h"
+#include "WindowContext.h"
 #include "Log.hpp"
 #include "Robin_Hood.h"
 
@@ -511,6 +511,7 @@ public:
 	};
 
 private:
+	WindowContext* m_windowContext;
 	uint8_t c_dummyPixel[4] = { 255, 255, 255, 255 };
 	bool m_pendingExit = false;
 	uint32_t m_lastDrawcallCount = 0;
@@ -973,7 +974,7 @@ private:
 
 
 public:
-	WindowSurface* const windowSurface;
+
 	VkInstance m_vkInstance = nullptr;
 	VkSurfaceKHR m_vkSurface = nullptr;
 	VkPhysicalDevice m_phyDevice = nullptr;
@@ -1127,9 +1128,8 @@ public:
 			cleanUp();
 		glfwTerminate();
 	}
-	VulkanContext() = delete;
-	explicit VulkanContext(WindowSurface* const wndSurface) :
-		windowSurface{ wndSurface },
+	explicit VulkanContext() :
+		m_windowContext{nullptr},
 		presentMode{},
 		swapchainFormat{},
 		swapchainExtent{},
@@ -1435,7 +1435,7 @@ public:
 		return VK_SUCCESS;
 	}
 
-	INLINE VkResult initVulkan(const VkPresentModeKHR mode, const bool prioIGpu = false) {
+	INLINE VkResult initVulkan(WindowContext* const wndCtx, const VkPresentModeKHR mode, const bool prioIGpu = false) {
 		VkResult vk{};
 
 		for (size_t i = 0; i < VULKAN_FRAMES_IN_FLIGHT; ++i) {
@@ -1443,7 +1443,8 @@ public:
 		}
 		presentMode = mode;
 		renderPassIndex = 0;
-		//Vk_CHECK(vk, createInstanceGlfw());
+		m_windowContext = wndCtx;
+
 		Vk_CHECK(vk, createInstance());
 		Vk_CHECK(vk, createSurface());
 		Vk_CHECK(vk, pickPhysDevice(prioIGpu));
@@ -2046,19 +2047,37 @@ public:
 		VkApplicationInfo appInfo{};
 		appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
 		appInfo.apiVersion = VK_API_VERSION_1_3;
-		appInfo.pApplicationName = windowSurface->appName_c_str();
+		appInfo.pApplicationName = m_windowContext->appName_c_str();
 
 		// Create instance
 		VkInstanceCreateInfo instanceCreateInfo = {};
 		instanceCreateInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
 		instanceCreateInfo.pApplicationInfo = &appInfo;
 #ifdef VULKAN_VALIDATION
+
+#ifdef BUILD_WIN
 		const char* extensions[] = {
 			"VK_KHR_surface",
 			"VK_KHR_win32_surface",
 			"VK_EXT_debug_utils"
 		};
-		instanceCreateInfo.enabledExtensionCount = 3;
+#else
+#ifdef WAYLAND
+		const char* extensions[] = {
+			"VK_KHR_surface",
+			"VK_KHR_wayland_surface",
+			"VK_EXT_debug_utils"
+		};
+#else
+		const char* extensions[] = {
+			"VK_KHR_surface",
+			"VK_KHR_xlib_surface",
+			"VK_EXT_debug_utils"
+		};
+#endif
+#endif
+
+		instanceCreateInfo.enabledExtensionCount = 2;
 
 		if (checkValidationLayerSupport()) {
 			instanceCreateInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
@@ -2068,10 +2087,27 @@ public:
 		}
 		LOGLINE(LogType::Info, LogMod::Vulkan, "Validation is ON. ");
 #else
+
+#ifdef BUILD_WIN
 		const char* extensions[] = {
 			"VK_KHR_surface",
 			"VK_KHR_win32_surface",
 		};
+#else
+#ifdef WAYLAND
+		const char* extensions[] = {
+			"VK_KHR_surface",
+			"VK_KHR_wayland_surface",
+		};
+#else
+		const char* extensions[] = {
+			"VK_KHR_surface",
+			"VK_KHR_xlib_surface",
+		};
+#endif
+#endif
+
+
 		instanceCreateInfo.enabledExtensionCount = 2;
 		instanceCreateInfo.enabledLayerCount = 0;
 		LOGLINE(LogType::Info, LogMod::Vulkan, "Validation is OFF. ");
@@ -2082,33 +2118,44 @@ public:
 		LOGLINE_IND(LogType::Success, LogMod::Vulkan, "VkInstance created.", -1);
 		return VK_SUCCESS;
 	}
-
+#ifndef BUILD_GLFW
+#ifdef BUILD_WIN
 	VkResult createSurface() {
 		VkResult vkResult;
 
 		// Create surface
-#ifdef BUILD_WIN
+
 		LOGLINE(LogType::Info, LogMod::Vulkan, "Creating Vk_Win32 Surface... ");
 		VkWin32SurfaceCreateInfoKHR surfaceCreateInfo = {};
 		surfaceCreateInfo.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
-		surfaceCreateInfo.hinstance = windowSurface->windowInstance;
-		surfaceCreateInfo.hwnd = windowSurface->windowHandle;
+		surfaceCreateInfo.hinstance = m_windowContext->windowInstance;
+		surfaceCreateInfo.hwnd = m_windowContext->windowHandle;
 
 		Vk_CHECK(vkResult, vkCreateWin32SurfaceKHR(m_vkInstance, &surfaceCreateInfo, nullptr, &m_vkSurface));
-#elifdef BUILD_GLFW
-		LOGLINE(LogType::Info, LogMod::Vulkan, "Creating Vk_Win32 Surface... ");
 
-		VkWaylandSurfaceCreateInfoKHR surfaceCreateInfo = {};
-		surfaceCreateInfo.sType = VK_STRUCTURE_TYPE_WAYLAND_SURFACE_CREATE_INFO_KHR;
-		surfaceCreateInfo.display = windowSurface->display();
-		surfaceCreateInfo.surface = windowSurface->surface();
-		//surfaceCreateInfo.hinstance = windowSurface->windowInstance;
-		//surfaceCreateInfo.hwnd = windowSurface->windowHandle;
-		Vk_CHECK(vkResult, vkCreateWaylandSurfaceKHR(m_vkInstance, &surfaceCreateInfo, nullptr, &m_vkSurface));
-#endif
+
 		LOG(LogType::Success, "Done.");
 		return VK_SUCCESS;
 	}
+#endif
+#else
+	VkResult createSurface()
+	{
+		VkResult vkResult{};
+		LOGLINE(LogType::Info, LogMod::Vulkan, "Creating GLFW Surface... ");
+		vkResult = glfwCreateWindowSurface(m_vkInstance, m_windowContext->window(), nullptr, &m_vkSurface);
+		if (vkResult == VK_ERROR_EXTENSION_NOT_PRESENT) {
+			uint32_t extCount = 0;
+			const auto extsPtr = glfwGetRequiredInstanceExtensions(&extCount);
+			for (std::size_t i = 0; i < extCount; ++i) {
+				LOGLINE(LogType::Info, LogMod::Vulkan, extsPtr[i]);
+			}
+			return vkResult;
+		}
+		LOG(LogType::Success, "Done.");
+		return VK_SUCCESS;
+	}
+#endif
 
 	VkResult pickPhysDevice(const bool prioIGpu) {
 		VkResult vkResult{};
@@ -2344,7 +2391,10 @@ public:
 		}
 		//surfaceFormat = surfaceFormat;
 		swapchainFormat = surfaceFormat.format;
-		swapchainExtent = { surfaceCaps.currentExtent.width, surfaceCaps.currentExtent.height };
+		if (surfaceCaps.currentExtent.width != 0xFFFFFFFF)
+			swapchainExtent = { surfaceCaps.currentExtent.width, surfaceCaps.currentExtent.height };
+		else
+			swapchainExtent = { m_windowContext->width, m_windowContext->height };
 
 		// Swapchain create info
 		VkSwapchainCreateInfoKHR swapchainCreateInfo = {};

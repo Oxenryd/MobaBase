@@ -60,7 +60,9 @@ public:
     explicit HeapArena(const size_t size, const bool destruct = true)
         : m_size(size + 1), m_lastStart(0), m_destruct{ destruct }
     {
-        m_memory = new uint8_t[m_size];
+        constexpr size_t alignment = 64;
+        m_memory = static_cast<uint8_t*>(std::aligned_alloc(alignment, m_size));
+        //m_memory = new uint8_t[m_size];
         const auto memStart = reinterpret_cast<size_t>(m_memory);
         if (memStart == 0) {
             LOGLINE(LogType::Info, LogMod::Memory, "Creating HeapArena, Addr: " + std::to_string(memStart) +

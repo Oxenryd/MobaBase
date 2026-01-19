@@ -693,7 +693,8 @@ public:
 
 	INLINE void printHierarchy() {
 		Log::logLine(LogType::Info, LogMod::Engine,
-					 std::format("\nTransform Hierarchy for Scene index {} - *\n", static_cast<uint32_t>(m_sceneIndex)) );
+					 std::format("\nTransform Hierarchy for Scene index {} - *\n",
+					 	static_cast<uint32_t>(m_sceneIndex)) );
 
 		for (const auto root : m_roots) {
 			constexpr uint32_t depth = 0;

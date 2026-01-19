@@ -111,7 +111,7 @@ public:
 			entry.deleter(entry.ptr);
 	}
 	GameObjectSystem() = delete;
-	GameObjectSystem(uint16_t sceneIndex, ArenaRegistry* const registry)
+	GameObjectSystem(const uint16_t sceneIndex, ArenaRegistry* const registry)
 		: SystemECS{ registry, sceneIndex }
 	{}
 
