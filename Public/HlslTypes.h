@@ -268,9 +268,9 @@ struct BaseVSIn
 	//uint32_t instanceID;
 };
 
-struct ModelTransform
+struct alignas (64) ModelTransform
 {
-	ModelTransform(const glm::mat4x4& mat) :
+	explicit ModelTransform(const glm::mat4x4& mat) :
 		modelToWorld{mat} {}
 
 	ModelTransform& operator=(const glm::mat4x4& mat) {
@@ -280,11 +280,11 @@ struct ModelTransform
 
 	glm::mat4x4 modelToWorld;
 
-	operator glm::mat4x4()& {
+	operator glm::mat4x4() const& {
 		return modelToWorld;
 	}
-	glm::mat4x4 operator*(glm::mat4x4& rhs) const { return modelToWorld * rhs; }
-	glm::mat4x4& operator*=(glm::mat4x4& rhs) { return modelToWorld = modelToWorld * rhs; }
+	glm::mat4x4 operator*(const glm::mat4x4& rhs) const { return modelToWorld * rhs; }
+	glm::mat4x4& operator*=(const glm::mat4x4& rhs) { return modelToWorld = modelToWorld * rhs; }
 };
 
 struct Index32

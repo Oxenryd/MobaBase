@@ -95,8 +95,9 @@ class TransformSystem final : public SystemECS_ModelTransformsProvider
 				if (p != entt::null) {
 					const auto& pt = this_->m_groupPtr->get<TransformComponent>(p);
 					if (objectState_is_dirty(pt.state.value())) t1.state.setByEnum(ObjectState::ParentMovedThisFrame);
+					auto& mtw = this_->m_modelTransforms[t1.dataIndex].modelToWorld;
 					this_->m_modelTransforms[t1.dataIndex] = MMath::matrix_multiply_avx2(
-						this_->m_modelTransforms[pt.dataIndex], local_matrices[j]);
+						mtw, local_matrices[j]);
 				} else {
 					this_->m_modelTransforms[t1.dataIndex] = local_matrices[j];
 				}
@@ -168,10 +169,10 @@ class TransformSystem final : public SystemECS_ModelTransformsProvider
 			const auto& pt = this_->m_groupPtr->get<TransformComponent>(p);
 			if (objectState_is_dirty(pt.state.value())) t.state.setByEnum(ObjectState::ParentMovedThisFrame);
 
-			this_->m_modelTransforms[t.dataIndex] = MMath::matrix_multiply_avx2(
-				this_->m_modelTransforms[pt.dataIndex], local);
+			this_->m_modelTransforms[t.dataIndex].modelToWorld = MMath::matrix_multiply_avx2(
+				this_->m_modelTransforms[pt.dataIndex].modelToWorld, local);
 		} else {
-			this_->m_modelTransforms[t.dataIndex] = local;
+			this_->m_modelTransforms[t.dataIndex].modelToWorld = local;
 		}
 
 		//// Always update bounds
@@ -472,9 +473,10 @@ public:
 			//m_workers[i] = new std::thread{ TransformSystem::_workerThread, this, i }; 
 			//m_workers[i] = new std::thread{ TransformSystem::workerThread_brute_test, this, i };
 			//m_workers[i] = new std::thread{ TransformSystem::_workerThread_avx2_test, this, i };
-			m_workers[i] = new std::thread{ _workerThread_avx2_test_entities, this, i };
+
 			m_startSemas[i] = new std::binary_semaphore{ 0 };
 			m_doneSemas[i] = new std::binary_semaphore{ 0 };
+			m_workers[i] = new std::thread{ _workerThread_avx2_test_entities, this, i };
 		}
 	}
 

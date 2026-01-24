@@ -27,7 +27,7 @@
 	#ifdef X11
 		#include <vulkan/vulkan_xcb.h>
 	#elifdef WAYLAND
-		#include <vulkan/vulkan_wayland.h>
+		//#include <vulkan/vulkan_wayland.h>
 	#else
 		// Windows specifics for GLFW, if any
 	#endif
@@ -137,8 +137,8 @@ struct SceneInstancePair
 	{
 		size_t operator()(const SceneInstancePair& p) const {
 			size_t seed = 0;
-			hash_combine(seed, p.sceneIndex);
-			hash_combine(seed, p.instanceIndex);
+			boost::hash_combine(seed, p.sceneIndex);
+			boost::hash_combine(seed, p.instanceIndex);
 			return seed;
 		}
 	};
@@ -1107,6 +1107,7 @@ public:
 		return &matData_baseMatInstances[index];
 	}
 	
+	GLFWwindow* window() { return m_windowContext->window(); }
 
 	void setPendingExit() { m_pendingExit = true; }
 	const bool& isPendingExit() const { return m_pendingExit; }

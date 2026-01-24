@@ -14,10 +14,8 @@
 #include "VulkanContext.hpp"
 
 #include <cstdint>
-#include <type_traits>
 #include <list>
 #include <algorithm>
-#include <utility>
 
 #include "WindowContext.h"
 #include "InputManager.hpp"

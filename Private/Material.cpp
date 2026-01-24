@@ -193,8 +193,6 @@ Material& Material::initFromShaders(Material& thisMat, const std::string& newNam
 				descSetKey.flags = 0;
 		}
 
-
-
 		switch (param.type)
 		{
 			case TypeBase::PushConstStruct:

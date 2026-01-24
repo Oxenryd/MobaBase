@@ -471,6 +471,8 @@ public:
     GLFWwindow* window() const { return m_window; }
     GLFWwindow* window() { return m_window; }
 
+    static void showWindow(int) {}
+
     static std::vector<const char*> getVulkanInstanceExtensions() {
         uint32_t count = 0;
         const char** exts = glfwGetRequiredInstanceExtensions(&count);

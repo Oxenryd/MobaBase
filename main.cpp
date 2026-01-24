@@ -132,9 +132,9 @@ int main(int, char*)
 	EC_RETURN_FAILED_INT(EC);
 
 	// Start Engine
-	// engine.createNewScene<GameScene>(512_MB, nullptr);
-	// engine.setTargetUpdateDeltaTime(0.0);
-	// engine.start();
+	engine.createNewScene<GameScene>(512_MB, nullptr);
+	engine.setTargetUpdateDeltaTime(0.0);
+	engine.start();
 
 	return 0;
 }

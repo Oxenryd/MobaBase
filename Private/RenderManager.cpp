@@ -6,14 +6,16 @@
 
 RenderManager* RenderManager::s_instance = nullptr;
 
-RenderManager::RenderManager(VulkanContext* const vkContext, ShaderCompilerBase* compiler, size_t paramArenaSize) :
-	m_compiler{ compiler },
+RenderManager::RenderManager(VulkanContext* const vkContext, const size_t paramArenaSize) :
 	m_vkContext {vkContext},
 	m_paramArena{ paramArenaSize }
 {
+	if (s_instance != nullptr)
+		throw std::runtime_error("RenderManager already initialized.");
+	s_instance = this;
 }
 
-Shader* const RenderManager::getShader(Shader::Type type, size_t index) {
+Shader* RenderManager::getShader(const Shader::Type type, const size_t index) {
 	switch (type) {
 		case Shader::Type::Vertex:
 		{
@@ -30,18 +32,19 @@ Shader* const RenderManager::getShader(Shader::Type type, size_t index) {
 			if (index < m_cShaders.size())
 				return &m_cShaders.at(index);
 		} break;
+		default: std::unreachable();
 	}
 
 	return nullptr;
 }
 
-Shader* const RenderManager::getShader(
+const Shader* RenderManager::getShader(
 	const std::string& name) const {
 
-	auto it = m_shader_NamePairMap.find(name);
+	const auto it = m_shader_NamePairMap.find(name);
 	if (it != m_shader_NamePairMap.end()) {
-		auto type = it->second.first;
-		auto index = it->second.second;
+		const auto type = it->second.first;
+		const auto index = it->second.second;
 		switch (type) {
 			case Shader::Type::Vertex:
 				return const_cast<Shader*>(&m_vShaders[index]);
@@ -49,16 +52,17 @@ Shader* const RenderManager::getShader(
 				return const_cast<Shader*>(&m_pShaders[index]);
 			case Shader::Type::Compute:
 				return const_cast<Shader*>(&m_cShaders[index]);
+			default: std::unreachable();
 		}
 	}
 	return nullptr;
 }
 
-Shader* const RenderManager::getShader(const std::string& name) {
-	auto it = m_shader_NamePairMap.find(name);
+Shader* RenderManager::getShader(const std::string& name) {
+	const auto it = m_shader_NamePairMap.find(name);
 	if (it != m_shader_NamePairMap.end()) {
-		auto type = it->second.first;
-		auto index = it->second.second;
+		const auto type = it->second.first;
+		const auto index = it->second.second;
 		switch (type) {
 			case Shader::Type::Vertex:
 				return const_cast<Shader*>(&m_vShaders[index]);
@@ -74,8 +78,8 @@ Shader* const RenderManager::getShader(const std::string& name) {
 }
 
 const std::string& RenderManager::getShaderName(const Shader& shader) {
-	auto pair = std::pair{ shader.type, shader.m_arrayIndex };
-	auto it = m_shader_PairNameMap.find(pair);
+	const auto pair = std::pair{ shader.type, shader.m_arrayIndex };
+	const auto it = m_shader_PairNameMap.find(pair);
 	if (it != m_shader_PairNameMap.end()) {
 		return it->second;
 	} else {
@@ -96,13 +100,13 @@ const std::string& RenderManager::getShaderName(const Shader& shader) {
 
 Material& RenderManager::createMaterial(const std::string& name, Shader& vertex, Shader& fragment) {
 	Material newMaterial{};
-	auto matPtr = registerMaterial(name, newMaterial);
+	const auto matPtr = registerMaterial(name, newMaterial);
 	auto actualMat = Material{ *matPtr, name, vertex, fragment };
 	return *matPtr;
 }
 
 Material* RenderManager::getMaterial(const std::string& name) {
-	auto it = m_mat_NameIndexMap.find(name);
+	const auto it = m_mat_NameIndexMap.find(name);
 	if (it != m_mat_NameIndexMap.end()) {
 		return &m_materials[it->second];
 	} else
@@ -110,7 +114,7 @@ Material* RenderManager::getMaterial(const std::string& name) {
 }
 
 Material* RenderManager::getMaterial(const size_t& index) {
-	auto it = m_mat_IndexNameMap.find(index);
+	const auto it = m_mat_IndexNameMap.find(index);
 	if (it != m_mat_IndexNameMap.end()) {
 		return &m_materials[index];
 	} else
@@ -126,7 +130,7 @@ std::string& RenderManager::getTextureName(const Texture2D& tex) {
 }
 
 Texture2D* RenderManager::getTexture(const std::string& filePath) {
-	auto it = m_texNameIndexMap.find(filePath);
+	const auto it = m_texNameIndexMap.find(filePath);
 	if (it != m_texNameIndexMap.end()) {
 		return &m_tex2ds[it->second];
 	} else
@@ -134,7 +138,7 @@ Texture2D* RenderManager::getTexture(const std::string& filePath) {
 }
 
 Texture2D* RenderManager::getTexture(const size_t texIndex) {
-	auto it = m_texIndexNameMap.find(texIndex);
+	const auto it = m_texIndexNameMap.find(texIndex);
 	if (it != m_texIndexNameMap.end()) {
 		return &m_tex2ds[texIndex];
 	} else
@@ -150,7 +154,7 @@ ErrorCode RenderManager::recompileShaderCache() {
 	// Find all HLSL files in directory
 	std::vector<std::filesystem::path> hlslFiles;
 	try {
-		auto workDir = FileSys::getExecutableDir() / SHADER_SOURCE_DIR;
+		const auto workDir = FileSys::getExecutableDir() / SHADER_SOURCE_DIR;
 		hlslFiles = FileSys::getAllFilesWithExtension(workDir, L".hlsl");
 		if (hlslFiles.size() == 0)
 			return ErrorCode::FILE_NOT_FOUND;
@@ -159,12 +163,12 @@ ErrorCode RenderManager::recompileShaderCache() {
 	}
 
 	for (auto& file : hlslFiles) {
-		auto type = FileSys::parseShaderTypeFromFile(file);
+		const auto type = FileSys::parseShaderTypeFromFile(file);
 		if (type == Shader::Type::Invalid)
 			continue;
 		ErrorCode EC{};
 		Shader newShader{ type, file };
-		EC_CHECK(EC, m_compiler->compile(newShader));
+		EC_CHECK(EC, compileShader(newShader));
 
 		auto name = FileSys::parseShaderNameFromFile(file);
 		EC_CHECK(EC, registerShader(name, newShader));
@@ -220,25 +224,42 @@ Material* RenderManager::registerMaterial(const std::string& name, Material& mat
 
 
 
-ErrorCode DxcWin32VulkanShaderCompiler::compileShaders(RenderManager*) {
+ErrorCode RenderManager::compileShaders() {
 	return ErrorCode::OK;
 }
 
-ErrorCode DxcWin32VulkanShaderCompiler::compile(Shader& shader) {
+ErrorCode RenderManager::compileShader(Shader& shader) {
+
 
 	std::string target;
 	switch (shader.type) {
 		case Shader::Type::Vertex:   target = "vs_6_6"; break;
 		case Shader::Type::Fragment: target = "ps_6_6"; break;
 		case Shader::Type::Compute:  target = "cs_6_6"; break;
+		default: std::unreachable();
 	}
-	auto execDir = FileSys::getExecutableDir();
-	std::filesystem::path shaderDir = SHADER_SOURCE_DIR;
-	std::filesystem::path dxcDir = DXC_DIR;// / "dxc.exe";
-	std::filesystem::path outDir = SHADER_TARGET_DIR;
+
+	static auto execDir = FileSys::getExecutableDir();
+	static std::filesystem::path shaderDir = SHADER_SOURCE_DIR;
+	static std::filesystem::path outDir = SHADER_TARGET_DIR;
+	static std::string dxcBin;
+	static bool pathSet = false;
+#ifdef BUILD_WIN
+	if (!pathSet) {
+		dxcBin = execDir / "dxc.exe";
+		pathSet = true;
+	}
+#else
+	if (!pathSet) {
+		std::string libPath = execDir.string();
+		dxcBin = "LD_LIBRARY_PATH=" + libPath + " " + (execDir / "dxc").string();
+		pathSet = true;
+	}
+#endif
+
 	auto outPath = outDir / shader.sourcePath.filename().replace_extension(".spv");
 	std::stringstream cmd;
-	cmd << dxcDir.string() << "/dxc.exe";
+	cmd << dxcBin;
 	cmd << " -spirv -fspv-target-env=vulkan1.3";
 	cmd << " -fvk-use-dx-layout";
 	cmd << " -T " << target;
@@ -308,39 +329,39 @@ ErrorCode DxcWin32VulkanShaderCompiler::compile(Shader& shader) {
 	return ErrorCode::OK;
 }
 
-ErrorCode DxcWin32VulkanShaderCompiler::checkForShaderChanges(Shader& shader) {
+ErrorCode RenderManager::checkForShaderChanges(Shader& shader) {
 	return ErrorCode::OK;
 }
 
-ErrorCode DxcWin32VulkanShaderCompiler::hotReload(RenderManager& manager) {
+ErrorCode RenderManager::hotReload() {
 
 	ErrorCode EC{};
 	bool changed = false;
-	for (auto& ps : manager.pixelShaders()) {
+	for (auto& ps : pixelShaders()) {
 		auto writeTime = std::filesystem::last_write_time(ps.sourcePath);
 		if (ps.lastSourceChangedTime < writeTime) {
 			LOGLINE(LogType::Info, LogMod::Rendering, "Recompiling PS: " + ps.sourcePath.string() + "... ");
-			EC_CHECK(EC, compile(ps));
+			EC_CHECK(EC, compileShader(ps));
 			LOG(LogType::Success, "Done.");
 			changed = true;
 			ps.lastSourceChangedTime = writeTime;
 		}
 	}
-	for (auto& vs : manager.vertexShaders()) {
+	for (auto& vs : vertexShaders()) {
 		auto writeTime = std::filesystem::last_write_time(vs.sourcePath);
 		if (vs.lastSourceChangedTime < writeTime) {
 			LOGLINE(LogType::Info, LogMod::Rendering, "Recompiling VS: " + vs.sourcePath.string() + "... ");
-			EC_CHECK(EC, compile(vs));
+			EC_CHECK(EC, compileShader(vs));
 			LOG(LogType::Success, "Done.");
 			changed = true;
 			vs.lastSourceChangedTime = writeTime;
 		}
 	}
-	for (auto& cs : manager.computeShaders()) {
+	for (auto& cs : computeShaders()) {
 		auto writeTime = std::filesystem::last_write_time(cs.sourcePath);
 		if (cs.lastSourceChangedTime < writeTime) {
 			LOGLINE(LogType::Info, LogMod::Rendering, "Recompiling CS: " + cs.sourcePath.string() + "... ");
-			EC_CHECK(EC, compile(cs));
+			EC_CHECK(EC, compileShader(cs));
 			LOG(LogType::Success, "Done.");
 			changed = true;
 			cs.lastSourceChangedTime = writeTime;
@@ -348,7 +369,7 @@ ErrorCode DxcWin32VulkanShaderCompiler::hotReload(RenderManager& manager) {
 	}
 
 	if (changed) {
-		manager.onShaderHotReloaded.notify(nullptr);
+		onShaderHotReloaded.notify(nullptr);
 	}
 
 	return ErrorCode::OK;

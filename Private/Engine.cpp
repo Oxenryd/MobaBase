@@ -12,10 +12,7 @@ Engine::Engine(const char* appName, const size_t heapSize) :
 	m_baseArena{heapSize},
 	m_appName{appName},
 	m_targetUpdateDeltaTime{ FPS_400 },
-	m_updateDeltaTime{ 0.0 },
 	m_targetFixedDeltaTime{ FPS_60 },
-	m_fixedAccu{ 0.0 },
-	m_framesSinceLastFpsRead{ 0 },
 	m_lastReadFps{m_targetUpdateDeltaTime},
 	m_lastUpdateTime{ std::chrono::steady_clock::now() },
 	m_baseTimers{ 1 },
@@ -43,7 +40,7 @@ Engine::~Engine() {
 		m_workArena = nullptr;
 	}
 
-	for (auto* scene : m_scenes) {
+	for (const auto* scene : m_scenes) {
 		delete scene;
 	}
 }
@@ -78,12 +75,10 @@ inline double Engine::_tickDt() {
 
 ErrorCode Engine::_initShaderManager() {
 	LOGLINE_IND(LogType::Info, LogMod::Rendering, "Setting up ShaderManager... ", 1);
-#ifdef BUILD_WIN
 
-	DxcWin32VulkanShaderCompiler* w32VkCompiler = m_baseArena.construct<DxcWin32VulkanShaderCompiler>();
-	m_renderMan = m_baseArena.construct<RenderManager>(RenderManager{m_vkCtx, w32VkCompiler, 128_MB });
+	m_renderMan = m_baseArena.construct<RenderManager>(RenderManager{m_vkCtx, 128_MB });
 
-#endif
+
 
 #ifdef SHADER_HOTRELOAD
 		LOGLINE(LogType::Info, LogMod::Rendering, "Shader HotReload is ON.");
@@ -112,10 +107,10 @@ ErrorCode Engine::_initGraphics() {
 	LOGLINE(LogType::Info, LogMod::Vulkan, "Creating Vulkan context... ");
 	m_vkCtx = m_baseArena.construct<VulkanContext>(); //new VulkanContext();
 #ifdef IGPU_PRIO
-	VkPresentModeKHR presentMode = VkPresentModeKHR::VK_PRESENT_MODE_FIFO_KHR;
+	VkPresentModeKHR presentMode = VK_PRESENT_MODE_FIFO_KHR;
 #else
 	//presentMode = VkPresentModeKHR::VK_PRESENT_MODE_MAILBOX_KHR;
-	VkPresentModeKHR presentMode = VkPresentModeKHR::VK_PRESENT_MODE_IMMEDIATE_KHR;
+	VkPresentModeKHR presentMode = VK_PRESENT_MODE_IMMEDIATE_KHR;
 #endif
 
 #ifdef IGPU_PRIO
@@ -221,7 +216,7 @@ void Engine::start() {
 	m_status = EngineStatus::PendingRun;
 	onStartInitiated.notify(this);
 	
-	//m_wnd->showWindow(SW_NORMAL);
+	m_wnd->showWindow(0);
 
 	m_status = EngineStatus::Running;
 	onStarted.notify(this);
@@ -238,7 +233,7 @@ inline void Engine::_run() {
 
 	m_baseTimers.startTimer(m_fpsCountTimer);
 
-	while (m_status != EngineStatus::PendingStop) {
+	while (m_status != EngineStatus::PendingStop && !glfwWindowShouldClose(m_vkCtx->window())) {
 
 #ifdef PROFILER
 		if (m_pendingTrace) {
@@ -261,7 +256,9 @@ inline void Engine::_run() {
 		PROFILE_SCOPE("Frame");
 		PROFILE_FRAME_MARK(m_totalFrames);
 
-		auto dt = _tickDt();
+		glfwPollEvents();
+
+		const auto dt = _tickDt();
 		m_updateDeltaTime = dt;
 		m_fixedAccu += dt;
 		m_totalTime += dt;
@@ -314,6 +311,8 @@ inline void Engine::_run() {
 				m_vkCtx->draw(drawCtx);
 			}
 
+			//TODO PRESENT HERE!
+
 			{
 				PROFILE_SCOPE("PostDraw");
 				m_vkCtx->postDraw();
@@ -326,7 +325,7 @@ inline void Engine::_run() {
 
 	}
 
-	for (auto scene : m_scenes) {
+	for (const auto scene : m_scenes) {
 		scene->unloadDispatch();
 		delete scene;
 	}
@@ -426,7 +425,7 @@ inline void Engine::_updateEarly(double dt) {
 	onEarlyUpdateExit.notify(this);
 }
 
-inline void Engine::_updateLate(double dt) {
+inline void Engine::_updateLate(const double dt) {
 	PROFILE_SCOPE("LateUpdate");
 	onLateUpdateEnter.notify(this);
 	std::vector<uint32_t> removeIndices;

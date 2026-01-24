@@ -106,7 +106,7 @@ private:
 public:
 	using iterator = GameObjectSystemIterator;
 
-	~GameObjectSystem() {
+	~GameObjectSystem() override {
 		for (auto& [_, entry] : m_typeVectors)
 			entry.deleter(entry.ptr);
 	}

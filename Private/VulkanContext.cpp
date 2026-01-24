@@ -707,7 +707,6 @@ void VulkanContext::draw(const DrawContext& ctx) {
 							auto& descSet = bindingToDescriptorSet[combo];
 							if (lastSets[combo.set] != descSet[currentFrame]) {
 								if (!pendingRebind) {
-									firstSet = combo.set;
 									setCount = 0;
 									pendingRebind = true;
 								}
@@ -716,8 +715,13 @@ void VulkanContext::draw(const DrawContext& ctx) {
 							}
 						}
 
-
 						if (pendingRebind) {
+							for (size_t fSeti = 0; fSeti  < 4; ++fSeti ) {
+								if (lastSets[fSeti] != nullptr) {
+									firstSet = fSeti;
+									break;
+								}
+							}
 							vkCmdBindDescriptorSets(frame.cmdBuffer,
 													VK_PIPELINE_BIND_POINT_GRAPHICS,
 													pipelineLayouts[matBase->pipelineLayoutId],

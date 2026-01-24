@@ -154,7 +154,7 @@ public:
 		cancelPersistentDraw(drawCmd.hash());
 	}
 
-	uint32_t addCamera(CameraData* initData = nullptr);
+	uint32_t addCamera(const CameraData* initData = nullptr) const;
 
 	std::span<MeshDrawCommand> persistentDrawCommands() { 
 		return std::span<MeshDrawCommand>(s_threadPresistentDrawBuffers[m_sceneIndex]); }

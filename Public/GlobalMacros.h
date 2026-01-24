@@ -43,6 +43,8 @@ constexpr std::size_t operator""_TB(const unsigned long long val) {
     return val * 1024ULL * 1024ULL * 1024ULL * 1024ULL;
 }
 
+
+
 //#define TB(x) static_cast<size_t>(1024 * 1024 * 1024 * 1024 * (x))
 //#define GB(x) static_cast<size_t>(1024 * 1024 * 1024 * (x))
 //#define MB(x) static_cast<size_t>(1024 * 1024 * (x))

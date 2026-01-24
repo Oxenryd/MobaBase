@@ -302,7 +302,7 @@ namespace MMath
 
             // Now do the center-extent test for intersection
             const float* plane = &frustum.planes[i].raw[0];
-            const __m128 n_d = _mm_load_ps(plane);
+            const __m128 n_d = _mm_loadu_ps(plane);
             const __m128 center_vec = _mm_set_ps(0.0f, center.z, center.y, center.x);
             const __m128 extent_vec = _mm_set_ps(0.0f, extent.z, extent.y, extent.x);
 
@@ -451,7 +451,7 @@ namespace MMath
         }
     }
 
-    INLINE glm::mat4 matrix_multiply_avx2(const glm::mat4& a, const glm::mat4& b) {
+    INLINE glm::mat4 matrix_multiply_avx2(const glm::mat4& a, const glm::mat4& b) { // testing value sem
         alignas(32) glm::mat4 result;
 
         const float* pa = &a[0][0]; // column-major, 16 floats
