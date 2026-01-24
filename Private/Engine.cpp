@@ -97,7 +97,7 @@ ErrorCode Engine::_initShaderManager() {
 
 ErrorCode Engine::_initInputManager() {
 	m_inputMan = baseArena().construct<InputManager>(m_wnd); //new InputManager(m_wnd);
-	//m_wnd->enableRawInput();
+
 	return ErrorCode::OK;
 }
 

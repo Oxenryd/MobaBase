@@ -101,10 +101,10 @@ public:
         //modelMesh2.getTransform().modifyPosition() = { -12, 0, 0 };
         //auto& reg = registry();
 
-        Engine::getInstance()->getInputManager()->onKeyHold.subscribe( [this](KeyCode code) -> void
+        Engine::getInstance()->getInputManager()->onKeyHold.subscribe( [this](const KeyCode code) -> void
                        {
-                           auto cam = Camera::getCamera(m_sceneIndex, m_camIndex);
-                           auto dt = Timing::deltaTimeF();
+                           const auto cam = Camera::getCamera(m_sceneIndex, m_camIndex);
+                           const auto dt = Timing::deltaTimeF();
                            switch (code) {
                                case KeyCode::W:
                                    cam->translate(cam->transform().forward() * m_camSpeed * dt); break;
@@ -124,7 +124,7 @@ public:
                        });
 
         Engine::getInstance()->getInputManager()->
-              onKeyDown.subscribe([this](KeyCode code) -> void
+              onKeyDown.subscribe([this](const KeyCode code) -> void
                                   {
                                       switch (code) {
                                           case KeyCode::B: sceneRender().setDrawAABBs(!sceneRender().drawCoarseAbbs()); break;
@@ -173,15 +173,15 @@ public:
         //     Engine::getInstance()->getInputManager()->disableRelativeMouse();
         //                              });
 
-        Engine::getInstance()->getInputManager()->
-            onMouseRightHold.subscribe([this](MouseState state) -> void 
-                                       {
-            auto cam = Camera::getCamera(m_sceneIndex, m_camIndex);
-            auto dt = Timing::deltaTime();
-            auto height = Engine::getInstance()->getWndSurface()->height;
-            auto width = Engine::getInstance()->getWndSurface()->width;
-            cam->rotateLocal(Input::scaledMouseMovementVec3(state, dt, 0.1f, {width, height}));
-                                       });
+        // Engine::getInstance()->getInputManager()->
+        //     onMouseRightHold.subscribe([this](MouseState state) -> void
+        //                                {
+        //     auto cam = Camera::getCamera(m_sceneIndex, m_camIndex);
+        //     auto dt = Timing::deltaTime();
+        //     auto height = Engine::getInstance()->getWndSurface()->height;
+        //     auto width = Engine::getInstance()->getWndSurface()->width;
+        //     cam->rotateLocal(Input::scaledMouseMovementVec3(state, dt, 0.1f, {width, height}));
+        //                                });
 
 
         //Engine::getInstance()->getGlobalSystem().printAllTags();

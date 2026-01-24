@@ -520,8 +520,11 @@ private:
 	std::binary_semaphore* m_threadSemas[VULKAN_FRAMES_IN_FLIGHT] = { nullptr, nullptr };
 	FrameArena*  m_mapArenas[VULKAN_FRAMES_IN_FLIGHT];
 	std::vector<std::vector<MeshDrawCommand>> drawCmds[VULKAN_FRAMES_IN_FLIGHT];
-	std::vector<robin_hood::unordered_flat_set<uint32_t>> submeshKeysWithMultipleInstances[VULKAN_FRAMES_IN_FLIGHT];
-	std::vector<robin_hood::unordered_flat_map<uint32_t, BoundedInstanceData>> submeshDrawInstanceData[VULKAN_FRAMES_IN_FLIGHT];
+
+	std::vector<robin_hood::unordered_flat_set<uint32_t>>
+		submeshKeysWithMultipleInstances[VULKAN_FRAMES_IN_FLIGHT];
+	std::vector<robin_hood::unordered_flat_map<uint32_t, BoundedInstanceData>>
+		submeshDrawInstanceData[VULKAN_FRAMES_IN_FLIGHT];
 	
 
 	struct QueueFamilyIndices
@@ -534,16 +537,19 @@ private:
 		}
 	};
 
-	INLINE MeshDrawCommand subMeshEntity_to_drawCommand(SceneBase* scene, ArenaRegistry& reg, entt::entity entity);
+	INLINE MeshDrawCommand subMeshEntity_to_drawCommand(
+		SceneBase* scene, ArenaRegistry& reg, entt::entity entity);
 
 	static QueueFamilyIndices findQueueFamilies(const VkPhysicalDevice device, const VkSurfaceKHR surface) {
 		QueueFamilyIndices indices_;
 
 		uint32_t queueFamilyCount = 0;
-		vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, nullptr);
+		vkGetPhysicalDeviceQueueFamilyProperties(
+			device, &queueFamilyCount, nullptr);
 
 		std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
-		vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, queueFamilies.data());
+		vkGetPhysicalDeviceQueueFamilyProperties(
+			device, &queueFamilyCount, queueFamilies.data());
 
 		for (uint32_t i = 0; i < queueFamilyCount; i++) {
 			if (queueFamilies[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) {
