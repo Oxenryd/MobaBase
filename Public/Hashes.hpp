@@ -48,7 +48,7 @@ struct FastPairHash
 struct StringHash {
     using is_transparent = void;
 
-    size_t operator()(std::string_view sv) const noexcept {
+    size_t operator()(const std::string_view sv) const noexcept {
         return boost::hash_range(sv.begin(), sv.end());
     }
 

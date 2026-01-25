@@ -3,9 +3,12 @@
 
 #include <glm/glm.hpp>
 #include <boost/unordered/unordered_flat_set.hpp>
+//#include <oneapi/tbb/detail/_task.h>
+
 #include "WindowContext.h"
 #include "Delegate.hpp"
 #include "InputTypes.h"
+//#include "../out/build/Linux-x64-debug/_deps/glfw-src/src/wl_platform.h"
 
 
 //#include "GlobalMacros.h"
@@ -96,100 +99,93 @@ public:
 	}
 };
 
+enum class CursorMode
+{
+	Normal = GLFW_CURSOR,
+	Hidden = GLFW_CURSOR_HIDDEN,
+	HiddenGrabbed = GLFW_CURSOR_DISABLED
+};
 
-
-
+class Engine;
 class InputManager
 {
+	friend Engine;
 	inline static InputManager* s_instance = nullptr;
-	boost::unordered_flat_map<KeyCombo, std::vector<Action>, KeyComboHash> m_keyboardActions;
-	boost::unordered_flat_map<KeyCombo, std::vector<Event<ActionState>*>, KeyComboHash> m_keyDownActionMap;
-	boost::unordered_flat_set<int, IntHash<int>> m_keysDown;
 
-	std::vector<Action> m_mouseActions;
-	std::vector<Action> m_gamepadActions;
+	boost::unordered_flat_map<
+		KeyCombo, std::vector<Action>, KeyComboHash> m_keyboardActions;
+	boost::unordered_flat_map<
+		KeyCombo, std::vector<Event<ActionState>*>, KeyComboHash> m_keyDownActionMap;
+	boost::unordered_flat_set<
+		int, IntHash<int>> m_keysDown;
+
+	boost::unordered_flat_map<
+		MouseButtonState, std::vector<Action>, MouseButtonStateHash> m_mouseButtonActions;
+	boost::unordered_flat_map<
+		MouseButtonState, std::vector<Event<ActionState>*>, MouseButtonStateHash> m_mouseDownActionMap;
+	boost::unordered_flat_set<
+		int, IntHash<int>> m_mouseButtonsDown;
 
 
-	uint8_t m_mButtonsDown = 0;
-	bool m_ignoreNextMouseDelta = false;
 	MouseState m_lastMouseState;
 	MouseState m_currentMouseState;
-	glm::i16vec2 m_lastDeltaMax{};
 
-
-	bool m_gotMousePosThisFrame = false;
+	GLFWwindow* m_window;
 	float m_deltaTime{};
 
+	// Keyboard
+	Event<const KeyCombo> m_onKeyEvent;
+	Event<const KeyCode> m_onKeyDown;
+	Event<const KeyCode> m_onKeyHold;
+	Event<const KeyCode> m_onKeyUp;
 
-	void _notifyMouseButtonEvent(const uint8_t mask, const ActionState action) const {
+	// Mouse
+	Event<const MouseState&, const MouseButton> m_onMouseButtonDown;
+	Event<const MouseState&, const MouseButton> m_onMouseButtonHold;
+	Event<const MouseState&, const MouseButton> m_onMouseButtonUp;
+	Event<const MouseState&, const glm::i16vec2> m_onMouseMove;
 
-		switch (mask) {
+	static void mouse_button_callback(GLFWwindow* window, int button, int action, int mods) {
+		if (window != s_instance->m_window)
+			return;
 
-			default: return;
-
-			case static_cast<uint8_t>(MButton::Button1): switch (action) {
-				default: return;
-				case ActionState::Started: onMouseLeftDown.notify(m_currentMouseState); return;
-				case ActionState::Performed: onMouseLeftHold.notify(m_lastMouseState); return;
-				case ActionState::Stopped: onMouseLeftUp.notify(m_currentMouseState); return;
-			}
-
-			case static_cast<uint8_t>(MButton::Button2): switch (action) {
-				default: return;
-				case ActionState::Started: onMouseRightDown.notify(m_currentMouseState); return;
-				case ActionState::Performed: onMouseRightHold.notify(m_lastMouseState); return;
-				case ActionState::Stopped: onMouseRightUp.notify(m_currentMouseState); return;
-			}
-
-			case static_cast<uint8_t>(MButton::Button3): switch (action) {
-				default: return;
-				case ActionState::Started: onMouseMiddleDown.notify(m_currentMouseState); return;
-				case ActionState::Performed: onMouseMiddleHold.notify(m_lastMouseState); return;
-				case ActionState::Stopped: onMouseMiddleUp.notify(m_currentMouseState); return;
-			}
-
-			case static_cast<uint8_t>(MButton::Button4): switch (action) {
-				default: return;
-				case ActionState::Started: onMouseM4Down.notify(m_currentMouseState); return;
-				case ActionState::Performed: onMouseM4Hold.notify(m_lastMouseState); return;
-				case ActionState::Stopped: onMouseM4Up.notify(m_currentMouseState); return;
-			}
-
-			case static_cast<uint8_t>(MButton::Button5): switch (action) {
-				default: return;
-				case ActionState::Started: onMouseM5Down.notify(m_currentMouseState); return;
-				case ActionState::Performed: onMouseM5Hold.notify(m_lastMouseState); return;
-				case ActionState::Stopped: onMouseM5Up.notify(m_currentMouseState); return;
-			}
-
-			case static_cast<uint8_t>(MButton::Button6): switch (action) {
-				default: return;
-				case ActionState::Started: onMouseM6Down.notify(m_currentMouseState); return;
-				case ActionState::Performed: onMouseM6Hold.notify(m_lastMouseState); return;
-				case ActionState::Stopped: onMouseM6Up.notify(m_currentMouseState); return;
-			}
-
-			case static_cast<uint8_t>(MButton::Button7): switch (action) {
-				default: return;
-				case ActionState::Started: onMouseM7Down.notify(m_currentMouseState); return;
-				case ActionState::Performed: onMouseM7Hold.notify(m_lastMouseState); return;
-				case ActionState::Stopped: onMouseM7Up.notify(m_currentMouseState); return;
-			}
-
-			case static_cast<uint8_t>(MButton::Button8): switch (action) {
-				default: return;
-				case ActionState::Started: onMouseM8Down.notify(m_currentMouseState); return;
-				case ActionState::Performed: onMouseM8Hold.notify(m_lastMouseState); return;
-				case ActionState::Stopped: onMouseM8Up.notify(m_currentMouseState); return;
-			}
-
+		const auto bState = MouseButtonState(button, mods);
+		const auto aState = static_cast<ActionState>(action);
+		const auto it = s_instance->m_mouseButtonActions.find(bState);
+		if (it != s_instance->m_mouseButtonActions.end()) {
+			//TODO
 		}
 
-	}
+		switch (aState) {
+			default: break;
 
+			case ActionState::Started: {
+				const auto mDownIT = s_instance->m_mouseButtonsDown.find(button);
+				if (mDownIT == s_instance->m_mouseButtonsDown.end()) {
+					s_instance->m_mouseButtonsDown.insert(button);
+				}
+				s_instance->m_currentMouseState.buttonState =
+					s_instance->m_currentMouseState.buttonState | bState;
+				s_instance->m_onMouseButtonDown.notify(s_instance->m_currentMouseState, glfwToMButton(button));
+			} break;
+
+			case ActionState::Stopped: {
+				const auto mDownIT = s_instance->m_mouseButtonsDown.find(button);
+				if (mDownIT != s_instance->m_mouseButtonsDown.end()) {
+					s_instance->m_mouseButtonsDown.erase(button);
+				}
+				s_instance->m_currentMouseState.buttonState =
+					s_instance->m_currentMouseState.buttonState & ~bState;
+				s_instance->m_onMouseButtonUp.notify(s_instance->m_currentMouseState, glfwToMButton(button));
+			} break;
+		}
+	}
 
 	static void key_callback(GLFWwindow* window, int key, int scancode, int glfwAction, int mods)
 	{
+		if (window != s_instance->m_window)
+			return;
+
 		const KeyCombo combo{key, mods};
 		const auto aState = static_cast<ActionState>(glfwAction);
 		const auto it = s_instance->m_keyboardActions.find(combo);
@@ -231,19 +227,51 @@ class InputManager
 				const auto keyIt = s_instance->m_keysDown.find(key);
 				if (keyIt == s_instance->m_keysDown.end()) {
 					s_instance->m_keysDown.insert(key);
-					s_instance->onKeyDown.notify(glfwToKeyCode(key));
+					s_instance->m_onKeyDown.notify(glfwToKeyCode(key));
 				}
 			} break;
 			case ActionState::Stopped: {
 				const auto keyIt = s_instance->m_keysDown.find(key);
 				if (keyIt != s_instance->m_keysDown.end()) {
 					s_instance->m_keysDown.erase(keyIt);
-					s_instance->onKeyUp.notify(glfwToKeyCode(key));
+					s_instance->m_onKeyUp.notify(glfwToKeyCode(key));
 				}
 			} break;
 		}
 	}
 
+	INLINE void update(const double dt) {
+
+		m_deltaTime = static_cast<float>(dt);
+
+		// Mouse input
+		double xpos, ypos;
+		glfwGetCursorPos(m_window, &xpos, &ypos);
+		s_instance->m_currentMouseState.relativePosition = glm::vec2(xpos, ypos);
+		s_instance->m_currentMouseState.absoluteScreenPosition = glm::vec2(xpos, ypos);
+		m_currentMouseState.deltaPosition =
+			m_currentMouseState.relativePosition - m_lastMouseState.relativePosition;
+		if (m_currentMouseState.deltaPosition.x != 0 || m_currentMouseState.deltaPosition.y != 0) {
+			m_onMouseMove.notify(m_currentMouseState, m_currentMouseState.deltaPosition);
+		}
+		for (const auto& btn : m_mouseButtonsDown) {
+			m_onMouseButtonHold.notify(m_currentMouseState, glfwToMButton(btn));
+		}
+
+
+
+		// Keyboard input
+		for (auto& actionList: m_keyDownActionMap | std::views::values) {
+			for (const auto& actionEvent : actionList ) {
+				actionEvent->notify(ActionState::Stopped);
+			}
+		}
+		for (const auto& key : m_keysDown) {
+			m_onKeyHold.notify(glfwToKeyCode(key));
+		}
+
+		m_lastMouseState = m_currentMouseState;
+	}
 
 public:
     ~InputManager() {}
@@ -254,98 +282,42 @@ public:
     		throw std::runtime_error("There Can only be one InputManager!!");
     	}
     	s_instance = this;
-    	glfwSetKeyCallback(context->window(), key_callback);
+    	m_window = context->window();
+
+    	glfwSetInputMode(m_window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+
+    	glfwSetKeyCallback(m_window, key_callback);
+    	glfwSetMouseButtonCallback(m_window, mouse_button_callback);
+
 	}
 
-	INLINE void update(const double dt) {
+	INLINE static void setCursorMode(const CursorMode mode) {
+	    switch (mode) {
+		    case CursorMode::Normal:
+	    		glfwSetInputMode(s_instance->m_window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+	    		glfwSetInputMode(s_instance->m_window, GLFW_RAW_MOUSE_MOTION, GLFW_FALSE);
+	    		break;
 
-		m_deltaTime = static_cast<float>(dt);
-		//m_lastDeltaMax = { 0,0 };
-		//m_currentMouseState.lastPositionDelta = m_lastDeltaMax;
-		m_currentMouseState.lastPositionDelta = glm::ivec2{ 0, 0 };
+	    	case CursorMode::Hidden:
+	    		glfwSetInputMode(s_instance->m_window, GLFW_CURSOR, GLFW_CURSOR_HIDDEN);
+	    		glfwSetInputMode(s_instance->m_window, GLFW_RAW_MOUSE_MOTION, GLFW_FALSE);
+	    		break;
 
-
-		for (auto& actionList: m_keyDownActionMap | std::views::values) {
-			for (const auto& actionEvent : actionList ) {
-				actionEvent->notify(ActionState::Stopped);
-			}
-		}
-    	for (const auto& key : m_keysDown) {
-    		onKeyHold.notify(glfwToKeyCode(key));
-    	}
-
-		for (uint8_t i = 0; i < 8; ++i) {
-			const uint8_t mask = 1 << i;
-			if (m_mButtonsDown & mask)
-				_notifyMouseButtonEvent(mask, ActionState::Performed);
-		}
+	    	case CursorMode::HiddenGrabbed:
+	    		glfwSetInputMode(s_instance->m_window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+	    		glfwSetInputMode(s_instance->m_window, GLFW_RAW_MOUSE_MOTION, GLFW_TRUE);
+	    		break;
+	    }
+    }
 
 
-		// MouseButtons
-		//uint8_t last = m_lastMouseState.buttonState.getField();
-		const uint8_t curr = m_currentMouseState.buttonState.raw;
-		for (uint8_t i = 0; i < 8; ++i) {
-			const uint8_t mask = 1 << i;
-			if (m_mButtonsDown & mask) {
-				if (!(curr & mask))
-					_notifyMouseButtonEvent(mask, ActionState::Stopped);
-			} else if (curr & mask)
-				_notifyMouseButtonEvent(mask, ActionState::Started);
-		}
-		m_mButtonsDown = curr;
-		m_lastMouseState = m_currentMouseState;
-	}
 
-	MouseState& currentMouseState() const { return const_cast<MouseState&>(m_currentMouseState); }
-	MouseState& lastMouseState() const { return const_cast<MouseState&>(m_lastMouseState); }
-
-	// void mouseToWindowCenter() {
-	// 	m_ignoreNextMouseDelta = true;
-	// 	POINT pt{ m_ws->width / 2, m_ws->height / 2 };
-	// 	ClientToScreen(m_ws->windowHandle, &pt);
-	// 	SetCursorPos(pt.x, pt.y);
-	// }
-	//
-	// void enableRelativeMouse() {
-	// 	// Hide cursor
-	// 	while (ShowCursor(FALSE) >= 0); // ensure hidden
-	//
-	// 	// Confine to client area
-	// 	RECT rect;
-	// 	GetClientRect(m_ws->windowHandle, &rect);
-	// 	POINT tl = { rect.left, rect.top };
-	// 	POINT br = { rect.right, rect.bottom };
-	// 	ClientToScreen(m_ws->windowHandle, &tl);
-	// 	ClientToScreen(m_ws->windowHandle, &br);
-	// 	RECT clipRect = { tl.x, tl.y, br.x, br.y };
-	// 	ClipCursor(&clipRect);
-	// }
-	//
-	// void disableRelativeMouse() {
-	// 	// Show cursor
-	// 	while (ShowCursor(TRUE) < 0); // ensure visible
-	//
-	// 	// Release cursor
-	// 	ClipCursor(nullptr);
-	// }
-
-	// static void handleKeyEvent(InputManager* _this, KeyCombo event) {
-	//
-	// 	_this->onKeyEvent.notify(event); // for manual handling
-	//
-	// 	const auto it = _this->m_keyButtonDownMap.find(static_cast<uint16_t>(event.code));
-	// 	if (event.action == ActionState::Stopped) {
-	// 		if (it != _this->m_keyButtonDownMap.end()) {
-	// 			_this->m_keyButtonDownMap.erase(it);
-	// 			_this->onKeyUp.notify(event.code);
-	// 		}
-	// 	} else {
-	// 		if (it == _this->m_keyButtonDownMap.end()) {
-	// 			_this->m_keyButtonDownMap.insert(static_cast<uint16_t>(event.code));
-	// 			_this->onKeyDown.notify(event.code);
-	// 		}
-	// 	}
-	// }
+	static const MouseState& currentMouseState() { return s_instance->m_currentMouseState; }
+	static const MouseState& lastMouseState() { return s_instance->m_lastMouseState; }
+	static glm::vec3 deltaPosVec3_swizzled() {
+    	const auto delta = s_instance->m_currentMouseState.deltaPosition;
+	    return glm::vec3(delta.x, delta.y, 0.0f);
+    }
 
 	// EVENTS
 
@@ -353,74 +325,55 @@ public:
 
 
 	// Keyboard
-	Event<const KeyCombo> onKeyEvent;
-	Event<const KeyCode> onKeyDown;
-	Event<const KeyCode> onKeyHold;
-	Event<const KeyCode> onKeyUp;
+	static Event<const KeyCombo>& onKeyEvent() { return s_instance->m_onKeyEvent; }
+	static Event<const KeyCode>& onKeyDown() { return s_instance->m_onKeyDown; }
+	static Event<const KeyCode>& onKeyUp() { return s_instance->m_onKeyUp; }
+	static Event<const KeyCode>& onKeyHold() { return s_instance->m_onKeyHold; }
 
 
 	// Mouse
-	Event<MouseState> onMouseButtonDown;
-	Event<MouseState> onMouseButtonHold;
-	Event<MouseState> onMouseButtonUp;
+	static Event<const MouseState&, const MouseButton>& onMouseDown() {
+	    return s_instance->m_onMouseButtonDown; }
+	static Event<const MouseState&, const MouseButton>& onMouseUp() {
+    	return s_instance->m_onMouseButtonUp; }
+	static Event<const MouseState&, const MouseButton>& onMouseHold() {
+    	return s_instance->m_onMouseButtonHold; }
+	static Event<const MouseState&, const glm::i16vec2>& onMouseMove() {
+    	return s_instance->m_onMouseMove; }
 
-	Event<MouseState> onMouseLeftDown;
-	Event<MouseState> onMouseLeftHold;
-	Event<MouseState> onMouseLeftUp;
-	Event<MouseState> onMouseRightDown;
-	Event<MouseState> onMouseRightHold;
-	Event<MouseState> onMouseRightUp;
-	Event<MouseState> onMouseMiddleDown;
-	Event<MouseState> onMouseMiddleHold;
-	Event<MouseState> onMouseMiddleUp;
-	Event<MouseState> onMouseM4Down;
-	Event<MouseState> onMouseM4Hold;
-	Event<MouseState> onMouseM4Up;
-	Event<MouseState> onMouseM5Down;
-	Event<MouseState> onMouseM5Hold;
-	Event<MouseState> onMouseM5Up;
-	Event<MouseState> onMouseM6Down;
-	Event<MouseState> onMouseM6Hold;
-	Event<MouseState> onMouseM6Up;
-	Event<MouseState> onMouseM7Down;
-	Event<MouseState> onMouseM7Hold;
-	Event<MouseState> onMouseM7Up;
-	Event<MouseState> onMouseM8Down;
-	Event<MouseState> onMouseM8Hold;
-	Event<MouseState> onMouseM8Up;
 };
 
 
-class Input
-{
-private:
-	static constexpr uint16_t STANDARD_WIDTH = 1280;
-	static constexpr uint16_t STANDARD_HEIGHT = 800;
-public:
-
-	template <std::floating_point T, std::floating_point U>
-	INLINE static glm::vec2 scaledMouseMovementVec2(
-		const MouseState& mState,
-		T dt, U sensitivity,
-		glm::highp_u16vec2 resolution = { STANDARD_WIDTH , STANDARD_HEIGHT }) {
-
-		//auto rec = 0.00025f / dt;
-		glm::vec2 scaledRes = glm::vec2{ static_cast<float>(resolution.x), static_cast<float>(resolution.y) } * INPUT_RESO_SCALE_FACTOR;
-		float sense = static_cast<float>(sensitivity * sensitivity);
-		return glm::vec2{
-			-(float)mState.lastPositionDelta.x * sense * scaledRes.x,
-			-(float)mState.lastPositionDelta.y * sense * scaledRes.y
-		};
-	}
-	template <std::floating_point T, std::floating_point U>
-	INLINE static glm::vec3 scaledMouseMovementVec3(
-		const MouseState& mState,
-		T dt, U sensitivity,
-		glm::highp_u16vec2 resolution = { STANDARD_WIDTH , STANDARD_HEIGHT }) {
-		auto vec2 = scaledMouseMovementVec2(mState, dt, sensitivity, resolution);
-		return glm::vec3(vec2.x, vec2.y, 0.0f);
-	}
-};
+// class Input
+// {
+// private:
+// 	static constexpr uint16_t STANDARD_WIDTH = 1280;
+// 	static constexpr uint16_t STANDARD_HEIGHT = 800;
+// public:
+//
+// 	template <std::floating_point T, std::floating_point U>
+// 	INLINE static glm::vec2 scaledMouseMovementVec2(
+// 		const MouseState& mState,
+// 		T dt, U sensitivity,
+// 		glm::highp_u16vec2 resolution = { STANDARD_WIDTH , STANDARD_HEIGHT }) {
+//
+// 		//auto rec = 0.00025f / dt;
+// 		glm::vec2 scaledRes = glm::vec2{ static_cast<float>(resolution.x), static_cast<float>(resolution.y) } * INPUT_RESO_SCALE_FACTOR;
+// 		float sense = static_cast<float>(sensitivity * sensitivity);
+// 		return glm::vec2{
+// 			-(float)mState.deltaPosition.x * sense * scaledRes.x,
+// 			-(float)mState.deltaPosition.y * sense * scaledRes.y
+// 		};
+// 	}
+// 	template <std::floating_point T, std::floating_point U>
+// 	INLINE static glm::vec3 scaledMouseMovementVec3(
+// 		const MouseState& mState,
+// 		T dt, U sensitivity,
+// 		glm::highp_u16vec2 resolution = { STANDARD_WIDTH , STANDARD_HEIGHT }) {
+// 		auto vec2 = scaledMouseMovementVec2(mState, dt, sensitivity, resolution);
+// 		return glm::vec3(vec2.x, vec2.y, 0.0f);
+// 	}
+// };
 
 
 #endif // INPUTMANAGER_HPP

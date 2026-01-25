@@ -151,7 +151,6 @@ private:
 template<typename... Args>
 class Event
 {
-private:
     std::vector<Delegate<Args...>> m_listeners;
 
 public:

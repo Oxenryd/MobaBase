@@ -127,7 +127,7 @@ enum class GLFW_MouseButton : uint8_t
     ENUM_END
 };
 
-enum class MButton : uint8_t
+enum class MouseButton : uint8_t
 {
     None = 0,
 
@@ -144,133 +144,151 @@ enum class MButton : uint8_t
     Button5 =   1 << 4,
     Button6 =   1 << 5,
     Button7 =   1 << 6,
-    Button8 =   1 << 7
+    Button8 =   1 << 7,
 };
-
-
-INLINE static MButton operator|(MButton a, MButton b) {
-    return static_cast<MButton>(
-        static_cast<uint8_t>(a) | static_cast<uint8_t>(b)
-        );
-}
-
-INLINE static KeyMod operator|(KeyMod  a, KeyMod  b) {
-    return static_cast<KeyMod >(
-        static_cast<uint8_t>(a) | static_cast<uint8_t>(b)
-        );
-}
-
-// template<typename A, typename B>
-//     requires
-//         std::is_convertible_v<A, uint8_t> &&
-//         std::is_convertible_v<B, uint8_t>
-// INLINE static MButton operator|(A a, B b) {
-//     return static_cast<MButton>(
-//         static_cast<uint8_t>(a) | static_cast<uint8_t>(b)
-//         );
-// }
-// template<typename A, typename B>
-//     requires
-//         std::is_convertible_v<A, uint8_t> &&
-//         std::is_convertible_v<B, uint8_t>
-// INLINE static MButton operator&(A a, B b) {
-//     return static_cast<MButton>(
-//         static_cast<uint8_t>(a) & static_cast<uint8_t>(b)
-//         );
-// }
-//
-// template<typename A, typename B>
-//     requires
-//         std::is_convertible_v<A, uint8_t> &&
-//         std::is_convertible_v<B, uint8_t>
-// INLINE static KeyMod operator|(A a, B b) {
-//     return static_cast<KeyMod>(
-//         static_cast<uint8_t>(a) | static_cast<uint8_t>(b)
-//         );
-// }
-// template<typename A, typename B>
-//     requires
-//         std::is_convertible_v<A, uint8_t> &&
-//         std::is_convertible_v<B, uint8_t>
-// INLINE static KeyMod operator&(A a, B b) {
-//     return static_cast<KeyMod>(
-//         static_cast<uint8_t>(a) & static_cast<uint8_t>(b)
-//         );
-// }
-
-struct MouseButtonState {
-    uint8_t raw;
-
-    template <typename I>
-    constexpr bool isButtonDown(const I button) const {
-        if constexpr (std::is_same_v<I, MButton>)
-            return raw & button;
-        if constexpr (std::is_same_v<I, GLFW_MouseButton>)
-            return raw = 1 << button;
-        else
-            static_assert(false);
-        return false;
-    }
-    constexpr std::string getBitString() const {
-        std::string str{};
-        for (size_t i = 8; i >= 1; --i) {
-            str.append(std::string{
-                static_cast<char>(
-                    static_cast<uint8_t>(raw & 1 << (i-1)) + 48
-                    )
-            });
-        }
-        return str;
-    }
-};
-
-
 
 template<typename I>
     requires std::is_integral_v<I>
-constexpr MButton glfwToMButton(const I button) {
+constexpr MouseButton glfwToMButton(const I button) {
     switch (button) {
-        default: return MButton::None;
+        default: return MouseButton::None;
 
         case GLFW_MOUSE_BUTTON_LEFT:
-            return MButton::Button1;
+            return MouseButton::Button1;
         case GLFW_MOUSE_BUTTON_RIGHT:
-            return MButton::Button2;
+            return MouseButton::Button2;
         case GLFW_MOUSE_BUTTON_MIDDLE:
-            return MButton::Button3;
+            return MouseButton::Button3;
         case GLFW_MOUSE_BUTTON_4:
-            return MButton::Button4;
+            return MouseButton::Button4;
         case GLFW_MOUSE_BUTTON_5:
-            return MButton::Button5;
+            return MouseButton::Button5;
         case GLFW_MOUSE_BUTTON_6:
-            return MButton::Button6;
+            return MouseButton::Button6;
         case GLFW_MOUSE_BUTTON_7:
-            return MButton::Button7;
+            return MouseButton::Button7;
         case GLFW_MOUSE_BUTTON_8:
-            return MButton::Button8;
+            return MouseButton::Button8;
     }
 }
 
-struct MouseState
+struct alignas(2) MouseButtonState {
+    union {
+        struct {
+            MouseButton button;
+            KeyMod mods;
+        };
+        uint16_t raw{};
+    };
+
+    MouseButtonState() = default;
+    MouseButtonState(const MouseButtonState& other) :
+        raw{other.raw} {}
+    MouseButtonState(const MouseButton& buttons, const KeyMod& mods) :
+        button(buttons), mods(mods) {}
+    MouseButtonState(const int button, const int mods) :
+        button{glfwToMButton(button)}, mods{static_cast<KeyMod>(mods)} {}
+    MouseButtonState& operator=(const MouseButtonState& other) {
+        raw = other.raw;
+        return *this;
+    }
+    MouseButtonState(MouseButtonState&& other) noexcept {
+        raw = other.raw;
+        other.raw = 0;
+    }
+
+    uint8_t buttonMask() const { return static_cast<uint8_t>(button); }
+
+    MouseButtonState& operator=(MouseButtonState&& other) noexcept {
+        raw = other.raw;
+        other.raw = 0;
+        return *this;
+    }
+
+    MouseButtonState operator~() const {
+        const auto neg = ~static_cast<uint8_t>(button);
+        return MouseButtonState{static_cast<MouseButton>(neg), mods};
+    }
+
+    friend bool operator==(const MouseButtonState& lhs, const MouseButtonState& rhs) {
+        return lhs.raw == rhs.raw;
+    }
+};
+
+struct MouseButtonStateHash {
+    size_t operator()(MouseButtonState const& value) const noexcept {
+        uint64_t x = static_cast<uint64_t>(value.raw);
+        x = (x ^ (x >> 30)) * 0xbf58476d1ce4e5b9ULL;
+        x = (x ^ (x >> 27)) * 0x94d049bb133111ebULL;
+        x = x ^ (x >> 31);
+        return x;
+    }
+};
+
+INLINE static KeyMod operator|(KeyMod  a, KeyMod  b) {
+    return static_cast<KeyMod>(
+        static_cast<uint8_t>(a) | static_cast<uint8_t>(b)
+        );
+}
+INLINE static KeyMod operator&(KeyMod  a, KeyMod  b) {
+    return static_cast<KeyMod >(
+        static_cast<uint8_t>(a) & static_cast<uint8_t>(b)
+        );
+}
+
+INLINE static MouseButton operator|(MouseButton a, MouseButton b) {
+    return static_cast<MouseButton>(
+        static_cast<uint8_t>(a) | static_cast<uint8_t>(b)
+        );
+}
+INLINE static MouseButton operator&(MouseButton a, MouseButton b) {
+    return static_cast<MouseButton>(
+        static_cast<uint8_t>(a) & static_cast<uint8_t>(b)
+        );
+}
+
+INLINE static MouseButtonState operator|(MouseButtonState a, MouseButtonState b) {
+    const auto buttons = a.button | b.button;
+    const auto mods = a.mods | b.mods;
+    return MouseButtonState{buttons, mods};
+}
+INLINE static MouseButtonState operator&(MouseButtonState a, MouseButtonState b) {
+    const auto buttons = a.button & b.button;
+    const auto mods = a.mods & b.mods;
+    return MouseButtonState{buttons, mods};
+}
+
+
+
+
+
+struct alignas(16) MouseState
 {
-    glm::ivec2 relativePosition{};
-    glm::ivec2 lastPositionDelta{};
-    glm::ivec2 absoluteScreenPosition{};
-    glm::i16vec2 wheel{};
+    glm::vec2 relativePosition{};
+    glm::vec2 absoluteScreenPosition{};
+    glm::vec2 wheel{};
+    glm::vec2 deltaPosition{};
     MouseButtonState buttonState{};
 
-    std::string to_String() {
-        return std::format("\n absPos: {},{}\trelPos: {},{}\twhDelta: {},{}\tpDelta: {},{}\tbState: {}",
+    std::string to_string() const {
+        return std::format("\n absPos: {},{}\trelPos: {},{}\twhDelta: {},{}\tdPos: {},{}\tbState: {}",
                            absoluteScreenPosition.x,
                            absoluteScreenPosition.y,
                            relativePosition.x,
                            relativePosition.y,
                            wheel.x,
                            wheel.y,
-                           lastPositionDelta.x,
-                           lastPositionDelta.y,
-                           buttonState.getBitString()
+                           deltaPosition.x,
+                           deltaPosition.y,
+                           buttonState.raw
                            );
+    }
+
+    constexpr void reset() {
+        relativePosition = glm::ivec2(0, 0);
+        absoluteScreenPosition = glm::ivec2(0, 0);
+        wheel = glm::ivec2(0, 0);
+        buttonState.raw = 0;
     }
 };
 

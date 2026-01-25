@@ -101,7 +101,7 @@ public:
         //modelMesh2.getTransform().modifyPosition() = { -12, 0, 0 };
         //auto& reg = registry();
 
-        Engine::getInstance()->getInputManager()->onKeyHold.subscribe( [this](const KeyCode code) -> void
+        InputManager::onKeyHold().subscribe( [this](const KeyCode code) -> void
                        {
                            const auto cam = Camera::getCamera(m_sceneIndex, m_camIndex);
                            const auto dt = Timing::deltaTimeF();
@@ -123,56 +123,80 @@ public:
                               
                        });
 
-        Engine::getInstance()->getInputManager()->
-              onKeyDown.subscribe([this](const KeyCode code) -> void
-                                  {
-                                      switch (code) {
-                                          case KeyCode::B: sceneRender().setDrawAABBs(!sceneRender().drawCoarseAbbs()); break;
-                                          case KeyCode::O: sceneRender().setDrawOccluders(!sceneRender().drawOccluders()); break;
-                                          case KeyCode::N: sceneRender().setDrawNodes(!sceneRender().drawNodes()); break;
-                                          case KeyCode::ArrowLeft:
-                                          {
-                                              auto sTrans = Transform{&registry(), m_go2};
-                                              [[maybe_unused]] auto& pos = sTrans.modifyScale() -= glm::vec3{ 1,0,0 };
-                                             
-                                          } break;
-                                          case KeyCode::ArrowRight:
-                                          {
-                                              auto sTrans = Transform{ &registry(), m_go2 };
-                                              [[maybe_unused]] auto& pos = sTrans.modifyScale() += glm::vec3{ 1,0,0 };
-                                    
-                                          } break;
-                                          case KeyCode::ArrowUp:
-                                          {
-                                              auto sTrans = Transform{ &registry(), m_go2 };
-                                              [[maybe_unused]] auto& pos = sTrans.modifyScale() += glm::vec3{ 0,1,0 };
 
-                                          } break;
-                                          case KeyCode::ArrowDown:
-                                          {
-                                              auto sTrans = Transform{ &registry(), m_go2 };
-                                              [[maybe_unused]] auto& pos = sTrans.modifyScale() -= glm::vec3{ 0,1,0 };
+        InputManager::onKeyDown().subscribe([this](const KeyCode code) -> void
+               {
+                   switch (code) {
+                       case KeyCode::B: sceneRender().setDrawAABBs(!sceneRender().drawCoarseAbbs()); break;
+                       case KeyCode::O: sceneRender().setDrawOccluders(!sceneRender().drawOccluders()); break;
+                       case KeyCode::N: sceneRender().setDrawNodes(!sceneRender().drawNodes()); break;
+                       case KeyCode::ArrowLeft:
+                       {
+                           auto sTrans = Transform{ &registry(), m_go2};
+                           [[maybe_unused]] auto& pos = sTrans.modifyScale() -= glm::vec3{ 1,0,0 };
 
-                                          } break;
+                       } break;
+                       case KeyCode::ArrowRight:
+                       {
+                           auto sTrans = Transform{ &registry(), m_go2 };
+                           [[maybe_unused]] auto& pos = sTrans.modifyScale() += glm::vec3{ 1,0,0 };
 
-                                          case KeyCode::T:
-                                          {
-                                              Engine::getInstance()->armFrameTrace();
-                                          } break;
-                                          default: break;
-                                      }
-                                  });
+                       } break;
+                       case KeyCode::ArrowUp:
+                       {
+                           auto sTrans = Transform{ &registry(), m_go2 };
+                           [[maybe_unused]] auto& pos = sTrans.modifyScale() += glm::vec3{ 0,1,0 };
+
+                       } break;
+                       case KeyCode::ArrowDown:
+                       {
+                           auto sTrans = Transform{ &registry(), m_go2 };
+                           [[maybe_unused]] auto& pos = sTrans.modifyScale() -= glm::vec3{ 0,1,0 };
+
+                       } break;
+
+                       case KeyCode::T:
+                       {
+                           Engine::getInstance()->armFrameTrace();
+                       } break;
+                       default: break;
+                   }
+               });
 
 
-        // Engine::getInstance()->getInputManager()->
+        InputManager::onMouseDown().subscribe([](const MouseState& state, const MouseButton button) {
+                                        if (button == MouseButton::Right) {
+                                            InputManager::setCursorMode(CursorMode::HiddenGrabbed);
+                                        }
+                                    });
+
+        InputManager::onMouseHold().subscribe([this](const MouseState& state, const MouseButton button) {
+            if (button == MouseButton::Right) {
+                const auto cam = Camera::getCamera(m_sceneIndex, m_camIndex);
+                auto dt = Timing::deltaTime();
+                const auto deltaPos = state.deltaPosition;
+                //auto height = Engine::getInstance()->getWndSurface()->height;
+                //auto width = Engine::getInstance()->getWndSurface()->width;
+                //cam->rotateLocal(Input::scaledMouseMovementVec3(state, dt, 0.1f, {width, height}));
+                cam->rotateLocal(static_cast<float>(dt) *
+                    glm::vec3{-state.deltaPosition.x, -state.deltaPosition.y, 0.0f});
+            }
+        });
+
+        InputManager::onMouseUp().subscribe([](const MouseState& state, const MouseButton button) {
+            if (button == MouseButton::Right) {
+                InputManager::setCursorMode(CursorMode::Normal);
+            }
+        });
+
+        // InputManager::
         //     onMouseRightDown.subscribe([](MouseState state) -> void {
-        //     Engine::getInstance()->getInputManager()->enableRelativeMouse();
-        //                                });
+        //
         // Engine::getInstance()->getInputManager()->
         //     onMouseRightUp.subscribe([](MouseState state) -> void {
         //     Engine::getInstance()->getInputManager()->disableRelativeMouse();
         //                              });
-
+        //
         // Engine::getInstance()->getInputManager()->
         //     onMouseRightHold.subscribe([this](MouseState state) -> void
         //                                {
@@ -181,7 +205,7 @@ public:
         //     auto height = Engine::getInstance()->getWndSurface()->height;
         //     auto width = Engine::getInstance()->getWndSurface()->width;
         //     cam->rotateLocal(Input::scaledMouseMovementVec3(state, dt, 0.1f, {width, height}));
-        //                                });
+        //                               });
 
 
         //Engine::getInstance()->getGlobalSystem().printAllTags();
