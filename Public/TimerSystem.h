@@ -15,7 +15,6 @@
 
 class TimerSystem
 {
-private:
     friend class Engine;
     inline static TimerSystem* s_currentProvider;
     size_t m_num_threads;
@@ -37,19 +36,19 @@ private:
     void _workerLoop(size_t threadIndex);
 
     void _processTimers(
-        std::vector<double>& timers, std::vector<double>& targets,
+        std::vector<double>& timers, const std::vector<double>& targets,
         double deltaTime, bool is_inc, size_t threadIndex);
 
 public:
-    TimerSystem(size_t num_threads);
+    explicit TimerSystem(size_t num_threads);
 
     ~TimerSystem();
 
     void update(double deltaTime);
 
-    void startTimer(Timer timer);
-    void stopTimer(const Timer& timer);
-    void resetTimer(const Timer& timer);
+    void startTimer(const Timer& timer);
+    //void stopTimer(const Timer& timer);
+    //void resetTimer(const Timer& timer);
 
     Timer createTimer(bool increasing, double time, double start = 0.0);
 };

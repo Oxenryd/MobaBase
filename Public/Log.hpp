@@ -108,7 +108,7 @@ private:
 		return CON_COL_FG[static_cast<uint8_t>(color)];
 	}
 public:
-	virtual ~DefaultTerminalLogger() {}
+	virtual ~DefaultTerminalLogger() override {}
 	inline void logLineImpl(const LogType& type, const LogMod& module, const std::string_view& msg, const int8_t indent) override {
 		
 		if (indent < 0) {
@@ -138,7 +138,9 @@ public:
 		for (size_t i = 0; i < m_indent; ++i) {
 			indentStr.append("   -> ");
 		}
-		std::cout << '\n' << std::chrono::system_clock::now() << ":\t" << MODULE_STRINGS[static_cast<uint8_t>(module)] << indentStr << colStr << msg << _col(TermColor::Reset);
+		std::cout << '\n' << std::chrono::system_clock::now() << ":\t"
+		<< MODULE_STRINGS[static_cast<uint8_t>(module)] << indentStr << colStr
+		<< msg << _col(TermColor::Reset) << std::flush;
 	
 		if (indent > 0) {
 			m_indent++;
@@ -163,7 +165,7 @@ public:
 				colStr = std::string{ _col(TermColor::Reset) }; break;
 		}
 
-		std::cout << colStr << msg << _col(TermColor::Reset);
+		std::cout << colStr << msg << _col(TermColor::Reset) << std::flush;
 	}
 };
 

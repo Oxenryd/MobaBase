@@ -37,6 +37,7 @@ MaterialBuffer::MaterialBuffer(const MatParam& structure) :
 		m_structure.push_back(member);
 	}
 	switch (structure.type) {
+		default: break;
 		case TypeBase::CBuffer:
 			m_bufferType = MatBufferType::Uniform; break;
 		case TypeBase::PushConstStruct:

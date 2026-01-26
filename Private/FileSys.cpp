@@ -14,7 +14,7 @@ std::vector<std::filesystem::path> FileSys::getAllFilesWithExtension(
 	const std::filesystem::path& directory, const std::wstring& extension) {
 	std::vector<std::filesystem::path> files;
 	for (const auto& entry : std::filesystem::directory_iterator(directory)) {
-		auto regularFile = entry.is_regular_file();
+		const auto regularFile = entry.is_regular_file();
 		auto fExtension = entry.path().extension();
 		if (regularFile && fExtension == extension) {
 			files.push_back(entry.path());
@@ -24,11 +24,21 @@ std::vector<std::filesystem::path> FileSys::getAllFilesWithExtension(
 }
 
 std::filesystem::path FileSys::getExecutableDir() {
+
 #ifdef BUILD_WIN
 	char buffer[1024];
 	GetModuleFileNameA(NULL, buffer, sizeof(buffer));
-	std::filesystem::path exePath(buffer);
-	return exePath.parent_path();
+    const std::filesystem::path exePath(buffer);
+    return exePath.parent_path();
+#else
+    char buffer[PATH_MAX]{};
+    const ssize_t len = readlink("/proc/self/exe", buffer, sizeof(buffer) - 1);
+    if (len <= 0) {
+        throw std::runtime_error("readlink(/proc/self/exe) failed.");
+    }
+    buffer[len] = '\0';
+    const std::filesystem::path exePath(buffer);
+    return exePath.parent_path();
 #endif
 }
 
@@ -54,7 +64,7 @@ std::string FileSys::parseShaderNameFromFile(const std::filesystem::path& filePa
 
     while (std::getline(file, line)) {
         if (line.find("#pragma") != std::string::npos) {
-            std::size_t namePos = line.find(SHADER_NAME);
+            const std::size_t namePos = line.find(SHADER_NAME);
             if (namePos != std::string::npos) {
                 std::string name = line.substr(namePos + std::strlen(SHADER_NAME));
                 name.erase(0, name.find_first_not_of(" \t\r\n"));
@@ -67,7 +77,9 @@ std::string FileSys::parseShaderNameFromFile(const std::filesystem::path& filePa
 }
 
 ErrorCode FileSys::execAndCapture(const std::string& command, std::string& outStr) {
-    std::array<char, 1024> buffer;
+
+#ifdef BUILD_WIN
+    std::array<char, 1024> buffer{};
     outStr.clear();
 
     // Use "r" for reading stdout
@@ -85,4 +97,45 @@ ErrorCode FileSys::execAndCapture(const std::string& command, std::string& outSt
         outStr = "execAndCapture() exited with Code: " + std::to_string(returnCode) + ". ";
         return static_cast<ErrorCode>(returnCode);
     }
+#else
+
+    std::array<char, 4096> buffer{};
+    outStr.clear();
+
+    // If you also want stderr on Linux:
+    // std::string cmd = command + " 2>&1";
+    const std::string& cmd = command;
+
+    FILE* raw = popen(cmd.c_str(), "r");
+    if (!raw)
+        return ErrorCode::COMMAND_FAILED_EXECUTION;
+
+    std::unique_ptr<FILE, decltype(&pclose)> pipe(raw, pclose);
+
+    while (fgets(buffer.data(), buffer.size(), pipe.get()) != nullptr)
+        outStr += buffer.data();
+
+    // IMPORTANT: call pclose exactly once
+    const int status = pclose(pipe.release());
+
+    // Convert POSIX wait status to exit code (shell command exit code)
+    if (status != -1) {
+        if (WIFEXITED(status)) {
+            int exitCode = WEXITSTATUS(status);
+            if (exitCode == 0)
+                return ErrorCode::OK;
+
+            outStr = "execAndCapture() exited with Code: " + std::to_string(exitCode) + ". " + outStr;
+            return static_cast<ErrorCode>(exitCode);
+        }
+
+        // Process ended abnormally (signal, etc.)
+        outStr = "execAndCapture() terminated abnormally. " + outStr;
+        return ErrorCode::COMMAND_FAILED_EXECUTION;
+    }
+
+    outStr = "execAndCapture() failed to close pipe (pclose returned -1). " + outStr;
+    return ErrorCode::COMMAND_FAILED_EXECUTION;
+
+#endif
 }

@@ -38,8 +38,11 @@ public:
 		return *this;
 	}
 
+#ifdef BUILD_WIN
 #pragma warning(push)
 #pragma warning(disable : 26447)
+#endif
+
 	GameObject(GameObject&& other) noexcept {
 		m_reg = other.m_reg;
 		m_entity = other.m_entity;
@@ -58,7 +61,10 @@ public:
 		other.m_entity = entt::null;
 		other.m_globalEntity = entt::null;
 	}
+
+#ifdef BUILD_WIN
 #pragma warning(pop)
+#endif
 
 	bool operator==(const GameObject& rhs) {
 		return m_reg == rhs.m_reg && m_entity == rhs.m_entity && m_globalEntity == rhs.m_globalEntity;

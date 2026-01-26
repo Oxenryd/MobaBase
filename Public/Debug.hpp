@@ -3,7 +3,6 @@
 
 #include <iostream>
 #include <thread>
-#include <cstdint>
 #include <chrono>
 
 namespace Console
@@ -15,7 +14,7 @@ namespace Console
 
 namespace Debug
 {
-	inline void sleepBlock(uint32_t milliseconds) {
+	inline void sleepBlock(const uint32_t milliseconds) {
 		std::this_thread::sleep_for(std::chrono::milliseconds(milliseconds));
 	}
 }

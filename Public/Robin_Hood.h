@@ -633,7 +633,7 @@ namespace robin_hood
             , second(std::forward<U2>(b)) {}
 
         template <typename... U1, typename... U2>
-        // MSVC 2015 produces error "C2476: ‘constexpr’ constructor does not initialize all members"
+        // MSVC 2015 produces error "C2476: ï¿½constexprï¿½ constructor does not initialize all members"
         // if this constructor is constexpr
 #if !ROBIN_HOOD(BROKEN_CONSTEXPR)
         constexpr
@@ -726,8 +726,10 @@ namespace robin_hood
             h ^= k;
             h *= m;
         }
+#ifdef MSVC
 #pragma warning(push)
 #pragma warning(disable : 26819)
+#endif
         auto const* const data8 = reinterpret_cast<uint8_t const*>(data64 + n_blocks);
         switch (len & 7U) {
             case 7:
@@ -755,7 +757,9 @@ namespace robin_hood
             default:
                 break;
         }
+#ifdef MSVC
 #pragma warning(pop)
+#endif
         h ^= h >> r;
 
         // not doing the final step here, because this will be done by keyToIdx anyways

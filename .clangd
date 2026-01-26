@@ -1,0 +1,9 @@
+CompileFlags:
+  Add:
+    - x86_64-pc-linux-gnu
+    - -msse2
+    - -std=c++23
+  Remove:
+    - -fmodules-ts
+    - -fmodule-mapper=*
+    - -fdeps-format=*

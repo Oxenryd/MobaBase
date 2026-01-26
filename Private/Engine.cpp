@@ -8,24 +8,21 @@
 thread_local std::unordered_map<uint16_t, size_t> SceneRenderSystem::s_threadIndex;
 
 
-Engine::Engine(const std::string& appName, size_t baseSize) :
+Engine::Engine(const char* appName, const size_t heapSize) :
+	m_baseArena{heapSize},
 	m_appName{appName},
 	m_targetUpdateDeltaTime{ FPS_400 },
-	m_updateDeltaTime{ 0.0 },
-	m_lastUpdateTime{ std::chrono::steady_clock::now() },
 	m_targetFixedDeltaTime{ FPS_60 },
-	m_fixedAccu{ 0.0 },
-	m_framesSinceLastFpsRead{ 0 },
-	m_baseTimers{ 1 },
 	m_lastReadFps{m_targetUpdateDeltaTime},
-	m_fpsCountTimer{ m_baseTimers.createTimer(true, 1.0) },
-	m_baseArena{baseSize}
+	m_lastUpdateTime{ std::chrono::steady_clock::now() },
+	m_baseTimers{ 1 },
+	m_fpsCountTimer{ m_baseTimers.createTimer(true, 1.0) }
  {
 	assert(s_instance == nullptr && "THERE CAN BE ONLY ONE!");
 
 	s_instance = this;
 
-	m_wnd = m_baseArena.construct<WindowSurface>();
+	//m_wnd = m_baseArena.construct<WindowContext>();
 	
 
 	m_baseTimers.m_incOnTimes[m_fpsCountTimer.m_timerIndex].subscribe([this]()
@@ -43,7 +40,7 @@ Engine::~Engine() {
 		m_workArena = nullptr;
 	}
 
-	for (auto* scene : m_scenes) {
+	for (const auto* scene : m_scenes) {
 		delete scene;
 	}
 }
@@ -54,7 +51,7 @@ inline double Engine::_tickDt() {
 
 	for (;;) {
 		auto now = steady_clock::now();
-		double remaining = m_targetUpdateDeltaTime - duration<double>(now - m_lastUpdateTime).count();
+		const double remaining = m_targetUpdateDeltaTime - duration<double>(now - m_lastUpdateTime).count();
 		if (remaining <= 0.0)
 			break;
 
@@ -66,8 +63,8 @@ inline double Engine::_tickDt() {
 	}
 
 
-	auto frameStart = steady_clock::now();
-	double frameTime = std::min(
+	const auto frameStart = steady_clock::now();
+	const double frameTime = std::min(
 		duration<double>(frameStart - m_lastUpdateTime).count(),
 		MAX_DELTA_TIME);
 
@@ -78,12 +75,10 @@ inline double Engine::_tickDt() {
 
 ErrorCode Engine::_initShaderManager() {
 	LOGLINE_IND(LogType::Info, LogMod::Rendering, "Setting up ShaderManager... ", 1);
-#ifdef BUILD_WIN
 
-	DxcWin32VulkanShaderCompiler* w32VkCompiler = m_baseArena.construct<DxcWin32VulkanShaderCompiler>();
-	m_renderMan = m_baseArena.construct<RenderManager>(RenderManager{m_vkCtx, w32VkCompiler, 128_MB });
+	m_renderMan = m_baseArena.construct<RenderManager>(RenderManager{m_vkCtx, 128_MB });
 
-#endif
+
 
 #ifdef SHADER_HOTRELOAD
 		LOGLINE(LogType::Info, LogMod::Rendering, "Shader HotReload is ON.");
@@ -101,8 +96,8 @@ ErrorCode Engine::_initShaderManager() {
 }
 
 ErrorCode Engine::_initInputManager() {
-	m_inputMan = baseArena().construct<InputManager>(m_wnd);
-	m_wnd->enableRawInput();
+	m_inputMan = baseArena().construct<InputManager>(m_wnd); //new InputManager(m_wnd);
+
 	return ErrorCode::OK;
 }
 
@@ -110,32 +105,36 @@ ErrorCode Engine::_initGraphics() {
 
 	// Create Vulkan Context
 	LOGLINE(LogType::Info, LogMod::Vulkan, "Creating Vulkan context... ");
-	m_vkCtx = m_baseArena.construct<VulkanContext>(m_wnd);
-	VkPresentModeKHR presentMode;
+	m_vkCtx = m_baseArena.construct<VulkanContext>(); //new VulkanContext();
 #ifdef IGPU_PRIO
-	presentMode = VkPresentModeKHR::VK_PRESENT_MODE_FIFO_KHR;
+	VkPresentModeKHR presentMode = VK_PRESENT_MODE_FIFO_KHR;
 #else
 	//presentMode = VkPresentModeKHR::VK_PRESENT_MODE_MAILBOX_KHR;
-	presentMode = VkPresentModeKHR::VK_PRESENT_MODE_IMMEDIATE_KHR;
+	VkPresentModeKHR presentMode = VK_PRESENT_MODE_IMMEDIATE_KHR;
 #endif
 
 #ifdef IGPU_PRIO
-	const bool igpuPriority = true;
+	constexpr bool igpuPriority = true;
 #else
-	const bool igpuPriority = false;
+	constexpr bool igpuPriority = false;
 #endif
 
-	auto vk = m_vkCtx->initVulkan(presentMode, igpuPriority);
+#ifdef BUILD_GLFW
+
+	auto vk = m_vkCtx->initVulkan(m_wnd, presentMode, igpuPriority);
+#else
+	auto vk = m_vkCtx->initVulkan(presentMode, nullptr, igpuPriority);
+#endif
 	if (vk != VK_SUCCESS) {
 		LOG(LogType::Error, "Failed. Code: " + std::to_string(static_cast<uint32_t>(vk)));
-		return (ErrorCode)vk;
+		return static_cast<ErrorCode>(vk);
 	}
 	LOGLINE(LogType::Success, LogMod::Vulkan, "Vulkan init Complete.\n");
 
 	return ErrorCode::OK;
 }
 
-ErrorCode Engine::_initBaseShaders() {
+ErrorCode Engine::_initBaseShaders() const {
 
 	LOGLINE(LogType::Info, LogMod::Rendering, "Compiling Shaders...\n");
 	ErrorCode EC = m_renderMan->recompileShaderCache();
@@ -144,7 +143,7 @@ ErrorCode Engine::_initBaseShaders() {
 			"\t\t\t\t\tDone. Compiled " + std::to_string(m_renderMan->totalShaders()) + " shaders.\n");
 	else {
 		LOG(LogType::Error, "Failed. Code: " + std::to_string(static_cast<uint8_t>(EC)));
-		return (ErrorCode)EC;
+		return EC;
 	}
 
 	// Create Base Materials          
@@ -217,7 +216,7 @@ void Engine::start() {
 	m_status = EngineStatus::PendingRun;
 	onStartInitiated.notify(this);
 	
-	m_wnd->showWindow(SW_NORMAL);
+	m_wnd->showWindow(0);
 
 	m_status = EngineStatus::Running;
 	onStarted.notify(this);
@@ -234,7 +233,7 @@ inline void Engine::_run() {
 
 	m_baseTimers.startTimer(m_fpsCountTimer);
 
-	while (m_status != EngineStatus::PendingStop) {
+	while (m_status != EngineStatus::PendingStop && !glfwWindowShouldClose(m_vkCtx->window())) {
 
 #ifdef PROFILER
 		if (m_pendingTrace) {
@@ -257,7 +256,9 @@ inline void Engine::_run() {
 		PROFILE_SCOPE("Frame");
 		PROFILE_FRAME_MARK(m_totalFrames);
 
-		auto dt = _tickDt();
+		glfwPollEvents();
+
+		const auto dt = _tickDt();
 		m_updateDeltaTime = dt;
 		m_fixedAccu += dt;
 		m_totalTime += dt;
@@ -310,6 +311,8 @@ inline void Engine::_run() {
 				m_vkCtx->draw(drawCtx);
 			}
 
+			//TODO PRESENT HERE!
+
 			{
 				PROFILE_SCOPE("PostDraw");
 				m_vkCtx->postDraw();
@@ -322,13 +325,13 @@ inline void Engine::_run() {
 
 	}
 
-	for (auto scene : m_scenes) {
+	for (const auto scene : m_scenes) {
 		scene->unloadDispatch();
 		delete scene;
 	}
 	m_scenes.clear();
 
-	m_wnd->destroyWindow();
+	//m_wnd->destroyWindow();
 
 	
 
@@ -343,7 +346,7 @@ void Engine::stop() {
 	onPendingStop.notify(this);
 }
 
-Camera* Engine::mainCamera() {
+Camera* Engine::mainCamera() const {
 
 	if (m_mainCamIndex.invalid())
 		return nullptr;
@@ -352,12 +355,12 @@ Camera* Engine::mainCamera() {
 		gameObjectSystem().getAllOfType<Camera>()[m_mainCamIndex.camIndex];
 }
 
-void Engine::setMainCamera(uint16_t sceneIndex, uint32_t camIndex) {
-	auto scene = getScene(sceneIndex);
+void Engine::setMainCamera(const uint16_t sceneIndex, const uint32_t camIndex) {
+	const auto scene = getScene(sceneIndex);
 	if (!scene)
 		throw std::invalid_argument("No Such scene!");
 
-	auto& cams = scene->gameObjectSystem().getAllOfType<Camera>();
+	const auto& cams = scene->gameObjectSystem().getAllOfType<Camera>();
 	if (cams.empty() || camIndex >= cams.size())
 		throw std::invalid_argument("Scene has no cameras!");
 
@@ -365,7 +368,10 @@ void Engine::setMainCamera(uint16_t sceneIndex, uint32_t camIndex) {
 	
 }
 
-ErrorCode Engine::init() {
+ErrorCode Engine::init(WindowContext* wndCtx) {
+
+	if (wndCtx)
+		m_wnd = wndCtx;
 
 	ErrorCode EC{};
 	EC_CHECK(EC, _initGraphics());
@@ -419,7 +425,7 @@ inline void Engine::_updateEarly(double dt) {
 	onEarlyUpdateExit.notify(this);
 }
 
-inline void Engine::_updateLate(double dt) {
+inline void Engine::_updateLate(const double dt) {
 	PROFILE_SCOPE("LateUpdate");
 	onLateUpdateEnter.notify(this);
 	std::vector<uint32_t> removeIndices;

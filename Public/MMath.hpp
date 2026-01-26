@@ -11,20 +11,31 @@
 #include "Range.hpp"
 //#include "BasicTypes.hpp"
 #include "Unions.h"
+#include "glm/gtc/type_ptr.hpp"
 
 
+#ifndef BUILD_WIN
+#if !defined(__x86_64__) || !defined(__SSE__)
+#error clangd is not parsing this as x86_64+SSE (compile command mismatch)
+#endif
+#endif
 
-
-
+// NOLINTBEGIN(portability-simd-intrinsics)
 namespace MMath
 {
-    constexpr const float fPI = 3.14159265359f;
-    constexpr const float fTAU = 2 * 3.14159265359f;
-    constexpr const double dPI = 3.14159265359;
-    constexpr const double dTAU = 2 * 3.14159265359;
-    constexpr const float fSQR2Inv = 0.707106781f;
-    constexpr const double dSQR2Inv = 0.70710678118655;
-    static const glm::mat4x4 IDENTITY_MAT = glm::mat4x4{ 1 };
+    constexpr float fPI = 3.14159265359f;
+    constexpr float fTAU = 2 * 3.14159265359f;
+    constexpr double dPI = 3.14159265359;
+    constexpr double dTAU = 2 * 3.14159265359;
+    constexpr float fSQR2Inv = 0.707106781f;
+    constexpr double dSQR2Inv = 0.70710678118655;
+    static const auto IDENTITY_MAT = glm::mat4x4{ 1 };
+
+    template <std::size_t N, std::size_t M = N, glm::qualifier P = glm::defaultp>
+    constexpr void toFloat(float (&dst)[N], const glm::vec<M, float, P>& v, const std::size_t offset = 0 ) noexcept {
+        for (std::size_t i = offset; i < N; ++i)
+            dst[i] = v[static_cast<glm::length_t>(i)];
+    }
 
 
     static const glm::mat4x4& identityMat4() { 
@@ -33,9 +44,7 @@ namespace MMath
 
     template <std::integral U, std::integral V, std::integral W, std::integral Z, std::integral X>
     INLINE size_t getChunkSetRange(W threadCount, X size, Z currentThreadIndex, U& start, V& count) {
-        size_t offset = static_cast<size_t>(
-            std::ceil(static_cast<float>(size / static_cast<float>(threadCount)))
-            );
+        size_t offset = std::ceil(static_cast<float>(size / static_cast<float>(threadCount)));
         start = currentThreadIndex * offset;
         count = (currentThreadIndex == threadCount - 1 && size % offset != 0)
             ? size % offset
@@ -56,15 +65,15 @@ namespace MMath
 
     INLINE static glm::quat quatFromRotationVector(const glm::vec3& w) {
         // w direction = axis, |w| = angle
-        float theta = glm::length(w);
-        if (theta < 1e-12f) return glm::quat(1, 0, 0, 0);
-        glm::vec3 axis = w / theta;
+        const float theta = glm::length(w);
+        if (theta < 1e-12f) return {1, 0, 0, 0};
+        const glm::vec3 axis = w / theta;
         return glm::angleAxis(theta, axis);
     }
 
     INLINE static glm::quat quatDelta(const glm::quat& qFrom, const glm::quat& qTo) {
         // Make sure we take the shortest arc by aligning hemisphere
-        glm::quat a = qFrom;
+        const glm::quat a = qFrom;
         glm::quat b = qTo;
         if (glm::dot(a, b) < 0.0f) b = -b;
         // qDelta * a = b  =>  qDelta = b * conjugate(a)
@@ -115,8 +124,8 @@ namespace MMath
         return _mm_cvtss_f32(t);
     }
     inline void hminmax8(__m256 v, float& mn, float& mx) {
-        __m128 lo = _mm256_castps256_ps128(v);
-        __m128 hi = _mm256_extractf128_ps(v, 1);
+        const __m128 lo = _mm256_castps256_ps128(v);
+        const __m128 hi = _mm256_extractf128_ps(v, 1);
         mn = hmin4(_mm_min_ps(lo, hi));
         mx = hmax4(_mm_max_ps(lo, hi));
     }
@@ -133,20 +142,20 @@ namespace MMath
 
     INLINE void matrix_multiply_avx2(const float* a, const float* b, float* result) {
         // Load matrix A columns
-        __m256 a_col0 = _mm256_load_ps(a);      // a[0-7]
-        __m256 a_col1 = _mm256_load_ps(a + 8);  // a[8-15]
+        const __m256 a_col0 = _mm256_load_ps(a);      // a[0-7]
+        const __m256 a_col1 = _mm256_load_ps(a + 8);  // a[8-15]
 
         // Load matrix B columns
         __m256 b_col0 = _mm256_load_ps(b);
         __m256 b_col1 = _mm256_load_ps(b + 8);
 
         // First 8 elements of result
-        __m256 r0 = _mm256_mul_ps(a_col0, _mm256_broadcast_ps((const __m128*)(b)));
-        r0 = _mm256_fmadd_ps(a_col1, _mm256_broadcast_ps((const __m128*)(b + 4)), r0);
+        __m256 r0 = _mm256_mul_ps(a_col0, _mm256_broadcast_ps(reinterpret_cast<const __m128 *>(b)));
+        r0 = _mm256_fmadd_ps(a_col1, _mm256_broadcast_ps(reinterpret_cast<const __m128 *>(b + 4)), r0);
         _mm256_store_ps(result, r0);
 
-        __m256 r1 = _mm256_mul_ps(a_col0, _mm256_broadcast_ps((const __m128*)(b + 8)));
-        r1 = _mm256_fmadd_ps(a_col1, _mm256_broadcast_ps((const __m128*)(b + 12)), r1);
+        __m256 r1 = _mm256_mul_ps(a_col0, _mm256_broadcast_ps(reinterpret_cast<const __m128 *>(b + 8)));
+        r1 = _mm256_fmadd_ps(a_col1, _mm256_broadcast_ps(reinterpret_cast<const __m128 *>(b + 12)), r1);
         _mm256_store_ps(result + 8, r1);
     }
 
@@ -186,12 +195,14 @@ namespace MMath
         __m128 _near = _mm_add_ps(col3, col2);
         __m128 _far = _mm_sub_ps(col3, col2);
 
-        _mm_storeu_ps(f.planes[0].raw, _left);
-        _mm_storeu_ps(f.planes[1].raw, _right);
-        _mm_storeu_ps(f.planes[2].raw, _bottom);
-        _mm_storeu_ps(f.planes[3].raw, _top);
-        _mm_storeu_ps(f.planes[4].raw, _near);
-        _mm_storeu_ps(f.planes[5].raw, _far);
+        const float* raw = reinterpret_cast<float*>(&f.planes[0]);
+
+        _mm_storeu_ps(&f.planes[0].raw[0], _left);
+        _mm_storeu_ps(&f.planes[1].raw[0], _right);
+        _mm_storeu_ps(&f.planes[2].raw[0], _bottom);
+        _mm_storeu_ps(&f.planes[3].raw[0], _top);
+        _mm_storeu_ps(&f.planes[4].raw[0], _near);
+        _mm_storeu_ps(&f.planes[5].raw[0], _far);
 
         //printf("\n\nSIMD:\n");
 
@@ -202,9 +213,9 @@ namespace MMath
         if (normalize)
             for (size_t i = 0; i < 6; ++i) {
 
-                float* plane = f.planes[i].raw; // contiguous!
+                float* plane = &f.planes[i].raw[0]; // contiguous!
                 __m128 v = _mm_loadu_ps(plane);
-                __m128 lenSq = _mm_dp_ps(v, v, 0x71); // result is [len2, 0, 0, 0]
+                const __m128 lenSq = _mm_dp_ps(v, v, 0x71); // result is [len2, 0, 0, 0]
                 __m128 len = _mm_sqrt_ps(lenSq);
                 // Broadcast length to all lanes
                 len = _mm_shuffle_ps(len, len, 0x00);
@@ -215,20 +226,20 @@ namespace MMath
         return f;
     }
 
-    INLINE static bool sphereVisible(const glm::vec3& center, const float radius, Frustum& frustum) {
+    INLINE static bool sphereVisible(const glm::vec3& center, const float radius, const Frustum& frustum) {
         for (int i = 0; i < 6; ++i) {
             const auto& plane = frustum.planes[i];
-            float dist = glm::dot(plane.normal, center) + plane.d;
+            const float dist = glm::dot(glm::make_vec3(xyz(plane.raw)), center) + plane.raw.w;
             if (dist < -radius)
                 return false; // outside
         }
         return true; // potentially visible or intersecting
     }
 
-    INLINE static bool sphereVisibleSIMD(const glm::vec3& center, const float radius, Frustum& frustum) {
+    INLINE static bool sphereVisibleSIMD(const glm::vec3& center, const float radius, const Frustum& frustum) {
 
         for (size_t i = 0; i < 6; ++i) {
-            auto plane = &frustum.planes[i].x;
+            auto plane = &frustum.planes[i].raw.x;
             __m128 vplane = _mm_loadu_ps(plane);           // [nx, ny, nz, d]
             __m128 vcenter = _mm_set_ps(1.0f, center.z, center.y, center.x); // [x, y, z, 1]
             // Dot product for first 3 components, then add d (plane[3])
@@ -271,7 +282,7 @@ namespace MMath
         //glm::vec3 mn{ box.frontTopLeft.x,   box.backBottomRight.y, box.backBottomRight.z };
         //glm::vec3 mx{ box.backBottomRight.x, box.frontTopLeft.y,   box.frontTopLeft.z };
         for (size_t i = 0; i < 6; ++i) {
-            if (!__aabbVisibleSIMDPlane_mul(frustum.planes[i].raw, min, max))
+            if (!__aabbVisibleSIMDPlane_mul(&frustum.planes[i].raw[0], min, max))
                 return false;
         }
         return true;
@@ -287,13 +298,13 @@ namespace MMath
 
         for (int i = 0; i < 6; ++i) {
             // Quick outside test using your existing function
-            if (!__aabbVisibleSIMDPlane_mul(frustum.planes[i].raw, min, max)) {
+            if (!__aabbVisibleSIMDPlane_mul(&frustum.planes[i].raw[0], min, max)) {
                 return { 0, 0 };  // Outside
             }
 
             // Now do the center-extent test for intersection
-            const float* plane = frustum.planes[i].raw;
-            const __m128 n_d = _mm_load_ps(plane);
+            const float* plane = &frustum.planes[i].raw[0];
+            const __m128 n_d = _mm_loadu_ps(plane);
             const __m128 center_vec = _mm_set_ps(0.0f, center.z, center.y, center.x);
             const __m128 extent_vec = _mm_set_ps(0.0f, extent.z, extent.y, extent.x);
 
@@ -320,7 +331,7 @@ namespace MMath
             }
         }
 
-        return { mask, anyIntersect ? (uint8_t)1 : (uint8_t)2 };
+        return { mask, anyIntersect ? static_cast<uint8_t>(1) : static_cast<uint8_t>(2) };
     }
 
     //INLINE static bool obbVisible(const OBB& obb, const Frustum& frustum) {
@@ -442,7 +453,7 @@ namespace MMath
         }
     }
 
-    INLINE glm::mat4 matrix_multiply_avx2(const glm::mat4& a, const glm::mat4& b) {
+    INLINE glm::mat4 matrix_multiply_avx2(const glm::mat4& a, const glm::mat4& b) { // testing value sem
         alignas(32) glm::mat4 result;
 
         const float* pa = &a[0][0]; // column-major, 16 floats
@@ -928,5 +939,5 @@ struct uint24_t
 
 
 
-
+// NOLINTEND(portability-simd-intrinsics)
 #endif

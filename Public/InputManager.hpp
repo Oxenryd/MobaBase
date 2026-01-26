@@ -1,14 +1,17 @@
 #ifndef INPUTMANAGER_HPP
 #define INPUTMANAGER_HPP
 
-
-
-#include "WindowSurface.h"
-#include "Delegate.hpp"
 #include <glm/glm.hpp>
+#include <boost/unordered/unordered_flat_set.hpp>
+//#include <oneapi/tbb/detail/_task.h>
+
+#include "WindowContext.h"
+#include "Delegate.hpp"
+#include "InputTypes.h"
+//#include "../out/build/Linux-x64-debug/_deps/glfw-src/src/wl_platform.h"
+
+
 //#include "GlobalMacros.h"
-
-
 
 //Event<uint8_t, KeysBitfield> onKeyDown;
 //Event<uint8_t, KeysBitfield> onKeyUp;
@@ -25,251 +28,352 @@
 //	_ENUM_END = 0x80
 //};
 
-class InputManager
+enum class InputType : uint8_t
+{
+	Keyboard,
+	Mouse,
+	Gamepad,
+	Custom
+};
+
+enum class BindingType : uint8_t
+{
+	KeyButton,
+	Vector1D,
+	Vector2D,
+};
+
+struct alignas(8) InputBinding
+{
+	uint32_t raw{0};
+	uint16_t id{0};
+	InputType inputType{InputType::Keyboard};
+	BindingType bindType{BindingType::KeyButton};
+};
+
+
+
+class Action;
+struct alignas(8) InputData
 {
 private:
-	WindowSurface* m_ws;
-	std::set<uint16_t> m_keyButtonDownMap;
-	uint8_t m_mButtonsDown = 0;
-	bool m_ignoreNextMouseDelta = false;
+	friend Action;
+	unsigned char rawData[8]{};
+	void setMouseState(MouseState* statePtr) {
+		auto& ptr = reinterpret_cast<MouseState*&>(rawData);
+		ptr = statePtr;
+	}
+	void setVector1D(const float value) {
+		*reinterpret_cast<float*>(rawData) = value;
+	}
+	void setVector2D(const glm::vec2& value) {
+		std::construct_at<glm::vec2>(reinterpret_cast<glm::vec2*>(rawData), value);
+	}
+	void setRawKeyCode(const uint16_t code) {
+		*reinterpret_cast<uint16_t*>(rawData) = code;
+	}
+
+public:
+	const MouseState& getMouseState() const {return *reinterpret_cast<const MouseState*>(rawData);}
+	float getVector1D() const { return *reinterpret_cast<const float*>(rawData); }
+	const glm::vec2& getVector2D() const { return *reinterpret_cast<const glm::vec2*>(rawData); }
+	uint16_t getRawKeyCode() const { return *reinterpret_cast<const uint16_t*>(rawData); }
+};
+
+
+
+
+class Action {
+	std::string m_name;
+	std::vector<InputBinding> m_bindings;
+
+
+public:
+	Event<ActionState> onTrigger;
+	std::string& name() { return m_name; }
+	const std::vector<InputBinding>& bindings() const { return m_bindings; }
+	std::vector<InputBinding>& bindings() { return m_bindings; }
+
+	void trigger(const ActionState state) const {
+		onTrigger.notify(state);
+	}
+};
+
+enum class CursorMode
+{
+	Normal = GLFW_CURSOR,
+	Hidden = GLFW_CURSOR_HIDDEN,
+	HiddenGrabbed = GLFW_CURSOR_DISABLED
+};
+
+class Engine;
+class InputManager
+{
+	friend Engine;
+	inline static InputManager* s_instance = nullptr;
+
+	boost::unordered_flat_map<
+		KeyCombo, std::vector<Action>, KeyComboHash> m_keyboardActions;
+	boost::unordered_flat_map<
+		KeyCombo, std::vector<Event<ActionState>*>, KeyComboHash> m_keyDownActionMap;
+	boost::unordered_flat_set<
+		int, IntHash<int>> m_keysDown;
+
+	boost::unordered_flat_map<
+		MouseButtonState, std::vector<Action>, MouseButtonStateHash> m_mouseButtonActions;
+	boost::unordered_flat_map<
+		MouseButtonState, std::vector<Event<ActionState>*>, MouseButtonStateHash> m_mouseDownActionMap;
+	boost::unordered_flat_set<
+		int, IntHash<int>> m_mouseButtonsDown;
+
+
 	MouseState m_lastMouseState;
 	MouseState m_currentMouseState;
-	glm::i16vec2 m_lastDeltaMax{};
 
-	bool m_gotMousePosThisFrame = false;
+	GLFWwindow* m_window;
 	float m_deltaTime{};
 
+	// Keyboard
+	Event<const KeyCombo> m_onKeyEvent;
+	Event<const KeyCode> m_onKeyDown;
+	Event<const KeyCode> m_onKeyHold;
+	Event<const KeyCode> m_onKeyUp;
 
+	// Mouse
+	Event<const MouseState&, const MouseButton> m_onMouseButtonDown;
+	Event<const MouseState&, const MouseButton> m_onMouseButtonHold;
+	Event<const MouseState&, const MouseButton> m_onMouseButtonUp;
+	Event<const MouseState&, const glm::i16vec2> m_onMouseMove;
 
-	void _notifyMouseButtonEvent(uint8_t bit, KeyAction action) {
+	static void mouse_button_callback(GLFWwindow* window, int button, int action, int mods) {
+		if (window != s_instance->m_window)
+			return;
 
-		switch (bit) {
-
-			default: return;
-
-			case 0x01: switch (action) {
-				default: return;
-				case KeyAction::Press: onMouseLeftDown.notify(m_currentMouseState); return;
-				case KeyAction::Hold: onMouseLeftHold.notify(m_lastMouseState); return;
-				case KeyAction::Release: onMouseLeftUp.notify(m_currentMouseState); return;
-			}
-
-			case 0x02: switch (action) {
-				default: return;
-				case KeyAction::Press: onMouseRightDown.notify(m_currentMouseState); return;
-				case KeyAction::Hold: onMouseRightHold.notify(m_lastMouseState); return;
-				case KeyAction::Release: onMouseRightUp.notify(m_currentMouseState); return;
-			}
-
-			case 0x10: switch (action) {
-				default: return;
-				case KeyAction::Press: onMouseMiddleDown.notify(m_currentMouseState); return;
-				case KeyAction::Hold: onMouseMiddleHold.notify(m_lastMouseState); return;
-				case KeyAction::Release: onMouseMiddleUp.notify(m_currentMouseState); return;
-			}
-
-			case 0x20: switch (action) {
-				default: return;
-				case KeyAction::Press: onMouseM4Down.notify(m_currentMouseState); return;
-				case KeyAction::Hold: onMouseM4Hold.notify(m_lastMouseState); return;
-				case KeyAction::Release: onMouseM4Up.notify(m_currentMouseState); return;
-			}
-
-			case 0x40: switch (action) {
-				default: return;
-				case KeyAction::Press: onMouseM5Down.notify(m_currentMouseState); return;
-				case KeyAction::Hold: onMouseM5Hold.notify(m_lastMouseState); return;
-				case KeyAction::Release: onMouseM5Up.notify(m_currentMouseState); return;
-			}
-
+		const auto bState = MouseButtonState(button, mods);
+		const auto aState = static_cast<ActionState>(action);
+		const auto it = s_instance->m_mouseButtonActions.find(bState);
+		if (it != s_instance->m_mouseButtonActions.end()) {
+			//TODO
 		}
 
+		switch (aState) {
+			default: break;
+
+			case ActionState::Started: {
+				const auto mDownIT = s_instance->m_mouseButtonsDown.find(button);
+				if (mDownIT == s_instance->m_mouseButtonsDown.end()) {
+					s_instance->m_mouseButtonsDown.insert(button);
+				}
+				s_instance->m_currentMouseState.buttonState =
+					s_instance->m_currentMouseState.buttonState | bState;
+				s_instance->m_onMouseButtonDown.notify(s_instance->m_currentMouseState, glfwToMButton(button));
+			} break;
+
+			case ActionState::Stopped: {
+				const auto mDownIT = s_instance->m_mouseButtonsDown.find(button);
+				if (mDownIT != s_instance->m_mouseButtonsDown.end()) {
+					s_instance->m_mouseButtonsDown.erase(button);
+				}
+				s_instance->m_currentMouseState.buttonState =
+					s_instance->m_currentMouseState.buttonState & ~bState;
+				s_instance->m_onMouseButtonUp.notify(s_instance->m_currentMouseState, glfwToMButton(button));
+			} break;
+		}
+	}
+
+	static void key_callback(GLFWwindow* window, int key, int scancode, int glfwAction, int mods)
+	{
+		if (window != s_instance->m_window)
+			return;
+
+		const KeyCombo combo{key, mods};
+		const auto aState = static_cast<ActionState>(glfwAction);
+		const auto it = s_instance->m_keyboardActions.find(combo);
+		if (it != s_instance->m_keyboardActions.end()) {
+			const auto& actionList = it->second;
+
+			for(const auto& action : it->second) {
+
+				switch (aState) {
+					default: break;
+
+					case ActionState::Started: {
+						const auto keyDownIT = s_instance->m_keyDownActionMap.find(combo);
+						if (keyDownIT == s_instance->m_keyDownActionMap.end()) {
+							const auto [iter, snd] =
+								s_instance->m_keyDownActionMap.emplace(combo, std::vector<Event<ActionState>*>());
+							auto* ptr = const_cast<Event<ActionState>*>(&action.onTrigger);
+							iter->second.push_back(ptr);
+						}
+					} break;
+
+					case ActionState::Stopped: {
+						const auto keyDownIT = s_instance->m_keyDownActionMap.find(combo);
+						if (keyDownIT != s_instance->m_keyDownActionMap.end()) {
+							s_instance->m_keyDownActionMap.erase(keyDownIT);
+						}
+
+					} break;
+				}
+
+				action.trigger(aState);
+			}
+		}
+
+		switch (aState) {
+			default: break;
+
+			case ActionState::Started: {
+				const auto keyIt = s_instance->m_keysDown.find(key);
+				if (keyIt == s_instance->m_keysDown.end()) {
+					s_instance->m_keysDown.insert(key);
+					s_instance->m_onKeyDown.notify(glfwToKeyCode(key));
+				}
+			} break;
+			case ActionState::Stopped: {
+				const auto keyIt = s_instance->m_keysDown.find(key);
+				if (keyIt != s_instance->m_keysDown.end()) {
+					s_instance->m_keysDown.erase(keyIt);
+					s_instance->m_onKeyUp.notify(glfwToKeyCode(key));
+				}
+			} break;
+		}
+	}
+
+	INLINE void update(const double dt) {
+
+		m_deltaTime = static_cast<float>(dt);
+
+		// Mouse input
+		double xpos, ypos;
+		glfwGetCursorPos(m_window, &xpos, &ypos);
+		s_instance->m_currentMouseState.relativePosition = glm::vec2(xpos, ypos);
+		s_instance->m_currentMouseState.absoluteScreenPosition = glm::vec2(xpos, ypos);
+		m_currentMouseState.deltaPosition =
+			m_currentMouseState.relativePosition - m_lastMouseState.relativePosition;
+		if (m_currentMouseState.deltaPosition.x != 0 || m_currentMouseState.deltaPosition.y != 0) {
+			m_onMouseMove.notify(m_currentMouseState, m_currentMouseState.deltaPosition);
+		}
+		for (const auto& btn : m_mouseButtonsDown) {
+			m_onMouseButtonHold.notify(m_currentMouseState, glfwToMButton(btn));
+		}
+
+
+
+		// Keyboard input
+		for (auto& actionList: m_keyDownActionMap | std::views::values) {
+			for (const auto& actionEvent : actionList ) {
+				actionEvent->notify(ActionState::Stopped);
+			}
+		}
+		for (const auto& key : m_keysDown) {
+			m_onKeyHold.notify(glfwToKeyCode(key));
+		}
+
+		m_lastMouseState = m_currentMouseState;
 	}
 
 public:
     ~InputManager() {}
-	InputManager(WindowSurface* surface) :
-		m_ws{surface} {
-#ifdef BUILD_WIN
-		m_ws->onMouseRaw.subscribe( [this](MouseDataRaw raw) -> void
-								   {
-									   m_currentMouseState.lastPositionDelta += glm::ivec2{ raw.deltaX, raw.deltaY };// *std::max(static_cast<int32_t>(1.0f / m_deltaTime * m_mouseSense), 1);
-									   m_currentMouseState.absoluteScreenPosition = glm::ivec2{ raw.absX, raw.absY };
-								   });
-		m_ws->onKeyEvent.subscribe( [this](KeyEvent event) -> void
-								   {
-									   handleKeyEvent(this, event);
-								   });
+	explicit InputManager(WindowContext* context)
+	{
+    	if (s_instance != nullptr) {
+    		LOGLINE(LogType::Error, LogMod::Input, "There Can only be one InputManager!!");
+    		throw std::runtime_error("There Can only be one InputManager!!");
+    	}
+    	s_instance = this;
+    	m_window = context->window();
 
-		m_ws->onMouseButton.subscribe( [this](MouseState mState) -> void
-			{
-									m_currentMouseState.buttonState = mState.buttonState;
-			});
-		m_ws->onMouseWheel.subscribe([this](MouseState mState) -> void
-			 {
-									m_currentMouseState.wheel = mState.wheel;
-			});
+    	glfwSetInputMode(m_window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
 
-#endif
+    	glfwSetKeyCallback(m_window, key_callback);
+    	glfwSetMouseButtonCallback(m_window, mouse_button_callback);
+
 	}
 
-	INLINE void update(double dt) {
+	INLINE static void setCursorMode(const CursorMode mode) {
+	    switch (mode) {
+		    case CursorMode::Normal:
+	    		glfwSetInputMode(s_instance->m_window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+	    		glfwSetInputMode(s_instance->m_window, GLFW_RAW_MOUSE_MOTION, GLFW_FALSE);
+	    		break;
 
-		m_deltaTime = static_cast<float>(dt);
-		//m_lastDeltaMax = { 0,0 };
-		//m_currentMouseState.lastPositionDelta = m_lastDeltaMax;
-		m_currentMouseState.lastPositionDelta = glm::ivec2{ 0, 0 };
+	    	case CursorMode::Hidden:
+	    		glfwSetInputMode(s_instance->m_window, GLFW_CURSOR, GLFW_CURSOR_HIDDEN);
+	    		glfwSetInputMode(s_instance->m_window, GLFW_RAW_MOUSE_MOTION, GLFW_FALSE);
+	    		break;
+
+	    	case CursorMode::HiddenGrabbed:
+	    		glfwSetInputMode(s_instance->m_window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+	    		glfwSetInputMode(s_instance->m_window, GLFW_RAW_MOUSE_MOTION, GLFW_TRUE);
+	    		break;
+	    }
+    }
 
 
-		for (auto& code : m_keyButtonDownMap) {
-			onKeyHold.notify(static_cast<KeyCode>(code));
-		}
 
-		for (uint8_t i = 0; i < 8; ++i) {
-			uint8_t mask = 1 << i;
-			if (m_mButtonsDown & mask)
-				_notifyMouseButtonEvent(mask, KeyAction::Hold);
-		}
-
-#ifdef BUILD_WIN
-		MSG msg{};
-		while (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE)) {
-			TranslateMessage(&msg);
-			DispatchMessage(&msg);
-		}
-#endif
-
-		// MouseButtons
-		//uint8_t last = m_lastMouseState.buttonState.getField();
-		uint8_t curr = m_currentMouseState.buttonState.getField();
-		for (uint8_t i = 0; i < 8; ++i) {
-			uint8_t mask = 1 << i;
-			if (m_mButtonsDown & mask) {
-				if (!(curr & mask))
-					_notifyMouseButtonEvent(mask, KeyAction::Release);
-			} else if (curr & mask)
-				_notifyMouseButtonEvent(mask, KeyAction::Press);
-		}
-		m_mButtonsDown = curr;
-		m_lastMouseState = m_currentMouseState;
-	}
-
-	MouseState& currentMouseState() const { return const_cast<MouseState&>(m_currentMouseState); }
-	MouseState& lastMouseState() const { return const_cast<MouseState&>(m_lastMouseState); }
-
-#ifdef BUILD_WIN
-	void mouseToWindowCenter() {
-		m_ignoreNextMouseDelta = true;
-		POINT pt{ m_ws->width / 2, m_ws->height / 2 };
-		ClientToScreen(m_ws->windowHandle, &pt);
-		SetCursorPos(pt.x, pt.y);
-	}
-
-	void enableRelativeMouse() {
-		// Hide cursor
-		while (ShowCursor(FALSE) >= 0); // ensure hidden
-
-		// Confine to client area
-		RECT rect;
-		GetClientRect(m_ws->windowHandle, &rect);
-		POINT tl = { rect.left, rect.top };
-		POINT br = { rect.right, rect.bottom };
-		ClientToScreen(m_ws->windowHandle, &tl);
-		ClientToScreen(m_ws->windowHandle, &br);
-		RECT clipRect = { tl.x, tl.y, br.x, br.y };
-		ClipCursor(&clipRect);
-	}
-
-	void disableRelativeMouse() {
-		// Show cursor
-		while (ShowCursor(TRUE) < 0); // ensure visible
-
-		// Release cursor
-		ClipCursor(nullptr);
-	}
-
-#endif
-
-	static void handleKeyEvent(InputManager* _this, KeyEvent event) {
-
-		_this->onKeyEvent.notify(event); // for manual handling
-
-		auto it = _this->m_keyButtonDownMap.find(static_cast<uint16_t>(event.code));
-		if (event.action == KeyAction::Release) {
-			if (it != _this->m_keyButtonDownMap.end()) {
-				_this->m_keyButtonDownMap.erase(it);
-				_this->onKeyUp.notify(event.code);
-			}
-		} else {
-			if (it == _this->m_keyButtonDownMap.end()) {
-				_this->m_keyButtonDownMap.insert(static_cast<uint16_t>(event.code));
-				_this->onKeyDown.notify(event.code);
-			}
-		}
-	}
+	static const MouseState& currentMouseState() { return s_instance->m_currentMouseState; }
+	static const MouseState& lastMouseState() { return s_instance->m_lastMouseState; }
+	static glm::vec3 deltaPosVec3_swizzled() {
+    	const auto delta = s_instance->m_currentMouseState.deltaPosition;
+	    return glm::vec3(delta.x, delta.y, 0.0f);
+    }
 
 	// EVENTS
-	
+
+
+
+
 	// Keyboard
-	Event<KeyEvent> onKeyEvent;
-	Event<KeyCode> onKeyDown;
-	Event<KeyCode> onKeyHold;
-	Event<KeyCode> onKeyUp;
+	static Event<const KeyCombo>& onKeyEvent() { return s_instance->m_onKeyEvent; }
+	static Event<const KeyCode>& onKeyDown() { return s_instance->m_onKeyDown; }
+	static Event<const KeyCode>& onKeyUp() { return s_instance->m_onKeyUp; }
+	static Event<const KeyCode>& onKeyHold() { return s_instance->m_onKeyHold; }
 
 
 	// Mouse
-	Event<MouseState> onMouseButtonDown;
-	Event<MouseState> onMouseButtonHold;
-	Event<MouseState> onMouseButtonUp;
+	static Event<const MouseState&, const MouseButton>& onMouseDown() {
+	    return s_instance->m_onMouseButtonDown; }
+	static Event<const MouseState&, const MouseButton>& onMouseUp() {
+    	return s_instance->m_onMouseButtonUp; }
+	static Event<const MouseState&, const MouseButton>& onMouseHold() {
+    	return s_instance->m_onMouseButtonHold; }
+	static Event<const MouseState&, const glm::i16vec2>& onMouseMove() {
+    	return s_instance->m_onMouseMove; }
 
-	Event<MouseState> onMouseLeftDown;
-	Event<MouseState> onMouseLeftHold;
-	Event<MouseState> onMouseLeftUp;
-	Event<MouseState> onMouseRightDown;
-	Event<MouseState> onMouseRightHold;
-	Event<MouseState> onMouseRightUp;
-	Event<MouseState> onMouseMiddleDown;
-	Event<MouseState> onMouseMiddleHold;
-	Event<MouseState> onMouseMiddleUp;
-	Event<MouseState> onMouseM4Down;
-	Event<MouseState> onMouseM4Hold;
-	Event<MouseState> onMouseM4Up;
-	Event<MouseState> onMouseM5Down;
-	Event<MouseState> onMouseM5Hold;
-	Event<MouseState> onMouseM5Up;
 };
 
 
-class Input
-{
-private:
-	static constexpr uint16_t STANDARD_WIDTH = 1280;
-	static constexpr uint16_t STANDARD_HEIGHT = 800;
-public:
-
-	template <std::floating_point T, std::floating_point U>
-	INLINE static glm::vec2 scaledMouseMovementVec2(
-		const MouseState& mState,
-		T dt, U sensitivity,
-		glm::highp_u16vec2 resolution = { STANDARD_WIDTH , STANDARD_HEIGHT }) {
-
-		//auto rec = 0.00025f / dt;
-		glm::vec2 scaledRes = glm::vec2{ static_cast<float>(resolution.x), static_cast<float>(resolution.y) } * INPUT_RESO_SCALE_FACTOR;
-		float sense = static_cast<float>(sensitivity * sensitivity);
-		return glm::vec2{
-			-(float)mState.lastPositionDelta.x * sense * scaledRes.x,
-			-(float)mState.lastPositionDelta.y * sense * scaledRes.y
-		};
-	}
-	template <std::floating_point T, std::floating_point U>
-	INLINE static glm::vec3 scaledMouseMovementVec3(
-		const MouseState& mState,
-		T dt, U sensitivity,
-		glm::highp_u16vec2 resolution = { STANDARD_WIDTH , STANDARD_HEIGHT }) {
-		auto vec2 = scaledMouseMovementVec2(mState, dt, sensitivity, resolution);
-		return glm::vec3(vec2.x, vec2.y, 0.0f);
-	}
-};
+// class Input
+// {
+// private:
+// 	static constexpr uint16_t STANDARD_WIDTH = 1280;
+// 	static constexpr uint16_t STANDARD_HEIGHT = 800;
+// public:
+//
+// 	template <std::floating_point T, std::floating_point U>
+// 	INLINE static glm::vec2 scaledMouseMovementVec2(
+// 		const MouseState& mState,
+// 		T dt, U sensitivity,
+// 		glm::highp_u16vec2 resolution = { STANDARD_WIDTH , STANDARD_HEIGHT }) {
+//
+// 		//auto rec = 0.00025f / dt;
+// 		glm::vec2 scaledRes = glm::vec2{ static_cast<float>(resolution.x), static_cast<float>(resolution.y) } * INPUT_RESO_SCALE_FACTOR;
+// 		float sense = static_cast<float>(sensitivity * sensitivity);
+// 		return glm::vec2{
+// 			-(float)mState.deltaPosition.x * sense * scaledRes.x,
+// 			-(float)mState.deltaPosition.y * sense * scaledRes.y
+// 		};
+// 	}
+// 	template <std::floating_point T, std::floating_point U>
+// 	INLINE static glm::vec3 scaledMouseMovementVec3(
+// 		const MouseState& mState,
+// 		T dt, U sensitivity,
+// 		glm::highp_u16vec2 resolution = { STANDARD_WIDTH , STANDARD_HEIGHT }) {
+// 		auto vec2 = scaledMouseMovementVec2(mState, dt, sensitivity, resolution);
+// 		return glm::vec3(vec2.x, vec2.y, 0.0f);
+// 	}
+// };
 
 
 #endif // INPUTMANAGER_HPP

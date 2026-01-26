@@ -5,7 +5,7 @@
 #include "Timing.h"
 #include "Engine.h" // DELETE DELETE
 
-class GameScene : public Scene<GameScene>
+class GameScene final : public Scene<GameScene>
 {
 private:
     float m_time = 0;
@@ -34,7 +34,9 @@ public:
 
 
         auto dirLight = LightFactory::Directional(glm::vec3{-1, -0.85, -0.25});
-        dirLight.positionVS = glm::vec3{0, 20, 0};
+        dirLight.positionVS[0] = 0;
+        dirLight.positionVS[1] = 20;
+        dirLight.positionVS[2] = 0;
         m_skyLight = m_reg.create();
         [[maybe_unused]] auto& lightRef = lightSystem().registerLight(dirLight, m_skyLight);
 
@@ -70,8 +72,8 @@ public:
         sceneRender().createMeshFromModel(path1, &modelMesh1, m_go1.entity());
         float volume = 0.0f;
         entt::entity largestSubEntity = entt::null;
-        auto subMeshes = modelMesh1.getSubmeshes();
-        for (auto& subMesh : subMeshes) {
+        const auto subMeshes = modelMesh1.getSubmeshes();
+        for (const auto& subMesh : subMeshes) {
             BoundingVolume bVol{&registry(), subMesh.entity};
             auto aabb = bVol.getCoarseAABB();
             if (aabb.volume() > volume) {
@@ -99,10 +101,10 @@ public:
         //modelMesh2.getTransform().modifyPosition() = { -12, 0, 0 };
         //auto& reg = registry();
 
-        Engine::getInstance()->getInputManager()->onKeyHold.subscribe( [this](KeyCode code) -> void
+        InputManager::onKeyHold().subscribe( [this](const KeyCode code) -> void
                        {
-                           auto cam = Camera::getCamera(m_sceneIndex, m_camIndex);
-                           auto dt = Timing::deltaTimeF();
+                           const auto cam = Camera::getCamera(m_sceneIndex, m_camIndex);
+                           const auto dt = Timing::deltaTimeF();
                            switch (code) {
                                case KeyCode::W:
                                    cam->translate(cam->transform().forward() * m_camSpeed * dt); break;
@@ -116,69 +118,94 @@ public:
                                    cam->translate(cam->transform().up() * m_camSpeed * dt); break;
                                case KeyCode::E:
                                    cam->translate(-cam->transform().up() * m_camSpeed * dt); break;
+                               default: break;
                            }
                               
                        });
 
-        Engine::getInstance()->getInputManager()->
-              onKeyDown.subscribe([this](KeyCode code) -> void
-                                  {
-                                      switch (code) {
-                                          case KeyCode::B: sceneRender().setDrawAABBs(!sceneRender().drawCoarseAbbs()); break;
-                                          case KeyCode::O: sceneRender().setDrawOccluders(!sceneRender().drawOccluders()); break;
-                                          case KeyCode::N: sceneRender().setDrawNodes(!sceneRender().drawNodes()); break;
-                                          case KeyCode::ArrowLeft:
-                                          {
-                                              auto sTrans = Transform{&registry(), m_go2};
-                                              [[maybe_unused]] auto& pos = sTrans.modifyScale() -= glm::vec3{ 1,0,0 };
-                                             
-                                          } break;
-                                          case KeyCode::ArrowRight:
-                                          {
-                                              auto sTrans = Transform{ &registry(), m_go2 };
-                                              [[maybe_unused]] auto& pos = sTrans.modifyScale() += glm::vec3{ 1,0,0 };
-                                    
-                                          } break;
-                                          case KeyCode::ArrowUp:
-                                          {
-                                              auto sTrans = Transform{ &registry(), m_go2 };
-                                              [[maybe_unused]] auto& pos = sTrans.modifyScale() += glm::vec3{ 0,1,0 };
 
-                                          } break;
-                                          case KeyCode::ArrowDown:
-                                          {
-                                              auto sTrans = Transform{ &registry(), m_go2 };
-                                              [[maybe_unused]] auto& pos = sTrans.modifyScale() -= glm::vec3{ 0,1,0 };
+        InputManager::onKeyDown().subscribe([this](const KeyCode code) -> void
+               {
+                   switch (code) {
+                       case KeyCode::B: sceneRender().setDrawAABBs(!sceneRender().drawCoarseAbbs()); break;
+                       case KeyCode::O: sceneRender().setDrawOccluders(!sceneRender().drawOccluders()); break;
+                       case KeyCode::N: sceneRender().setDrawNodes(!sceneRender().drawNodes()); break;
+                       case KeyCode::ArrowLeft:
+                       {
+                           auto sTrans = Transform{ &registry(), m_go2};
+                           [[maybe_unused]] auto& pos = sTrans.modifyScale() -= glm::vec3{ 1,0,0 };
 
-                                          } break;
+                       } break;
+                       case KeyCode::ArrowRight:
+                       {
+                           auto sTrans = Transform{ &registry(), m_go2 };
+                           [[maybe_unused]] auto& pos = sTrans.modifyScale() += glm::vec3{ 1,0,0 };
 
-                                          case KeyCode::T:
-                                          {
-                                              Engine::getInstance()->armFrameTrace();
-                                          } break;
+                       } break;
+                       case KeyCode::ArrowUp:
+                       {
+                           auto sTrans = Transform{ &registry(), m_go2 };
+                           [[maybe_unused]] auto& pos = sTrans.modifyScale() += glm::vec3{ 0,1,0 };
 
-                                      }
-                                  });
+                       } break;
+                       case KeyCode::ArrowDown:
+                       {
+                           auto sTrans = Transform{ &registry(), m_go2 };
+                           [[maybe_unused]] auto& pos = sTrans.modifyScale() -= glm::vec3{ 0,1,0 };
+
+                       } break;
+
+                       case KeyCode::T:
+                       {
+                           Engine::getInstance()->armFrameTrace();
+                       } break;
+                       default: break;
+                   }
+               });
 
 
-        Engine::getInstance()->getInputManager()->
-            onMouseRightDown.subscribe([](MouseState state) -> void {
-            Engine::getInstance()->getInputManager()->enableRelativeMouse();
-                                       });
-        Engine::getInstance()->getInputManager()->
-            onMouseRightUp.subscribe([](MouseState state) -> void {
-            Engine::getInstance()->getInputManager()->disableRelativeMouse();
-                                     });
+        InputManager::onMouseDown().subscribe([](const MouseState& state, const MouseButton button) {
+                                        if (button == MouseButton::Right) {
+                                            InputManager::setCursorMode(CursorMode::HiddenGrabbed);
+                                        }
+                                    });
 
-        Engine::getInstance()->getInputManager()->
-            onMouseRightHold.subscribe([this](MouseState state) -> void 
-                                       {
-            auto cam = Camera::getCamera(m_sceneIndex, m_camIndex);
-            auto dt = Timing::deltaTime();
-            auto height = Engine::getInstance()->getWndSurface()->height;
-            auto width = Engine::getInstance()->getWndSurface()->width;
-            cam->rotateLocal(Input::scaledMouseMovementVec3(state, dt, 0.1f, {width, height}));
-                                       });
+        InputManager::onMouseHold().subscribe([this](const MouseState& state, const MouseButton button) {
+            if (button == MouseButton::Right) {
+                const auto cam = Camera::getCamera(m_sceneIndex, m_camIndex);
+                auto dt = Timing::deltaTime();
+                const auto deltaPos = state.deltaPosition;
+                //auto height = Engine::getInstance()->getWndSurface()->height;
+                //auto width = Engine::getInstance()->getWndSurface()->width;
+                //cam->rotateLocal(Input::scaledMouseMovementVec3(state, dt, 0.1f, {width, height}));
+                cam->rotateLocal(static_cast<float>(dt) *
+                    glm::vec3{-state.deltaPosition.x, -state.deltaPosition.y, 0.0f});
+            }
+        });
+
+        InputManager::onMouseUp().subscribe([](const MouseState& state, const MouseButton button) {
+            if (button == MouseButton::Right) {
+                InputManager::setCursorMode(CursorMode::Normal);
+            }
+        });
+
+        // InputManager::
+        //     onMouseRightDown.subscribe([](MouseState state) -> void {
+        //
+        // Engine::getInstance()->getInputManager()->
+        //     onMouseRightUp.subscribe([](MouseState state) -> void {
+        //     Engine::getInstance()->getInputManager()->disableRelativeMouse();
+        //                              });
+        //
+        // Engine::getInstance()->getInputManager()->
+        //     onMouseRightHold.subscribe([this](MouseState state) -> void
+        //                                {
+        //     auto cam = Camera::getCamera(m_sceneIndex, m_camIndex);
+        //     auto dt = Timing::deltaTime();
+        //     auto height = Engine::getInstance()->getWndSurface()->height;
+        //     auto width = Engine::getInstance()->getWndSurface()->width;
+        //     cam->rotateLocal(Input::scaledMouseMovementVec3(state, dt, 0.1f, {width, height}));
+        //                               });
 
 
         //Engine::getInstance()->getGlobalSystem().printAllTags();

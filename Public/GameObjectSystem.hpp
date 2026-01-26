@@ -27,7 +27,7 @@ struct GameObjectRangeImpl : IGameObjectRange
 {
 	std::vector<T>* vec;
 
-	GameObjectRangeImpl(std::vector<T>* v) : vec(v) {}
+	explicit GameObjectRangeImpl(std::vector<T>* v) : vec(v) {}
 
 	size_t size() const override { return vec->size(); }
 	GameObject* at(size_t i) override { return &(*vec)[i]; }
@@ -77,7 +77,7 @@ private:
 
 
 
-class GameObjectSystem : public SystemECS
+class GameObjectSystem final : public SystemECS
 {
 private:
 	std::unordered_map<std::type_index, UntypedVectorWithDeleter> m_typeVectors;
@@ -88,7 +88,7 @@ private:
 		static_assert(std::is_base_of_v<GameObject, T>, "T must derive from GameObject");
 		const std::type_index typeId = typeid(T);
 
-		auto it = m_typeVectors.find(typeId);
+		const auto it = m_typeVectors.find(typeId);
 		if (it == m_typeVectors.end()) {
 			auto* vec = new std::vector<T>();
 			auto deleterFn = [](void* p) {
@@ -106,12 +106,12 @@ private:
 public:
 	using iterator = GameObjectSystemIterator;
 
-	~GameObjectSystem() {
+	~GameObjectSystem() override {
 		for (auto& [_, entry] : m_typeVectors)
 			entry.deleter(entry.ptr);
 	}
 	GameObjectSystem() = delete;
-	GameObjectSystem(uint16_t sceneIndex, ArenaRegistry* const registry)
+	GameObjectSystem(const uint16_t sceneIndex, ArenaRegistry* const registry)
 		: SystemECS{ registry, sceneIndex }
 	{}
 

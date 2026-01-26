@@ -1,9 +1,11 @@
-﻿cmake_minimum_required (VERSION 3.21)
+﻿cmake_minimum_required (VERSION 3.51)
 
 project ("MobaBase")
 
-set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 
 if (POLICY CMP0141)
   cmake_policy(SET CMP0141 NEW)
@@ -12,16 +14,20 @@ endif()
 
 # Only apply to MSVC and Release builds
 if(MSVC)
-    message(STATUS "Enabling /GL and /LTCG for MSVC Release build")
+	message(STATUS "Enabling /GL and /LTCG for MSVC Release build")
 
-    # Enable /GL for compile step
-    add_compile_options(/GL)
-
-    # Enable /LTCG for link step
-    set(CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} /LTCG")
-    set(CMAKE_STATIC_LINKER_FLAGS_RELEASE "${CMAKE_STATIC_LINKER_FLAGS_RELEASE} /LTCG")
-    set(CMAKE_SHARED_LINKER_FLAGS_RELEASE "${CMAKE_SHARED_LINKER_FLAGS_RELEASE} /LTCG")
-
+	# Enable /GL for compile step
+	add_compile_options("$<$<CONFIG:Release>:/GL>")
+	add_link_options("$<$<CONFIG:Release>:/LTCG>")
+	set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT
+    "$<$<CONFIG:Debug,Release,RelWithDebInfo>:ProgramDatabase>")
+	# Enable /LTCG for link step
+	#set(CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} /LTCG")
+	#set(CMAKE_STATIC_LINKER_FLAGS_RELEASE "${CMAKE_STATIC_LINKER_FLAGS_RELEASE} /LTCG")
+	#set(CMAKE_SHARED_LINKER_FLAGS_RELEASE "${CMAKE_SHARED_LINKER_FLAGS_RELEASE} /LTCG")
+else()
+	add_compile_options(-march=native)
+	add_compile_options(-Wno-template-body)
 endif()
 
 # FETCHES -----------------------------------------------------------------------------
@@ -31,24 +37,37 @@ include(FetchContent)
 FetchContent_Declare(
     glm
     GIT_REPOSITORY https://github.com/g-truc/glm.git
-    GIT_TAG 0.9.9.8
+    GIT_TAG 1.0.3
 )
 FetchContent_MakeAvailable(glm)
-
-#EnTT
+		#EnTT
 FetchContent_Declare(
   EnTT
   GIT_REPOSITORY https://github.com/skypjack/entt.git
-  GIT_TAG        v3.13.1  # or latest stable tag; check the GitHub repo
+  GIT_TAG        v3.16.0  # or latest stable tag; check the GitHub repo
 )
 FetchContent_MakeAvailable(EnTT)
 
-#Boost sort
+#Boost ------------------
+
+# Sort
 FetchContent_Declare(
   boost_sort
   GIT_REPOSITORY https://github.com/boostorg/sort.git
   GIT_TAG        boost-1.85.0
 )
+FetchContent_MakeAvailable(boost_sort)
+
+FetchContent_Declare(
+		boost_unordered
+		GIT_REPOSITORY https://github.com/MikePopoloski/boost_unordered.git
+		GIT_TAG        v1.85.0
+)
+FetchContent_MakeAvailable(boost_unordered)
+
+# ----------------------------------------------------------------
+
+
 
 #SPIR-V reflect
 FetchContent_Declare(
@@ -84,6 +103,19 @@ set(ASSIMP_BUILD_ZLIB ON CACHE BOOL "" FORCE)
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE) # global fallback
 
 FetchContent_MakeAvailable(assimp)
+if (TARGET assimp)
+	if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+		# Disable the specific boundary checks that GCC 15 is tripping on
+		target_compile_options(assimp PRIVATE -Wno-array-bounds -Wno-error=array-bounds)
+
+		# Newer GCCs also hate some of Assimp's string handling
+		target_compile_options(assimp PRIVATE -Wno-stringop-overflow -Wno-error=stringop-overflow)
+	endif()
+endif()
+
+
+
+
 
 # GLFW
 set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
@@ -128,7 +160,9 @@ message(STATUS "Available targets: ${all_targets}")
 
 
 # SOURCES -----------------------------------------------------------------------------
-add_executable (MobaBase)
+add_executable (MobaBase
+		Public/API.h
+		Public/Format_fixes.hpp)
 
 target_sources(MobaBase
 	PRIVATE
@@ -155,7 +189,7 @@ target_sources(MobaBase
 		"Private/Mesh.cpp"
 		"Private/Light.cpp"
 		"Private/BoundingVolume.cpp"
-		"private/BoundingSystem.cpp"
+		"Private/BoundingSystem.cpp"
 		"Private/BVH.cpp"
 )
 
@@ -180,27 +214,33 @@ target_link_libraries(MobaBase PRIVATE
 
 target_include_directories(MobaBase PRIVATE 
     "Public/"
+	${boost_unordered_SOURCE_DIR}/include
 	${boost_sort_SOURCE_DIR}/include
 )
 
+
+
 target_compile_options(MobaBase PRIVATE
-  $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wall -Wextra -Wpedantic>
+  $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wall -Wextra -mavx2 -mfma> #-Wpedantic
   $<$<CXX_COMPILER_ID:MSVC>:/W4 /wd4201 /wd4127 /wd4100 /wd4458 /wd4505 /wd4324 /wd6262>
 )
 
-
 # DEFINES ----------------------------------------------------------------------------
-target_compile_definitions(MobaBase PRIVATE 
+target_compile_definitions(MobaBase PRIVATE
 	GLFW_INCLUDE_VULKAN
 	BUILD_WIN
+	BUILD_DLL
 	BUILD_GLFW
+	# X11
+	# WAYLAND
 	GLM_FORCE_SSE2
+	GLM_ENABLE_EXPERIMENTAL
 	DEBUGGING
 	# $<$<CONFIG:Debug>:LOGGING>
 	LOGGING
 	PROFILER
 	#IGPU_PRIO	
-	SHADER_HOTRELOAD
+	#SHADER_HOTRELOAD
 
 	# VULKAN SPECIFICS
 	VULKAN_GLOBAL_DESCRIPTOR_SETS=3
@@ -308,3 +348,29 @@ target_compile_definitions(MobaBase PRIVATE
 
 # FILE ACTIONS -----------------------------------------------------------------------
 file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/Shaders/Build")
+
+# DX Compiler
+set(DXC_SOURCE_PATH "${CMAKE_SOURCE_DIR}/Ext/dxc")
+if(WIN32)
+	set(DXC_FILES
+			"${DXC_SOURCE_PATH}/dxc.exe"
+			"${DXC_SOURCE_PATH}/dxcompiler.dll"
+			"${DXC_SOURCE_PATH}/dxil.dll"
+	)
+else()
+	set(DXC_FILES
+			"${DXC_SOURCE_PATH}/dxc"
+			"${DXC_SOURCE_PATH}/libdxcompiler.so"
+			"${DXC_SOURCE_PATH}/libdxil.so"
+	)
+endif()
+foreach(dxc_file ${DXC_FILES})
+	file(COPY ${dxc_file} DESTINATION ${CMAKE_BINARY_DIR})
+endforeach()
+if(NOT WIN32)
+	# Ensure the 'dxc' binary is actually executable after copy
+	add_custom_command(TARGET MobaBase POST_BUILD
+			COMMAND chmod +x $<TARGET_FILE_DIR:MobaBase>/dxc
+			COMMENT "Setting executable permissions on DXC"
+	)
+endif()

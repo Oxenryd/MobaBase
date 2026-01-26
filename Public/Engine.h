@@ -10,22 +10,18 @@
 #endif
 
 
+#include "Format_fixes.hpp"
 #include "VulkanContext.hpp"
 
-
 #include <cstdint>
-#include <type_traits>
 #include <list>
-#include <map>
 #include <algorithm>
 
-#include "WindowSurface.h"
+#include "WindowContext.h"
 #include "InputManager.hpp"
 #include "Debug.hpp"
-#include "Log.hpp"
 #include "Delegate.hpp"
 #include "ArenaAllocator.hpp"
-#include "Timer.h"
 #include "TimerSystem.h"
 #include "RenderManager.h"
 #include "Scene.h"
@@ -34,13 +30,13 @@
 #include "MWork.hpp"
 
 
-constexpr const double			DEFAULT_DELTATIME_JITTER_SETTING = 0.002;
-constexpr const double			FPS_400 = 1.0 / 400.0;
-constexpr const double			FPS_165 = 1.0 / 165.0;
-constexpr const double			FPS_120 = 1.0 / 120.0;
-constexpr const double			FPS_60 = 1.0 / 60.0;
-constexpr const double			FPS_50 = 1.0 / 50.0;
-constexpr static const double	MAX_DELTA_TIME = 1.0;
+constexpr double			DEFAULT_DELTATIME_JITTER_SETTING = 0.002;
+constexpr double			FPS_400 = 1.0 / 400.0;
+constexpr double			FPS_165 = 1.0 / 165.0;
+constexpr double			FPS_120 = 1.0 / 120.0;
+constexpr double			FPS_60 = 1.0 / 60.0;
+constexpr double			FPS_50 = 1.0 / 50.0;
+constexpr static double	MAX_DELTA_TIME = 1.0;
 
 enum class EngineStatus : uint8_t
 {
@@ -52,42 +48,37 @@ enum class EngineStatus : uint8_t
 
 struct CamIndex
 {
-	union
-	{
-	public:
-		uint64_t _raw;
-		struct
-		{
-			uint16_t sceneIndex;
-			uint32_t camIndex;
-
-		};
-	};
-	CamIndex(uint64_t raw) :
-		_raw{raw} {}
-	CamIndex(uint16_t scene, uint32_t cameraIndex) :
+	uint16_t sceneIndex;
+	uint32_t camIndex;
+	CamIndex() : sceneIndex(UINT16_INVALID), camIndex(UINT32_INVALID) {}
+	explicit CamIndex(const CamIndex& camIndex) :
+		sceneIndex{camIndex.sceneIndex},
+		camIndex{camIndex.camIndex}
+	{}
+	explicit CamIndex(const uint64_t raw) :
+		sceneIndex{static_cast<uint16_t>(raw & 0xFFFF)},
+		camIndex{static_cast<uint32_t>(raw & 0xFFFFFFFF << 16)}
+	{}
+	CamIndex(const uint16_t scene, const uint32_t cameraIndex) :
 		sceneIndex{scene},
 		camIndex{cameraIndex}
 	{}
-
-
 
 	bool invalid() const {
 		return sceneIndex == UINT16_INVALID || camIndex == UINT32_INVALID;
 	}
 
-	operator bool() {
+	explicit operator bool() const {
 		return !invalid();
 	}
 
-	bool operator==(const CamIndex& rhs) {
+	bool operator==(const CamIndex& rhs) const {
 		return sceneIndex == rhs.sceneIndex && camIndex == rhs.camIndex;
 	}
 };
 
 class Engine
 {
-private:
 	static inline Engine* s_instance = nullptr;
 
 	HeapArena m_baseArena;
@@ -128,15 +119,15 @@ private:
 	INLINE ErrorCode _initShaderManager();
 	INLINE ErrorCode _initInputManager();
 	INLINE ErrorCode _initGraphics();
-	INLINE ErrorCode _initBaseShaders();
+	INLINE ErrorCode _initBaseShaders() const;
 	INLINE ErrorCode _initBaseCallbacks();
 	INLINE ErrorCode _initJobSystem();
 
 	// Base Systems
 	RenderManager* m_renderMan = nullptr;
-	WindowSurface* m_wnd = nullptr;;
-	InputManager* m_inputMan = nullptr;;
-	VulkanContext* m_vkCtx = nullptr;;
+	WindowContext* m_wnd = nullptr;
+	InputManager* m_inputMan = nullptr;
+	VulkanContext* m_vkCtx = nullptr;
 	FrameArena* m_workArena = nullptr;
 
 
@@ -147,9 +138,9 @@ private:
 
 public:
 	~Engine();
-	Engine(const std::string& appName, size_t heapSize);
+	Engine(const char* appName, size_t heapSize);
 	
-	Camera* mainCamera();
+	Camera* mainCamera() const;
 
 	// EVENTS
 	Event<Engine*> onStartInitiated;
@@ -169,12 +160,12 @@ public:
 	INLINE SceneBase* createNewScene(size_t arenaSize, void* argument) {
 		uint16_t index = m_newSceneIndex++;
 		m_scenes.resize(std::max(static_cast<size_t>(index), m_scenes.size() + 1));
-		m_scenes[index] = (T::createDefault(arenaSize, index, argument));
+		m_scenes[index] = T::createDefault(arenaSize, index, argument);
 		return m_scenes[index];
 	}
 
 	INLINE ErrorCode registerActiveScene(SceneBase* const scene) {
-		auto it = m_activeSceneIndices.find({ scene->m_sceneIndex });
+		const auto it = m_activeSceneIndices.find({ scene->m_sceneIndex });
 		if (it != m_activeSceneIndices.end()) {
 			return ErrorCode::SCENE_ALREADY_ACTIVE;
 		}
@@ -182,14 +173,14 @@ public:
 		return ErrorCode::OK;
 	}
 	INLINE ErrorCode unregisterActiveScene(SceneBase* const scene) {
-		auto it = m_activeSceneIndices.find({ scene->m_sceneIndex });
+		const auto it = m_activeSceneIndices.find({ scene->m_sceneIndex });
 		if (it == m_activeSceneIndices.end()) {
 			return ErrorCode::SCENE_UNTRACKED_SCENE_REFERENCE;
 		}
 		m_activeSceneIndices.erase(scene->m_sceneIndex);
 		return ErrorCode::OK;
 	}
-	INLINE ArenaRegistry& getSceneRegistry(SceneBase* const scene) {
+	INLINE ArenaRegistry& getSceneRegistry(const SceneBase* const scene) const {
 		return m_scenes[scene->m_sceneIndex]->registry();
 	}
 
@@ -205,12 +196,12 @@ public:
 	INLINE static double cos() { return s_instance->m_baseCosD; }
 	INLINE static float sinF() { return s_instance->m_baseSinF; }
 	INLINE static float cosF() { return s_instance->m_baseCosF; }
-	INLINE RenderManager* getRenderManager() { return m_renderMan; }
+	INLINE RenderManager* getRenderManager() const { return m_renderMan; }
 	void start();
 	void stop();
 	INLINE const EngineStatus& getStatus() const { return m_status; }
-	INLINE SceneBase* const getScene(const size_t index) { return m_scenes[index]; }
-	INLINE std::vector<SceneBase*> const getActiveScenes() { 
+	INLINE SceneBase* getScene(const size_t index) const { return m_scenes[index]; }
+	INLINE std::vector<SceneBase*> getActiveScenes() const {
 		std::vector<SceneBase*> scenes;
 		for (auto& index : m_activeSceneIndices) {
 			scenes.push_back(m_scenes[index]);
@@ -226,10 +217,10 @@ public:
 	}
 
 	void setMainCamera(uint16_t sceneIndex, uint32_t camIndex);
-	ErrorCode init();
-	INLINE WindowSurface* const getWndSurface() { return m_wnd; }
-	INLINE InputManager* const getInputManager() { return m_inputMan; }
-	INLINE VulkanContext* const getVulkanContext() { return m_vkCtx; }
+	ErrorCode init(WindowContext* wndCtx = nullptr);
+	INLINE WindowContext* getWndSurface() const { return m_wnd; }
+	INLINE InputManager* getInputManager() const { return m_inputMan; }
+	INLINE VulkanContext* getVulkanContext() const { return m_vkCtx; }
 
 	static Engine* getInstance() { return s_instance; }
 };

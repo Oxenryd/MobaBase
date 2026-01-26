@@ -250,7 +250,7 @@ void AssetLoader::parseMaterialTextures(const std::string& filename, const aiSce
 					//size_t dataSize = embeddedTex->mWidth;
 					//const uint8_t* data = reinterpret_cast<const uint8_t*>(embeddedTex->pcData);
 					// Now you can feed `data` to your image loader (stb_image, etc.)
-					throw std::exception("Not Implemented.");
+					throw std::runtime_error("Not Implemented.");
 
 				} else {
 					

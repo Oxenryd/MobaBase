@@ -8,7 +8,6 @@
 #include <algorithm>
 
 #include "SystemECS.h"
-#include "ErrorCodes.hpp"
 #include "Transform.hpp"
 #include "EnabledTag.hpp"
 #include "MMath.hpp"
@@ -20,10 +19,9 @@ using TransformGroup =
 decltype(std::declval<ArenaRegistry&>()
 		 .group<TransformComponent, BoundingVolumeComponent, EnabledTag>());
 
-class TransformSystem : public SystemECS_ModelTransformsProvider
+class TransformSystem final : public SystemECS_ModelTransformsProvider
 {
 	struct StackItem { entt::entity e; ObjectStateType dirtyState; };
-private:
 	std::array<std::vector<StackItem>, TRANSFORM_THREADS_MAX> m_threadsStacks;
 	ArenaUMap<entt::entity, size_t> m_entityRootIndexMap;
 	ArenaVector<entt::entity> m_roots;
@@ -56,14 +54,14 @@ private:
 	// Optimized batch update function
 	static void _brute_update_transform_batch_avx2(
 		const std::vector<entt::entity>& entities,
-		TransformSystem* this_,
-		size_t start_idx,
-		size_t count) {
+		TransformSystem* const this_,
+		const size_t start_idx,
+		const size_t count) {
 
 		PROFILE_SCOPE("TransformWorkerAVX");
 
 		constexpr size_t batch_size = 4;
-		const size_t batched_count = (count / batch_size) * batch_size;
+		const size_t batched_count = count / batch_size * batch_size;
 
 		// Process in batches of 4
 		for (size_t i = start_idx; i < start_idx + batched_count; i += batch_size) {
@@ -77,7 +75,7 @@ private:
 				const entt::entity e = entities[i + j];
 				//if (!this_->m_reg->all_of<EnabledTag>(e)) continue;
 
-				auto& t = this_->m_groupPtr->get<TransformComponent>(e);
+				const auto& t = this_->m_groupPtr->get<TransformComponent>(e);
 				positions[j] = this_->m_positions[t.dataIndex];
 				rotations[j] = this_->m_rotations[t.dataIndex];
 				scales[j] = this_->m_scales[t.dataIndex];
@@ -97,8 +95,9 @@ private:
 				if (p != entt::null) {
 					const auto& pt = this_->m_groupPtr->get<TransformComponent>(p);
 					if (objectState_is_dirty(pt.state.value())) t1.state.setByEnum(ObjectState::ParentMovedThisFrame);
+					auto& mtw = this_->m_modelTransforms[t1.dataIndex].modelToWorld;
 					this_->m_modelTransforms[t1.dataIndex] = MMath::matrix_multiply_avx2(
-						this_->m_modelTransforms[pt.dataIndex], local_matrices[j]);
+						mtw, local_matrices[j]);
 				} else {
 					this_->m_modelTransforms[t1.dataIndex] = local_matrices[j];
 				}
@@ -114,12 +113,10 @@ private:
 
 				// Flags
 				t1.state.clearByEnum(
-					(ObjectState)(
-						static_cast<ObjectStateType>(ObjectState::DirtyTransform) |
-						static_cast<ObjectStateType>(ObjectState::TranslationDirty) |
-						static_cast<ObjectStateType>(ObjectState::RotationDirty) |
-						static_cast<ObjectStateType>(ObjectState::ScaleDirty)
-						)
+					static_cast<ObjectState>(static_cast<ObjectStateType>(ObjectState::DirtyTransform) |
+					                         static_cast<ObjectStateType>(ObjectState::TranslationDirty) |
+					                         static_cast<ObjectStateType>(ObjectState::RotationDirty) |
+					                         static_cast<ObjectStateType>(ObjectState::ScaleDirty))
 				);
 
 				// Children
@@ -138,7 +135,7 @@ private:
 					}
 					
 				} else {
-					for (auto child : kids) {
+					for (const auto child : kids) {
 						_brute_update_transform_scalar(child, this_);
 					}
 				}
@@ -151,18 +148,20 @@ private:
 		}
 	}
 
-	static void _brute_update_transform_scalar(entt::entity root, TransformSystem* this_) {
+	static void _brute_update_transform_scalar(const entt::entity root, TransformSystem* const this_) {
 		//if (!this_->m_reg->all_of<EnabledTag>(root)) return;
 
 		PROFILE_SCOPE("TransformWorkerScalar");
 
 		auto& t = this_->m_groupPtr->get<TransformComponent>(root);
-		glm::mat4 local =
-			MMath::composeTRS(this_->m_positions[t.dataIndex], this_->m_rotations[t.dataIndex], this_->m_scales[t.dataIndex]);
+		const glm::mat4 local =
+			MMath::composeTRS(
+				this_->m_positions[t.dataIndex],
+				this_->m_rotations[t.dataIndex], this_->m_scales[t.dataIndex]);
 
 		t.state.clearByEnum(ObjectState::MovedThisFrame);
 
-		auto intEntity = entt::to_integral(root);
+		const auto intEntity = entt::to_integral(root);
 
 		// Always update, no dirty checks
 		const entt::entity p = this_->m_parentOf[intEntity];
@@ -170,10 +169,10 @@ private:
 			const auto& pt = this_->m_groupPtr->get<TransformComponent>(p);
 			if (objectState_is_dirty(pt.state.value())) t.state.setByEnum(ObjectState::ParentMovedThisFrame);
 
-			this_->m_modelTransforms[t.dataIndex] = MMath::matrix_multiply_avx2(
-				this_->m_modelTransforms[pt.dataIndex], local);
+			this_->m_modelTransforms[t.dataIndex].modelToWorld = MMath::matrix_multiply_avx2(
+				this_->m_modelTransforms[pt.dataIndex].modelToWorld, local);
 		} else {
-			this_->m_modelTransforms[t.dataIndex] = local;
+			this_->m_modelTransforms[t.dataIndex].modelToWorld = local;
 		}
 
 		//// Always update bounds
@@ -187,12 +186,10 @@ private:
 
 		// Flags
 		t.state.clearByEnum(
-			(ObjectState)(
-				static_cast<ObjectStateType>(ObjectState::DirtyTransform) |
-				static_cast<ObjectStateType>(ObjectState::TranslationDirty) |
-				static_cast<ObjectStateType>(ObjectState::RotationDirty) |
-				static_cast<ObjectStateType>(ObjectState::ScaleDirty)
-				)
+			static_cast<ObjectState>(static_cast<ObjectStateType>(ObjectState::DirtyTransform) |
+			                         static_cast<ObjectStateType>(ObjectState::TranslationDirty) |
+			                         static_cast<ObjectStateType>(ObjectState::RotationDirty) |
+			                         static_cast<ObjectStateType>(ObjectState::ScaleDirty))
 		);
 
 
@@ -212,7 +209,7 @@ private:
 			}
 
 		} else {
-			for (auto child : kids) {
+			for (const auto child : kids) {
 				_brute_update_transform_scalar(child, this_);
 			}
 		}
@@ -252,7 +249,7 @@ private:
 	//	}
 	//}
 
-	static void _workerThread_avx2_test_entities(TransformSystem* this_, uint8_t tI) {
+	static void _workerThread_avx2_test_entities(TransformSystem* const this_, const uint8_t tI) {
 		while (true) {
 			this_->m_startSemas[tI]->acquire();
 
@@ -260,7 +257,8 @@ private:
 				if (!this_->m_threadsRunning) return;
 
 				// Process in batches of 4 with AVX2
-				_brute_update_transform_batch_avx2(this_->m_workerEntities[tI], this_, 0, this_->m_workerEntities[tI].size());
+				_brute_update_transform_batch_avx2(
+					this_->m_workerEntities[tI], this_, 0, this_->m_workerEntities[tI].size());
 			}
 			this_->m_doneSemas[tI]->release();
 		}
@@ -391,10 +389,10 @@ private:
 	//	}
 	//}
 
-	INLINE void _onDestroy(ArenaRegistry& reg, entt::entity entity) {
-		auto id = entt::to_integral(entity);
+	INLINE void _onDestroy(ArenaRegistry&, const entt::entity entity) {
+		const auto id = entt::to_integral(entity);
 		if (id < m_parentOf.size()) {
-			entt::entity parent = m_parentOf[id];
+			const entt::entity parent = m_parentOf[id];
 			if (parent != entt::null) {
 				auto& siblings = m_childrenOf[entt::to_integral(parent)];
 				std::erase(siblings, entity);
@@ -406,11 +404,11 @@ private:
 	}
 
 	INLINE void _checkEntityIsRoot(entt::entity e) {
-		auto id = entt::to_integral(e);
+		const auto id = entt::to_integral(e);
 		
-		auto parent = m_parentOf[id];
+		const auto parent = m_parentOf[id];
 		if (parent == entt::null) {
-			auto it = m_entityRootIndexMap.find(e);
+			const auto it = m_entityRootIndexMap.find(e);
 			if (it == m_entityRootIndexMap.end()) {
 				auto index = m_roots.size();
 				m_roots.push_back(e);
@@ -418,7 +416,7 @@ private:
 			}
 
 			} else {
-				auto it = m_entityRootIndexMap.find(e);
+				const auto it = m_entityRootIndexMap.find(e);
 				if (it != m_entityRootIndexMap.end()) {
 					m_roots[it->second] = m_roots.back();
 					m_roots.pop_back();
@@ -431,7 +429,7 @@ private:
 	//}
 
 public:
-	virtual ~TransformSystem() {
+	~TransformSystem() override {
 		m_reg->on_destroy<TransformComponent>()
 			.disconnect<&TransformSystem::_onDestroy>(this);
 
@@ -448,16 +446,16 @@ public:
 		}
 	}
 
-	TransformSystem(ArenaRegistry* const registry, uint16_t sceneIndex, Arena* const arena)
+	TransformSystem(ArenaRegistry* const registry, const uint16_t sceneIndex, Arena* const arena)
 		: SystemECS_ModelTransformsProvider{ registry, sceneIndex },
+		m_entityRootIndexMap{ ArenaAllocator<std::pair<entt::entity, size_t>>{arena} },
+		m_roots{ ArenaAllocator<entt::entity>(arena) },
 		m_modelTransforms{ ArenaAllocator<ModelTransform>(arena) },
 		m_parentOf{ ArenaAllocator<entt::entity>(arena) },
 		m_childrenOf{ ArenaAllocator<entt::entity>(arena) },
-		m_roots{ ArenaAllocator<entt::entity>(arena) },
 		m_positions{ArenaAllocator<glm::vec3>{arena}},
-		m_scales{ ArenaAllocator<glm::vec3>{arena} },
 		m_rotations{ ArenaAllocator<glm::quat>{arena} },
-		m_entityRootIndexMap{ ArenaAllocator<std::pair<entt::entity, size_t>>{arena} }
+		m_scales{ ArenaAllocator<glm::vec3>{arena} }
 {
 		registry->on_destroy<TransformComponent>()
 			.connect<&TransformSystem::_onDestroy>(this);
@@ -475,9 +473,10 @@ public:
 			//m_workers[i] = new std::thread{ TransformSystem::_workerThread, this, i }; 
 			//m_workers[i] = new std::thread{ TransformSystem::workerThread_brute_test, this, i };
 			//m_workers[i] = new std::thread{ TransformSystem::_workerThread_avx2_test, this, i };
-			m_workers[i] = new std::thread{ TransformSystem::_workerThread_avx2_test_entities, this, i };
+
 			m_startSemas[i] = new std::binary_semaphore{ 0 };
 			m_doneSemas[i] = new std::binary_semaphore{ 0 };
+			m_workers[i] = new std::thread{ _workerThread_avx2_test_entities, this, i };
 		}
 	}
 
@@ -486,43 +485,44 @@ public:
 	INLINE ArenaVector<glm::vec3>& scales() { return m_scales; }
 	
 private:
-	static constexpr size_t _workerDiv = (TRANSFORM_THREADS_MAX * (TRANSFORM_THREADS_MAX / 2));
+	static constexpr size_t _workerDiv = TRANSFORM_THREADS_MAX * (TRANSFORM_THREADS_MAX / 2);
 
-	INLINE Range<uint32_t> _setupWorkerThreadRange(const entt::entity* entities, size_t entCount) {
+	INLINE Range<uint32_t> _setupWorkerThreadRange(const entt::entity* const entities, const size_t entCount) {
 
-		auto startWorkers = static_cast<uint8_t>(
+		const auto startWorkers = static_cast<uint8_t>(
 			std::clamp(entCount / _workerDiv,
 					   static_cast <size_t>(1),
 					   static_cast<size_t>(TRANSFORM_THREADS_MAX)));
 
-		auto curThreads = m_curNumWorkers.load(std::memory_order_acquire);
+		const auto curThreads = m_curNumWorkers.load(std::memory_order_acquire);
 		if (curThreads >= TRANSFORM_THREADS_MAX)
 			return { 0, 0 };
 
-		auto availWorkers = std::clamp(static_cast<unsigned int>(startWorkers),
-									   (unsigned int)0,
-									   (unsigned int)TRANSFORM_THREADS_MAX - curThreads);
+		const auto availWorkers = std::clamp(static_cast<unsigned int>(startWorkers),
+									   static_cast<unsigned int>(0),
+									   static_cast<unsigned int>(TRANSFORM_THREADS_MAX) - curThreads);
 
 		uint8_t expected = static_cast<uint8_t>(curThreads + availWorkers);
 		m_curNumWorkers.fetch_add(static_cast<uint8_t>(availWorkers), std::memory_order_acq_rel);
-		if (!m_curNumWorkers.compare_exchange_strong(expected, static_cast<uint8_t>(curThreads + availWorkers))) {
+		if (!m_curNumWorkers.compare_exchange_strong(
+			expected, static_cast<uint8_t>(curThreads + availWorkers))) {
 			if (expected >= TRANSFORM_THREADS_MAX)
 				return { 0, 0 };
 		}
 
 		auto threadRange = Range<uint32_t>{ curThreads, static_cast<uint32_t>(expected) - curThreads };
-		uint32_t offset = static_cast<uint32_t>(
-			std::ceil(static_cast<float>(entCount / static_cast<float>(threadRange.count)))
+		const uint32_t offset = static_cast<uint32_t>(
+			std::ceil(entCount / static_cast<float>(threadRange.count))
 			);
 
 
 		for (uint32_t i = 0; i < threadRange.count; ++i) {
-			uint32_t start = i * offset;
-			uint32_t count = (i == threadRange.count - 1 && entCount % offset != 0)
+			const uint32_t start = i * offset;
+			const uint32_t count = i == threadRange.count - 1 && entCount % offset != 0
 				? entCount % offset
 				: offset;
 
-			auto threadId = threadRange[i];
+			const auto threadId = threadRange[i];
 			m_workerEntities[threadId].reserve(count);
 			m_workerEntities[threadId].clear();
 			for (size_t e = start; e < start + count; ++e) {
@@ -551,9 +551,6 @@ public:
 		for (size_t i = startRange.start(); i < startRange.end(); ++i) {
 			m_doneSemas[i]->acquire();
 		}
-
-		return;
-
 
 		////TEST MT
 		////static constexpr size_t workerDiv = (TRANSFORM_THREADS_MAX * (TRANSFORM_THREADS_MAX / 2));
@@ -585,13 +582,13 @@ public:
 
 
 
-	INLINE void registryEmplace(entt::entity entity, void* valueInPtr = nullptr, void** valueOutPtr = nullptr) override {
+	INLINE void registryEmplace(const entt::entity entity, [[maybe_unused]] void* valueInPtr, [[maybe_unused]] void** valueOutPtr) override {
 		auto& transComp = m_reg->emplace_or_replace<TransformComponent>(entity, TransformComponent{});
 		
-		auto matrixIndex = static_cast<uint32_t>(m_modelTransforms.size());
+		const auto matrixIndex = static_cast<uint32_t>(m_modelTransforms.size());
 		transComp.dataIndex = matrixIndex;
 		transComp.sceneIndex = m_sceneIndex;
-		auto index = entt::to_integral(entity);
+		const auto index = entt::to_integral(entity);
 		if (index >= m_parentOf.size())
 			m_parentOf.resize(index + 1, entt::null);
 		if (index >= m_childrenOf.size())
@@ -608,7 +605,7 @@ public:
 
 
 		if (valueInPtr) {
-			auto parent = static_cast<entt::entity*>(valueInPtr);
+			const auto parent = static_cast<entt::entity*>(valueInPtr);
 			setParent(entity, parent);
 		} else {
 			_checkEntityIsRoot(entity);
@@ -623,14 +620,14 @@ public:
 	}
 
 	INLINE void setParent(const entt::entity entity, const entt::entity* parent) {
-		auto id = entt::to_integral(entity);
+		const auto id = entt::to_integral(entity);
 
 		if (id >= m_parentOf.size()) {
 			m_parentOf.resize(id + 1, entt::null);
 			m_childrenOf.resize(id + 1);
 		}
 
-		entt::entity oldParent = m_parentOf[id];
+		const entt::entity oldParent = m_parentOf[id];
 		if (oldParent != entt::null) {
 			auto& childrenToOldParent = m_childrenOf[entt::to_integral(oldParent)];
 			std::erase(childrenToOldParent, entity);
@@ -638,10 +635,10 @@ public:
 		}
 
 		if (parent) {
-			entt::entity newParent = *parent;
+			const entt::entity newParent = *parent;
 			if (newParent == entt::null) {
 				m_parentOf[id] = entt::null;
-				auto it = m_entityRootIndexMap.find(entity);
+				const auto it = m_entityRootIndexMap.find(entity);
 				if (it != m_entityRootIndexMap.end()) {
 					m_roots[it->second] = m_roots.back();
 					m_roots.pop_back();
@@ -649,7 +646,7 @@ public:
 				return;
 			}
 
-			auto newParentId = entt::to_integral(newParent);
+			const auto newParentId = entt::to_integral(newParent);
 			if (newParentId >= m_childrenOf.size()) {
 				m_childrenOf.resize(newParentId + 1);
 			}
@@ -661,7 +658,7 @@ public:
 
 		} else {
 			m_parentOf[id] = entt::null;
-			auto it = m_entityRootIndexMap.find(entity);
+			const auto it = m_entityRootIndexMap.find(entity);
 			if (it != m_entityRootIndexMap.end()) {
 				m_roots[it->second] = m_roots.back();
 				m_roots.pop_back();
@@ -670,15 +667,15 @@ public:
 	}
 
 	INLINE std::span<entt::entity> getChildren(const entt::entity ofEntity) {
-		auto id = entt::to_integral(ofEntity);
+		const auto id = entt::to_integral(ofEntity);
 		if (id >= m_childrenOf.size())
 			return std::span<entt::entity>();
 
-		return std::span<entt::entity>(m_childrenOf[id].data(), m_childrenOf[id].size());
+		return std::span(m_childrenOf[id].data(), m_childrenOf[id].size());
 	}
 
-	INLINE entt::entity getParent(const entt::entity ofEntity) {
-		auto id = entt::to_integral(ofEntity);
+	INLINE entt::entity getParent(const entt::entity ofEntity) const {
+		const auto id = entt::to_integral(ofEntity);
 		if (id >= m_parentOf.size())
 			return entt::null;
 		
@@ -686,10 +683,10 @@ public:
 	}
 
 	INLINE void clearChildren(const entt::entity parent) {
-		auto parentId = entt::to_integral(parent);
+		const auto parentId = entt::to_integral(parent);
 		if (parentId >= m_childrenOf.size()) return;
 
-		for (auto child : m_childrenOf[parentId]) {
+		for (const auto child : m_childrenOf[parentId]) {
 			m_parentOf[entt::to_integral(child)] = entt::null;
 		}
 		m_childrenOf[parentId].clear();
@@ -698,19 +695,20 @@ public:
 
 	INLINE void printHierarchy() {
 		Log::logLine(LogType::Info, LogMod::Engine,
-					 std::format("\nTransform Hierarchy for Scene index {} - *\n", m_sceneIndex) );
-		
-		uint32_t depth = 0;
-		for (auto root : m_roots) {			
+					 std::format("\nTransform Hierarchy for Scene index {} - *\n",
+					 	static_cast<uint32_t>(m_sceneIndex)) );
+
+		for (const auto root : m_roots) {
+			constexpr uint32_t depth = 0;
 			logTransformTag(root, depth);
 		}
 		Log::logLine(LogType::Success, LogMod::Engine, "Done.");
 	}
 
-	INLINE void logTransformTag(entt::entity entity, uint32_t depth) {
-		Transform transform{ m_reg, entity };
-		auto tag = transform.getTag();
-		std::string tagStr = tag.empty() ? "untagged" : std::string{ tag };
+	INLINE void logTransformTag(entt::entity entity, const uint32_t depth) {
+		const Transform transform{ m_reg, entity };
+		const auto tag = transform.getTag();
+		const std::string tagStr = tag.empty() ? "untagged" : std::string{ tag };
 		std::string tab = "\t";
 		for (size_t i = 0; i < depth; ++i) {
 			if (i == depth - 1)
@@ -720,7 +718,7 @@ public:
 		}
 		std::cout << tab << static_cast<uint32_t>(entity) << ", " << tagStr << "\n";
 		//LOGLINE_IND(LogType::Info, LogMod::Engine, tagStr, depth);
-		for (auto child : m_childrenOf[entt::to_integral(entity)])
+		for (const auto child : m_childrenOf[entt::to_integral(entity)])
 			logTransformTag(child, depth + 1);
 	}
 };

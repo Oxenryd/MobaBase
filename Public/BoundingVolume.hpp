@@ -18,7 +18,7 @@ public:
 		m_entity{entt::null}
 	{}
 
-	BoundingVolume(ArenaRegistry* registry, entt::entity entity)
+	BoundingVolume(ArenaRegistry* const registry, const entt::entity entity)
 		: m_reg{ registry }, m_entity{ entity } {}
 	BoundingVolume(const BoundingVolume& other) {
 		m_reg = other.m_reg;
@@ -44,8 +44,10 @@ public:
 
 		other.m_reg = nullptr;
 		other.m_entity = entt::null;
+
+		return *this;
 	}
-	bool operator==(const BoundingVolume& rhs) {
+	bool operator==(const BoundingVolume& rhs) const {
 		return m_reg == rhs.m_reg && m_entity == rhs.m_entity;
 	}
 
@@ -56,7 +58,7 @@ public:
 	AABB getCoarseAABB() const;
 	AABB getCoarseAABB_local() const;
 	
-	INLINE operator BoundingVolumeComponent& () {
+	INLINE operator BoundingVolumeComponent& () const {
 		return m_reg->get<BoundingVolumeComponent>(m_entity);
 	}
 	INLINE operator const BoundingVolumeComponent& () const {

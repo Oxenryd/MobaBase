@@ -2,8 +2,6 @@
 #define INPUTTYPES_H
 
 #include <cstdint>
-#include <format>
-#include <string>
 
 enum class KeyCode : uint16_t
 {
@@ -51,236 +49,500 @@ enum class KeyCode : uint16_t
     Comma, Period, Slash,
 };
 
-
-enum class MouseButtonDownState
-{
-#ifdef BUILD_WIN
+enum class KeyMod : uint8_t {
     None = 0,
-    Left = 0x0001,
-    Right = 0x0002,
-    ShiftKey = 0x0004,
-    ControlKey = 0x0008,
-    Middle = 0x0010,
-    XButton1 = 0x0020,
-    XButton2 = 0x0040
-#endif
+    Shift = 1,
+    Control = 2,
+    Alt = 4,
+    Super = 8,
+    CapsLock = 16,
+    NumLock = 32
 };
 
-enum class MButton : uint8_t
+struct alignas(4) KeyCombo
 {
-    None = 0x00,
-    Left = 0x01,
-    Right = 0x02,
-    ShiftKey = 0x04,
-    ControlKey = 0x08,
-    Middle = 0x10,
-    M4 = 0x20,
-    M5 = 0x40,
-    _ENUM_END = 0x80
+    union {
+        struct {
+            KeyCode key;
+            KeyMod mods;
+        };
+        uint32_t raw;
+    };
+    KeyCombo() = default;
+    KeyCombo(const KeyCombo& other) :
+        raw{other.raw} {}
+    KeyCombo(const KeyCode key, const KeyMod mods) :
+        key{key}, mods{mods} {};
+    KeyCombo(const int key, const int mods) :
+        key{static_cast<KeyCode>(key)}, mods{static_cast<KeyMod>(mods)} {}
+    KeyCombo& operator=(const KeyCombo& rhs) {
+        key = rhs.key;
+        mods = rhs.mods;
+        return *this;
+    }
+    KeyCombo(KeyCombo&& other) noexcept {
+        key = other.key;
+        mods = other.mods;
+        other.key = KeyCode{};
+        other.mods = KeyMod{};
+    }
+    KeyCombo& operator=(KeyCombo&& other) noexcept {
+        key = other.key;
+        mods = other.mods;
+        other.key = KeyCode{};
+        other.mods = KeyMod{};
+        return *this;
+    }
+    friend bool operator==(const KeyCombo& lhs, const KeyCombo& rhs) {
+        return lhs.raw == rhs.raw;
+    }
 };
 
-//template<typename A, typename B>
-//inline MButton operator|(A a, B b) {
-//    return static_cast<MouseButton>(
-//        static_cast<uint8_t>(a) | static_cast<uint8_t>(b)
-//        );
-//}
-//template<typename A, typename B>
-//inline MButton operator&(A a, B b) {
-//    return static_cast<MouseButton>(
-//        static_cast<uint8_t>(a) & static_cast<uint8_t>(b)
-//        );
-//}
 
-struct MouseState
+struct KeyComboHash {
+    size_t operator()(KeyCombo const& value) const noexcept {
+        uint64_t x = static_cast<uint64_t>(value.raw);
+        x = (x ^ (x >> 30)) * 0xbf58476d1ce4e5b9ULL;
+        x = (x ^ (x >> 27)) * 0x94d049bb133111ebULL;
+        x = x ^ (x >> 31);
+        return x;
+    }
+};
+
+typedef uint16_t ScanCode;
+
+enum class GLFW_MouseButton : uint8_t
 {
+    Button1 = GLFW_MOUSE_BUTTON_1,
+    Left = GLFW_MOUSE_BUTTON_LEFT,
+    Button2 = GLFW_MOUSE_BUTTON_2,
+    Right = GLFW_MOUSE_BUTTON_RIGHT,
+    Button3 = GLFW_MOUSE_BUTTON_3,
+    Middle = GLFW_MOUSE_BUTTON_MIDDLE,
+    Button4 = GLFW_MOUSE_BUTTON_4,
+    Button5 = GLFW_MOUSE_BUTTON_5,
+    Button6 = GLFW_MOUSE_BUTTON_6,
+    Button7 = GLFW_MOUSE_BUTTON_7,
+    Button8 = GLFW_MOUSE_BUTTON_8,
+    ENUM_END
+};
 
-    glm::ivec2 relativePosition{};
-    glm::ivec2 lastPositionDelta{};
-    glm::ivec2 absoluteScreenPosition{};
-    glm::i16vec2 wheel{};
-    SizedBitField<uint8_t> buttonState{};
+enum class MouseButton : uint8_t
+{
+    None = 0,
 
-    std::string to_String() {
-        return std::format("\n absPos: {},{}\trelPos: {},{}\twhDelta: {},{}\tpDelta: {},{}\tbState: {}",
+    Button1 =   1 << 0,
+    Left =      1 << 0,
+
+    Button2 =   1 << 1,
+    Right =     1 << 1,
+
+    Button3 =   1 << 2,
+    Middle =    1 << 2,
+
+    Button4 =   1 << 3,
+    Button5 =   1 << 4,
+    Button6 =   1 << 5,
+    Button7 =   1 << 6,
+    Button8 =   1 << 7,
+};
+
+template<typename I>
+    requires std::is_integral_v<I>
+constexpr MouseButton glfwToMButton(const I button) {
+    switch (button) {
+        default: return MouseButton::None;
+
+        case GLFW_MOUSE_BUTTON_LEFT:
+            return MouseButton::Button1;
+        case GLFW_MOUSE_BUTTON_RIGHT:
+            return MouseButton::Button2;
+        case GLFW_MOUSE_BUTTON_MIDDLE:
+            return MouseButton::Button3;
+        case GLFW_MOUSE_BUTTON_4:
+            return MouseButton::Button4;
+        case GLFW_MOUSE_BUTTON_5:
+            return MouseButton::Button5;
+        case GLFW_MOUSE_BUTTON_6:
+            return MouseButton::Button6;
+        case GLFW_MOUSE_BUTTON_7:
+            return MouseButton::Button7;
+        case GLFW_MOUSE_BUTTON_8:
+            return MouseButton::Button8;
+    }
+}
+
+struct alignas(2) MouseButtonState {
+    union {
+        struct {
+            MouseButton button;
+            KeyMod mods;
+        };
+        uint16_t raw{};
+    };
+
+    MouseButtonState() = default;
+    MouseButtonState(const MouseButtonState& other) :
+        raw{other.raw} {}
+    MouseButtonState(const MouseButton& buttons, const KeyMod& mods) :
+        button(buttons), mods(mods) {}
+    MouseButtonState(const int button, const int mods) :
+        button{glfwToMButton(button)}, mods{static_cast<KeyMod>(mods)} {}
+    MouseButtonState& operator=(const MouseButtonState& other) {
+        raw = other.raw;
+        return *this;
+    }
+    MouseButtonState(MouseButtonState&& other) noexcept {
+        raw = other.raw;
+        other.raw = 0;
+    }
+
+    uint8_t buttonMask() const { return static_cast<uint8_t>(button); }
+
+    MouseButtonState& operator=(MouseButtonState&& other) noexcept {
+        raw = other.raw;
+        other.raw = 0;
+        return *this;
+    }
+
+    MouseButtonState operator~() const {
+        const auto neg = ~static_cast<uint8_t>(button);
+        return MouseButtonState{static_cast<MouseButton>(neg), mods};
+    }
+
+    friend bool operator==(const MouseButtonState& lhs, const MouseButtonState& rhs) {
+        return lhs.raw == rhs.raw;
+    }
+};
+
+struct MouseButtonStateHash {
+    size_t operator()(MouseButtonState const& value) const noexcept {
+        uint64_t x = static_cast<uint64_t>(value.raw);
+        x = (x ^ (x >> 30)) * 0xbf58476d1ce4e5b9ULL;
+        x = (x ^ (x >> 27)) * 0x94d049bb133111ebULL;
+        x = x ^ (x >> 31);
+        return x;
+    }
+};
+
+INLINE static KeyMod operator|(KeyMod  a, KeyMod  b) {
+    return static_cast<KeyMod>(
+        static_cast<uint8_t>(a) | static_cast<uint8_t>(b)
+        );
+}
+INLINE static KeyMod operator&(KeyMod  a, KeyMod  b) {
+    return static_cast<KeyMod >(
+        static_cast<uint8_t>(a) & static_cast<uint8_t>(b)
+        );
+}
+
+INLINE static MouseButton operator|(MouseButton a, MouseButton b) {
+    return static_cast<MouseButton>(
+        static_cast<uint8_t>(a) | static_cast<uint8_t>(b)
+        );
+}
+INLINE static MouseButton operator&(MouseButton a, MouseButton b) {
+    return static_cast<MouseButton>(
+        static_cast<uint8_t>(a) & static_cast<uint8_t>(b)
+        );
+}
+
+INLINE static MouseButtonState operator|(MouseButtonState a, MouseButtonState b) {
+    const auto buttons = a.button | b.button;
+    const auto mods = a.mods | b.mods;
+    return MouseButtonState{buttons, mods};
+}
+INLINE static MouseButtonState operator&(MouseButtonState a, MouseButtonState b) {
+    const auto buttons = a.button & b.button;
+    const auto mods = a.mods & b.mods;
+    return MouseButtonState{buttons, mods};
+}
+
+
+
+
+
+struct alignas(16) MouseState
+{
+    glm::vec2 relativePosition{};
+    glm::vec2 absoluteScreenPosition{};
+    glm::vec2 wheel{};
+    glm::vec2 deltaPosition{};
+    MouseButtonState buttonState{};
+
+    std::string to_string() const {
+        return std::format("\n absPos: {},{}\trelPos: {},{}\twhDelta: {},{}\tdPos: {},{}\tbState: {}",
                            absoluteScreenPosition.x,
                            absoluteScreenPosition.y,
                            relativePosition.x,
                            relativePosition.y,
                            wheel.x,
                            wheel.y,
-                           lastPositionDelta.x,
-                           lastPositionDelta.y,
-                           buttonState.getField());
+                           deltaPosition.x,
+                           deltaPosition.y,
+                           buttonState.raw
+                           );
     }
 
+    void reset() {
+        relativePosition = glm::ivec2(0, 0);
+        absoluteScreenPosition = glm::ivec2(0, 0);
+        wheel = glm::ivec2(0, 0);
+        buttonState.raw = 0;
+    }
 };
 
-enum class KeyAction : uint8_t
+enum class ActionState : uint8_t
 {
-    None = 0,
-    Press = 1,
-    Release = 2,
-    Hold = 3
+    Stopped = 0,
+    Started = 1,
+    KeyRepeat = 2,
+    Performed = 3
 };
 
-struct KeyEvent
-{
-    KeyCode code;
-    KeyAction action;
-};
+INLINE static constexpr KeyCode glfwToKeyCode(const short key) {
+    switch (key) {
+        default: return KeyCode::Unknown;
 
-INLINE static KeyCode VkeyToKeyCode(USHORT vkey, USHORT makeCode, USHORT flags) {
-    //const bool isE0 = (flags & RI_KEY_E0);
-    //const bool isE1 = (flags & RI_KEY_E1);  // rarely used
+        case GLFW_KEY_A: return KeyCode::A;
+        case GLFW_KEY_B: return KeyCode::B;
+        case GLFW_KEY_C: return KeyCode::C;
+        case GLFW_KEY_D: return KeyCode::D;
+        case GLFW_KEY_E: return KeyCode::E;
+        case GLFW_KEY_F: return KeyCode::F;
+        case GLFW_KEY_G: return KeyCode::G;
+        case GLFW_KEY_H: return KeyCode::H;
+        case GLFW_KEY_I: return KeyCode::I;
+        case GLFW_KEY_J: return KeyCode::J;
+        case GLFW_KEY_K: return KeyCode::K;
+        case GLFW_KEY_L: return KeyCode::L;
+        case GLFW_KEY_M: return KeyCode::M;
+        case GLFW_KEY_N: return KeyCode::N;
+        case GLFW_KEY_O: return KeyCode::O;
+        case GLFW_KEY_P: return KeyCode::P;
+        case GLFW_KEY_Q: return KeyCode::Q;
+        case GLFW_KEY_R: return KeyCode::R;
+        case GLFW_KEY_S: return KeyCode::S;
+        case GLFW_KEY_T: return KeyCode::T;
+        case GLFW_KEY_U: return KeyCode::U;
+        case GLFW_KEY_V: return KeyCode::V;
+        case GLFW_KEY_W: return KeyCode::W;
+        case GLFW_KEY_X: return KeyCode::X;
+        case GLFW_KEY_Y: return KeyCode::Y;
+        case GLFW_KEY_Z: return KeyCode::Z;
 
-    switch (vkey) {
-        case 'A': return KeyCode::A;
-        case 'B': return KeyCode::B;
-        case 'C': return KeyCode::C;
-        case 'D': return KeyCode::D;
-        case 'E': return KeyCode::E;
-        case 'F': return KeyCode::F;
-        case 'G': return KeyCode::G;
-        case 'H': return KeyCode::H;
-        case 'I': return KeyCode::I;
-        case 'J': return KeyCode::J;
-        case 'K': return KeyCode::K;
-        case 'L': return KeyCode::L;
-        case 'M': return KeyCode::M;
-        case 'N': return KeyCode::N;
-        case 'O': return KeyCode::O;
-        case 'P': return KeyCode::P;
-        case 'Q': return KeyCode::Q;
-        case 'R': return KeyCode::R;
-        case 'S': return KeyCode::S;
-        case 'T': return KeyCode::T;
-        case 'U': return KeyCode::U;
-        case 'V': return KeyCode::V;
-        case 'W': return KeyCode::W;
-        case 'X': return KeyCode::X;
-        case 'Y': return KeyCode::Y;
-        case 'Z': return KeyCode::Z;
+        case GLFW_KEY_0: return KeyCode::Digit0;
+        case GLFW_KEY_1: return KeyCode::Digit1;
+        case GLFW_KEY_2: return KeyCode::Digit2;
+        case GLFW_KEY_3: return KeyCode::Digit3;
+        case GLFW_KEY_4: return KeyCode::Digit4;
+        case GLFW_KEY_5: return KeyCode::Digit5;
+        case GLFW_KEY_6: return KeyCode::Digit6;
+        case GLFW_KEY_7: return KeyCode::Digit7;
+        case GLFW_KEY_8: return KeyCode::Digit8;
+        case GLFW_KEY_9: return KeyCode::Digit9;
 
-        case '0': return KeyCode::Digit0;
-        case '1': return KeyCode::Digit1;
-        case '2': return KeyCode::Digit2;
-        case '3': return KeyCode::Digit3;
-        case '4': return KeyCode::Digit4;
-        case '5': return KeyCode::Digit5;
-        case '6': return KeyCode::Digit6;
-        case '7': return KeyCode::Digit7;
-        case '8': return KeyCode::Digit8;
-        case '9': return KeyCode::Digit9;
+        case GLFW_KEY_ESCAPE: return KeyCode::Escape;
+        case GLFW_KEY_TAB: return KeyCode::Tab;
+        case GLFW_KEY_CAPS_LOCK: return KeyCode::CapsLock;
+        case GLFW_KEY_ENTER: return KeyCode::Enter;
+        case GLFW_KEY_SPACE: return KeyCode::Space;
+        case GLFW_KEY_BACKSPACE: return KeyCode::Backspace;
+        case GLFW_KEY_INSERT: return KeyCode::Insert;
+        case GLFW_KEY_DELETE: return KeyCode::Delete;
+        case GLFW_KEY_HOME: return KeyCode::Home;
+        case GLFW_KEY_END: return KeyCode::End;
+        case GLFW_KEY_PAGE_UP: return KeyCode::PageUp;
+        case GLFW_KEY_PAGE_DOWN: return KeyCode::PageDown;
+        case GLFW_KEY_LEFT: return KeyCode::ArrowLeft;
+        case GLFW_KEY_RIGHT: return KeyCode::ArrowRight;
+        case GLFW_KEY_UP: return KeyCode::ArrowUp;
+        case GLFW_KEY_DOWN: return KeyCode::ArrowDown;
+        case GLFW_KEY_PRINT_SCREEN: return KeyCode::PrintScreen;
+        case GLFW_KEY_SCROLL_LOCK: return KeyCode::ScrollLock;
+        case GLFW_KEY_PAUSE: return KeyCode::PauseBreak;
 
-        case VK_ESCAPE: return KeyCode::Escape;
-        case VK_TAB: return KeyCode::Tab;
-        case VK_CAPITAL: return KeyCode::CapsLock;
-        case VK_RETURN: return KeyCode::Enter;
-        case VK_SPACE: return KeyCode::Space;
-        case VK_BACK: return KeyCode::Backspace;
-        case VK_INSERT: return KeyCode::Insert;
-        case VK_DELETE: return KeyCode::Delete;
-        case VK_HOME: return KeyCode::Home;
-        case VK_END: return KeyCode::End;
-        case VK_PRIOR: return KeyCode::PageUp;
-        case VK_NEXT: return KeyCode::PageDown;
-        case VK_LEFT: return KeyCode::ArrowLeft;
-        case VK_RIGHT: return KeyCode::ArrowRight;
-        case VK_UP: return KeyCode::ArrowUp;
-        case VK_DOWN: return KeyCode::ArrowDown;
-        case VK_SNAPSHOT: return KeyCode::PrintScreen;
-        case VK_SCROLL: return KeyCode::ScrollLock;
-        case VK_PAUSE: return KeyCode::PauseBreak;
+        case GLFW_KEY_MINUS: return KeyCode::Minus;
+        case GLFW_KEY_EQUAL: return KeyCode::Equals;
+        case GLFW_KEY_LEFT_BRACKET: return KeyCode::LeftBracket;
+        case GLFW_KEY_RIGHT_BRACKET: return KeyCode::RightBracket;
+        case GLFW_KEY_BACKSLASH: return KeyCode::Backslash;
+        case GLFW_KEY_SEMICOLON: return KeyCode::Semicolon;
+        case GLFW_KEY_APOSTROPHE: return KeyCode::Apostrophe;
+        case GLFW_KEY_GRAVE_ACCENT: return KeyCode::Grave;
+        case GLFW_KEY_COMMA: return KeyCode::Comma;
+        case GLFW_KEY_PERIOD: return KeyCode::Period;
+        case GLFW_KEY_SLASH: return KeyCode::Slash;
 
-        case VK_OEM_MINUS: return KeyCode::Minus;
-        case VK_OEM_PLUS: return KeyCode::Equals;
-        case VK_OEM_4: return KeyCode::LeftBracket;
-        case VK_OEM_6: return KeyCode::RightBracket;
-        case VK_OEM_5: return KeyCode::Backslash;
-        case VK_OEM_1: return KeyCode::Semicolon;
-        case VK_OEM_7: return KeyCode::Apostrophe;
-        case VK_OEM_3: return KeyCode::Grave;
-        case VK_OEM_COMMA: return KeyCode::Comma;
-        case VK_OEM_PERIOD: return KeyCode::Period;
-        case VK_OEM_2: return KeyCode::Slash;
+        case GLFW_KEY_LEFT_SHIFT: return KeyCode::LeftShift;
+        case GLFW_KEY_RIGHT_SHIFT: return KeyCode::RightShift;
+        case GLFW_KEY_LEFT_CONTROL: return KeyCode::LeftControl;
+        case GLFW_KEY_RIGHT_CONTROL: return KeyCode::RightControl;
+        case GLFW_KEY_LEFT_ALT: return KeyCode::LeftAlt;
+        case GLFW_KEY_RIGHT_ALT: return KeyCode::RightAlt;
+        case GLFW_KEY_LEFT_SUPER: return KeyCode::LeftSuper;
+        case GLFW_KEY_RIGHT_SUPER: return KeyCode::RightSuper;
 
-        case VK_LSHIFT: return KeyCode::LeftShift;
-        case VK_RSHIFT: return KeyCode::RightShift;
-        case VK_LCONTROL: return KeyCode::LeftControl;
-        case VK_RCONTROL: return KeyCode::RightControl;
-        case VK_LMENU: return KeyCode::LeftAlt;
-        case VK_RMENU: return KeyCode::RightAlt;
-        case VK_LWIN: return KeyCode::LeftSuper;
-        case VK_RWIN: return KeyCode::RightSuper;
+        case GLFW_KEY_KP_0: return KeyCode::Numpad0;
+        case GLFW_KEY_KP_1: return KeyCode::Numpad1;
+        case GLFW_KEY_KP_2: return KeyCode::Numpad2;
+        case GLFW_KEY_KP_3: return KeyCode::Numpad3;
+        case GLFW_KEY_KP_4: return KeyCode::Numpad4;
+        case GLFW_KEY_KP_5: return KeyCode::Numpad5;
+        case GLFW_KEY_KP_6: return KeyCode::Numpad6;
+        case GLFW_KEY_KP_7: return KeyCode::Numpad7;
+        case GLFW_KEY_KP_8: return KeyCode::Numpad8;
+        case GLFW_KEY_KP_9: return KeyCode::Numpad9;
+        case GLFW_KEY_KP_MULTIPLY: return KeyCode::NumpadMultiply;
+        case GLFW_KEY_KP_ADD: return KeyCode::NumpadAdd;
+        case GLFW_KEY_KP_SUBTRACT: return KeyCode::NumpadSubtract;
+        case GLFW_KEY_KP_DECIMAL: return KeyCode::NumpadDecimal;
+        case GLFW_KEY_KP_DIVIDE: return KeyCode::NumpadDivide;
 
-        case VK_NUMPAD0: return KeyCode::Numpad0;
-        case VK_NUMPAD1: return KeyCode::Numpad1;
-        case VK_NUMPAD2: return KeyCode::Numpad2;
-        case VK_NUMPAD3: return KeyCode::Numpad3;
-        case VK_NUMPAD4: return KeyCode::Numpad4;
-        case VK_NUMPAD5: return KeyCode::Numpad5;
-        case VK_NUMPAD6: return KeyCode::Numpad6;
-        case VK_NUMPAD7: return KeyCode::Numpad7;
-        case VK_NUMPAD8: return KeyCode::Numpad8;
-        case VK_NUMPAD9: return KeyCode::Numpad9;
-        case VK_MULTIPLY: return KeyCode::NumpadMultiply;
-        case VK_ADD: return KeyCode::NumpadAdd;
-        case VK_SUBTRACT: return KeyCode::NumpadSubtract;
-        case VK_DECIMAL: return KeyCode::NumpadDecimal;
-        case VK_DIVIDE: return KeyCode::NumpadDivide;
-
-        case VK_F1: return KeyCode::F1;
-        case VK_F2: return KeyCode::F2;
-        case VK_F3: return KeyCode::F3;
-        case VK_F4: return KeyCode::F4;
-        case VK_F5: return KeyCode::F5;
-        case VK_F6: return KeyCode::F6;
-        case VK_F7: return KeyCode::F7;
-        case VK_F8: return KeyCode::F8;
-        case VK_F9: return KeyCode::F9;
-        case VK_F10: return KeyCode::F10;
-        case VK_F11: return KeyCode::F11;
-        case VK_F12: return KeyCode::F12;
+        case GLFW_KEY_F1: return KeyCode::F1;
+        case GLFW_KEY_F2: return KeyCode::F2;
+        case GLFW_KEY_F3: return KeyCode::F3;
+        case GLFW_KEY_F4: return KeyCode::F4;
+        case GLFW_KEY_F5: return KeyCode::F5;
+        case GLFW_KEY_F6: return KeyCode::F6;
+        case GLFW_KEY_F7: return KeyCode::F7;
+        case GLFW_KEY_F8: return KeyCode::F8;
+        case GLFW_KEY_F9: return KeyCode::F9;
+        case GLFW_KEY_F10: return KeyCode::F10;
+        case GLFW_KEY_F11: return KeyCode::F11;
+        case GLFW_KEY_F12: return KeyCode::F12;
     }
 
     return KeyCode::Unknown;
 }
 
-INLINE static KeyEvent MapRawKeyboardEvent(const RAWKEYBOARD& keyboard) {
-    const USHORT vkey = keyboard.VKey;
-    const USHORT makeCode = keyboard.MakeCode;
-    const USHORT flags = keyboard.Flags;
+INLINE static constexpr int keyCodeToGLFW(const KeyCode keyCode) {
+    switch (keyCode) {
+        default: return GLFW_KEY_UNKNOWN;
 
-    // Handle generic remapping
-    USHORT mappedVKey = vkey;
-    bool isE0 = (flags & RI_KEY_E0);
-    bool isBreak = (flags & RI_KEY_BREAK);
+        case KeyCode::A: return GLFW_KEY_A;
+        case KeyCode::B: return GLFW_KEY_B;
+        case KeyCode::C: return GLFW_KEY_C;
+        case KeyCode::D: return GLFW_KEY_D;
+        case KeyCode::E: return GLFW_KEY_E;
+        case KeyCode::F: return GLFW_KEY_F;
+        case KeyCode::G: return GLFW_KEY_G;
+        case KeyCode::H: return GLFW_KEY_H;
+        case KeyCode::I: return GLFW_KEY_I;
+        case KeyCode::J: return GLFW_KEY_J;
+        case KeyCode::K: return GLFW_KEY_K;
+        case KeyCode::L: return GLFW_KEY_L;
+        case KeyCode::M: return GLFW_KEY_M;
+        case KeyCode::N: return GLFW_KEY_N;
+        case KeyCode::O: return GLFW_KEY_O;
+        case KeyCode::P: return GLFW_KEY_P;
+        case KeyCode::Q: return GLFW_KEY_Q;
+        case KeyCode::R: return GLFW_KEY_R;
+        case KeyCode::S: return GLFW_KEY_S;
+        case KeyCode::T: return GLFW_KEY_T;
+        case KeyCode::U: return GLFW_KEY_U;
+        case KeyCode::V: return GLFW_KEY_V;
+        case KeyCode::W: return GLFW_KEY_W;
+        case KeyCode::X: return GLFW_KEY_X;
+        case KeyCode::Y: return GLFW_KEY_Y;
+        case KeyCode::Z: return GLFW_KEY_Z;
 
-    if (vkey == VK_SHIFT) {
-        mappedVKey = static_cast<USHORT>(MapVirtualKey(makeCode, MAPVK_VSC_TO_VK_EX));
-    } else if (vkey == VK_CONTROL) {
-        mappedVKey = isE0 ? VK_RCONTROL : VK_LCONTROL;
-    } else if (vkey == VK_MENU) {
-        mappedVKey = isE0 ? VK_RMENU : VK_LMENU;
+        case KeyCode::Digit0: return GLFW_KEY_0;
+        case KeyCode::Digit1: return GLFW_KEY_1;
+        case KeyCode::Digit2: return GLFW_KEY_2;
+        case KeyCode::Digit3: return GLFW_KEY_3;
+        case KeyCode::Digit4: return GLFW_KEY_4;
+        case KeyCode::Digit5: return GLFW_KEY_5;
+        case KeyCode::Digit6: return GLFW_KEY_6;
+        case KeyCode::Digit7: return GLFW_KEY_7;
+        case KeyCode::Digit8: return GLFW_KEY_8;
+        case KeyCode::Digit9: return GLFW_KEY_9;
+
+        case KeyCode::Escape: return GLFW_KEY_ESCAPE;
+        case KeyCode::Tab: return GLFW_KEY_TAB;
+        case KeyCode::CapsLock: return GLFW_KEY_CAPS_LOCK;
+        case KeyCode::Enter: return GLFW_KEY_ENTER;
+        case KeyCode::Space: return GLFW_KEY_SPACE;
+        case KeyCode::Backspace: return GLFW_KEY_BACKSPACE;
+        case KeyCode::Insert: return GLFW_KEY_INSERT;
+        case KeyCode::Delete: return GLFW_KEY_DELETE;
+        case KeyCode::Home: return GLFW_KEY_HOME;
+        case KeyCode::End: return GLFW_KEY_END;
+        case KeyCode::PageUp: return GLFW_KEY_PAGE_UP;
+        case KeyCode::PageDown: return GLFW_KEY_PAGE_DOWN;
+        case KeyCode::ArrowLeft: return GLFW_KEY_LEFT;
+        case KeyCode::ArrowRight: return GLFW_KEY_RIGHT;
+        case KeyCode::ArrowUp: return GLFW_KEY_UP;
+        case KeyCode::ArrowDown: return GLFW_KEY_DOWN;
+        case KeyCode::PrintScreen: return GLFW_KEY_PRINT_SCREEN;
+        case KeyCode::ScrollLock: return GLFW_KEY_SCROLL_LOCK;
+        case KeyCode::PauseBreak: return GLFW_KEY_PAUSE;
+
+        case KeyCode::Minus: return GLFW_KEY_MINUS;
+        case KeyCode::Equals: return GLFW_KEY_EQUAL;
+        case KeyCode::LeftBracket: return GLFW_KEY_LEFT_BRACKET;
+        case KeyCode::RightBracket: return GLFW_KEY_RIGHT_BRACKET;
+        case KeyCode::Backslash: return GLFW_KEY_BACKSLASH;
+        case KeyCode::Semicolon: return GLFW_KEY_SEMICOLON;
+        case KeyCode::Apostrophe: return GLFW_KEY_APOSTROPHE;
+        case KeyCode::Grave: return GLFW_KEY_GRAVE_ACCENT;
+        case KeyCode::Comma: return GLFW_KEY_COMMA;
+        case KeyCode::Period: return GLFW_KEY_PERIOD;
+        case KeyCode::Slash: return GLFW_KEY_SLASH;
+
+        case KeyCode::LeftShift: return GLFW_KEY_LEFT_SHIFT;
+        case KeyCode::RightShift: return GLFW_KEY_RIGHT_SHIFT;
+        case KeyCode::LeftControl: return GLFW_KEY_LEFT_CONTROL;
+        case KeyCode::RightControl: return GLFW_KEY_RIGHT_CONTROL;
+        case KeyCode::LeftAlt: return GLFW_KEY_LEFT_ALT;
+        case KeyCode::RightAlt: return GLFW_KEY_RIGHT_ALT;
+        case KeyCode::LeftSuper: return GLFW_KEY_LEFT_SUPER;
+        case KeyCode::RightSuper: return GLFW_KEY_RIGHT_SUPER;
+
+        case KeyCode::Numpad0: return GLFW_KEY_KP_0;
+        case KeyCode::Numpad1: return GLFW_KEY_KP_1;
+        case KeyCode::Numpad2: return GLFW_KEY_KP_2;
+        case KeyCode::Numpad3: return GLFW_KEY_KP_3;
+        case KeyCode::Numpad4: return GLFW_KEY_KP_4;
+        case KeyCode::Numpad5: return GLFW_KEY_KP_5;
+        case KeyCode::Numpad6: return GLFW_KEY_KP_6;
+        case KeyCode::Numpad7: return GLFW_KEY_KP_7;
+        case KeyCode::Numpad8: return GLFW_KEY_KP_8;
+        case KeyCode::Numpad9: return GLFW_KEY_KP_9;
+        case KeyCode::NumpadMultiply: return GLFW_KEY_KP_MULTIPLY;
+        case KeyCode::NumpadAdd: return GLFW_KEY_KP_ADD;
+        case KeyCode::NumpadSubtract: return GLFW_KEY_KP_SUBTRACT;
+        case KeyCode::NumpadDecimal: return GLFW_KEY_KP_DECIMAL;
+        case KeyCode::NumpadDivide: return GLFW_KEY_KP_DIVIDE;
+
+        case KeyCode::F1: return GLFW_KEY_F1;
+        case KeyCode::F2: return GLFW_KEY_F2;
+        case KeyCode::F3: return GLFW_KEY_F3;
+        case KeyCode::F4: return GLFW_KEY_F4;
+        case KeyCode::F5: return GLFW_KEY_F5;
+        case KeyCode::F6: return GLFW_KEY_F6;
+        case KeyCode::F7: return GLFW_KEY_F7;
+        case KeyCode::F8: return GLFW_KEY_F8;
+        case KeyCode::F9: return GLFW_KEY_F9;
+        case KeyCode::F10: return GLFW_KEY_F10;
+        case KeyCode::F11: return GLFW_KEY_F11;
+        case KeyCode::F12: return GLFW_KEY_F12;
+
+        case KeyCode::Unknown: return GLFW_KEY_UNKNOWN;
     }
 
-    KeyCode code = VkeyToKeyCode(mappedVKey, makeCode, flags);
-
-    KeyAction action = isBreak ? KeyAction::Release : KeyAction::Press;
-
-    // Use GetAsyncKeyState to check if modifier keys are currently down
-    //bool shiftDown = (GetAsyncKeyState(VK_LSHIFT) & 0x8000) ||
-    //    (GetAsyncKeyState(VK_RSHIFT) & 0x8000);
-    //bool ctrlDown = (GetAsyncKeyState(VK_LCONTROL) & 0x8000) ||
-    //    (GetAsyncKeyState(VK_RCONTROL) & 0x8000);
-    //bool altDown = (GetAsyncKeyState(VK_LMENU) & 0x8000) ||
-    //    (GetAsyncKeyState(VK_RMENU) & 0x8000);
-
-    return KeyEvent{
-        .code = code,
-        .action = action
-    };
+    return GLFW_KEY_UNKNOWN;
 }
+
+
+// case GLFW_KEY_LEFT_SHIFT: return KeyCode::LeftShift;
+// case GLFW_KEY_RIGHT_SHIFT: return KeyCode::RightShift;
+// case GLFW_KEY_LEFT_CONTROL: return KeyCode::LeftControl;
+// case GLFW_KEY_RIGHT_CONTROL: return KeyCode::RightControl;
+// case GLFW_KEY_LEFT_ALT: return KeyCode::LeftAlt;
+// case GLFW_KEY_RIGHT_ALT: return KeyCode::RightAlt;
+// case GLFW_KEY_LEFT_SUPER: return KeyCode::LeftSuper;
+// case GLFW_KEY_RIGHT_SUPER: return KeyCode::RightSuper;
+
 
 #endif

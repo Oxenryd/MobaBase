@@ -3,22 +3,16 @@
 
 #include <glm/glm.hpp>
 
+#include "glm/gtc/type_ptr.hpp"
+
 struct FrustumPlane
 {
-	union
-	{
-		float raw[4]{};
-		struct
-		{
-			glm::vec3 normal;
-			float d;
-		};
-		struct
-		{
-			float x, y, z, d;
-		};
-		glm::vec4 vec;
-	};
+	// [0..2] normal
+	// [3] D
+	glm::vec4 raw;
+
+	[[nodiscard]] INLINE glm::vec3 normal() const { return xyz(raw); }
+	[[nodiscard]] INLINE float d() const { return raw.w; }
 };
 
 struct Frustum

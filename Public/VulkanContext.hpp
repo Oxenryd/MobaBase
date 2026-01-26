@@ -1,8 +1,10 @@
 #ifndef VULKANCONTEXT_HPP
 #define VULKANCONTEXT_HPP
 
+#ifdef MSVC
 #pragma warning(push)
 #pragma warning(disable : 28251)
+#endif
 
 //#include <csignal>
 //#ifndef SIGTRAP
@@ -10,21 +12,30 @@
 //#endif
 
 #ifdef BUILD_WIN
-
 	#ifndef _INC_WINAPIFAMILY
 		#define WIN32_LEAN_AND_MEAN
 		#define NOMINMAX
 		#include <windows.h>
 	#endif
+	//#include <vulkan/vulkan_win32.h>
+	//#include <vulkan/vulkan_core.h>
 #endif
 
 #ifdef BUILD_GLFW
-#include <GLFW/glfw3.h>
+	#include <GLFW/glfw3.h>
+
+	#ifdef X11
+		#include <vulkan/vulkan_xcb.h>
+	#elifdef WAYLAND
+		//#include <vulkan/vulkan_wayland.h>
+	#else
+		// Windows specifics for GLFW, if any
+	#endif
+
 #endif
 
-#include <vulkan/vulkan_core.h>
-#include <vulkan/vulkan_win32.h>
-#include <vulkan/vulkan.hpp>
+
+//#include <vulkan/vulkan.hpp>
 
 #include <thread>
 #include <vector>
@@ -33,7 +44,7 @@
 #include <queue>
 
 #include "DrawCommand.hpp"
-#include "WindowSurface.h"
+#include "WindowContext.h"
 #include "Log.hpp"
 #include "Robin_Hood.h"
 
@@ -42,14 +53,11 @@
 #include "RenderManager.h"
 #include "RenderTarget.hpp"
 #include "HlslTypes.h"
-#include "DrawCommand.hpp"
-
-#include <variant>
 
 #define Vk_FAILED(ec) ((ec) != VK_SUCCESS)
 #define Vk_CHECK(ecVar, expr) (ecVar) = (expr); if (Vk_FAILED(ecVar)) return (ecVar);
 
-constexpr VkFormat GetVkFormat(TypeBase type) {
+constexpr VkFormat GetVkFormat(const TypeBase type) {
 	switch (type) {
 		case TypeBase::Bool:           return VK_FORMAT_R8_UINT;
 		case TypeBase::UInt32:         return VK_FORMAT_R32_UINT;
@@ -78,6 +86,7 @@ constexpr VkFormat GetVkFormat(TypeBase type) {
 		case TypeBase::FloatVector3:   return VK_FORMAT_R32G32B32_SFLOAT;
 		case TypeBase::FloatVector4:   return VK_FORMAT_R32G32B32A32_SFLOAT;
 
+		case TypeBase::FloatMatrix2x2: return VK_FORMAT_R32G32B32A32_SFLOAT;
 		case TypeBase::FloatMatrix3x3: // Typically 3x vec3, not a single VkFormat
 		case TypeBase::FloatMatrix4x4: // Typically 4x vec4, likewise
 			return VK_FORMAT_UNDEFINED;
@@ -87,6 +96,7 @@ constexpr VkFormat GetVkFormat(TypeBase type) {
 		case TypeBase::DoubleVector3:  return VK_FORMAT_R64G64B64_SFLOAT;
 		case TypeBase::DoubleVector4:  return VK_FORMAT_R64G64B64A64_SFLOAT;
 
+		case TypeBase::DoubleMatrix2x2:return VK_FORMAT_R64G64B64A64_SFLOAT;
 		case TypeBase::DoubleMatrix3x3:
 		case TypeBase::DoubleMatrix4x4:
 			return VK_FORMAT_UNDEFINED;
@@ -107,7 +117,8 @@ struct BoundedInstanceData
 		instances{ other.instances.get_allocator() } {
 		instances = other.instances;
 	}
-	BoundedInstanceData(Arena* arena) :
+
+	explicit BoundedInstanceData(Arena* arena) :
 		instances{ ArenaAllocator<InstanceData>{arena} } {}
 	ArenaVector<InstanceData> instances;
 	//AABB bounds;
@@ -126,8 +137,8 @@ struct SceneInstancePair
 	{
 		size_t operator()(const SceneInstancePair& p) const {
 			size_t seed = 0;
-			hash_combine(seed, p.sceneIndex);
-			hash_combine(seed, p.instanceIndex);
+			boost::hash_combine(seed, p.sceneIndex);
+			boost::hash_combine(seed, p.instanceIndex);
 			return seed;
 		}
 	};
@@ -192,60 +203,78 @@ struct PendingWrite
 class SamplerStatesPresets
 {
 public:
-	static inline VkSamplerCreateInfo point = {
-		.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
-		.magFilter = VK_FILTER_NEAREST,
-		.minFilter = VK_FILTER_NEAREST,
-		.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST,
-		.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-		.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-		.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-		.mipLodBias = 0.0f,
-		.anisotropyEnable = VK_FALSE,				
-		.minLod = 0.0f,
-		.maxLod = 0.0f,
-		.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK,
-		.unnormalizedCoordinates = VK_FALSE
-	};
+	static constexpr VkSamplerCreateInfo point = []{
+		VkSamplerCreateInfo ci{};
+		ci.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+		ci.pNext = nullptr;
+		ci.flags = 0;
 
-	static inline VkSamplerCreateInfo linear = {
-	.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
-	.magFilter = VK_FILTER_LINEAR,
-	.minFilter = VK_FILTER_LINEAR,
-	.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
-	.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-	.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-	.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-	.mipLodBias = 0.0f,
-	.anisotropyEnable = VK_FALSE,
-	.minLod = 0.0f,
-	.maxLod = VK_LOD_CLAMP_NONE,
-	.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK,
-	.unnormalizedCoordinates = VK_FALSE
-	};
+		ci.magFilter = VK_FILTER_NEAREST;
+		ci.minFilter = VK_FILTER_NEAREST;
+		ci.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
 
-	static inline VkSamplerCreateInfo aniso = {
-		.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
-		.magFilter = VK_FILTER_LINEAR,
-		.minFilter = VK_FILTER_LINEAR,
-		.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
-		.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-		.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-		.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-		.mipLodBias = 0.0f,
-		.anisotropyEnable = VK_TRUE,
-		.maxAnisotropy = 8.0f,
-		.minLod = 0.0f,
-		.maxLod = VK_LOD_CLAMP_NONE,
-		.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK,
-		.unnormalizedCoordinates = VK_FALSE
-	};
+		ci.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+		ci.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+		ci.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+
+		ci.mipLodBias = 0.0f;
+		ci.anisotropyEnable = VK_FALSE;
+		ci.maxAnisotropy = 1.0f;
+
+		ci.compareEnable = VK_FALSE;
+		ci.compareOp = VK_COMPARE_OP_ALWAYS;
+
+		ci.minLod = 0.0f;
+		ci.maxLod = 0.0f;
+
+		ci.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
+		ci.unnormalizedCoordinates = VK_FALSE;
+		return ci;
+	}();
+
+	static constexpr VkSamplerCreateInfo linear = [] {
+		VkSamplerCreateInfo ci{};
+		ci.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+		ci.magFilter = VK_FILTER_LINEAR;
+		ci.minFilter = VK_FILTER_LINEAR;
+		ci.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+		ci.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+		ci.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+		ci.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+		ci.mipLodBias = 0.0f;
+		ci.anisotropyEnable = VK_FALSE;
+		ci.minLod = 0.0f;
+		ci.maxLod = VK_LOD_CLAMP_NONE;
+		ci.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
+		ci.unnormalizedCoordinates = VK_FALSE;
+		return ci;
+	}();
+
+	static constexpr VkSamplerCreateInfo aniso = [] {
+		VkSamplerCreateInfo ci{};
+		ci.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+   		ci.magFilter = VK_FILTER_LINEAR;
+   		ci.minFilter = VK_FILTER_LINEAR;
+   		ci.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+   		ci.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+   		ci.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+   		ci.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+   		ci.mipLodBias = 0.0f;
+   		ci.anisotropyEnable = VK_TRUE;
+   		ci.maxAnisotropy = 8.0f;
+   		ci.minLod = 0.0f;
+   		ci.maxLod = VK_LOD_CLAMP_NONE;
+   		ci.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
+   		ci.unnormalizedCoordinates = VK_FALSE;
+		return ci;
+	}();
+
 };
 
 class VkBlendModes
 {
 public:
-	static inline const VkPipelineColorBlendAttachmentState BlendOpaque = {
+	static constexpr VkPipelineColorBlendAttachmentState BlendOpaque = {
 	.blendEnable = VK_FALSE,
 	.srcColorBlendFactor = VK_BLEND_FACTOR_ONE,
 	.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO,
@@ -259,7 +288,7 @@ public:
 						   VK_COLOR_COMPONENT_A_BIT,
 	};
 
-	static inline const VkPipelineColorBlendAttachmentState BlendAlpha = {
+	static constexpr VkPipelineColorBlendAttachmentState BlendAlpha = {
 	.blendEnable = VK_TRUE,
 	.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA,
 	.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
@@ -273,7 +302,7 @@ public:
 						   VK_COLOR_COMPONENT_A_BIT,
 	};
 
-	static inline const VkPipelineColorBlendAttachmentState BlendPremultiplied = {
+	static constexpr VkPipelineColorBlendAttachmentState BlendPremultiplied = {
 	.blendEnable = VK_TRUE,
 	.srcColorBlendFactor = VK_BLEND_FACTOR_ONE,
 	.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
@@ -287,7 +316,7 @@ public:
 						   VK_COLOR_COMPONENT_A_BIT,
 	};
 
-	static inline const VkPipelineColorBlendAttachmentState BlendAdditive = {
+	static constexpr VkPipelineColorBlendAttachmentState BlendAdditive = {
 	.blendEnable = VK_TRUE,
 	.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA,
 	.dstColorBlendFactor = VK_BLEND_FACTOR_ONE,
@@ -302,7 +331,7 @@ public:
 	};
 };
 
-static inline VkPipelineColorBlendAttachmentState GetBlendPreset(BlendMode mode) {
+static constexpr VkPipelineColorBlendAttachmentState GetBlendPreset(const BlendMode mode) {
 	switch (mode) {
 		case BlendMode::Opaque:         return VkBlendModes::BlendOpaque;
 		case BlendMode::Alpha:          return VkBlendModes::BlendAlpha;
@@ -315,37 +344,44 @@ static inline VkPipelineColorBlendAttachmentState GetBlendPreset(BlendMode mode)
 class VkDepthStates
 {
 public:
-	static inline const VkPipelineDepthStencilStateCreateInfo DepthDefault = {
-	.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
-	.depthTestEnable = VK_TRUE,
-	.depthWriteEnable = VK_TRUE,
-	.depthCompareOp = VK_COMPARE_OP_LESS,
-	.depthBoundsTestEnable = VK_FALSE,
-	.stencilTestEnable = VK_FALSE,
-	.front = {}, // defaults
-	.back = {}, // defaults
-	.minDepthBounds = 0.0f,
-	.maxDepthBounds = 1.0f,
-	};
 
-	static inline const VkPipelineDepthStencilStateCreateInfo DepthTestNoWrite = {
-	.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
-	.depthTestEnable = VK_TRUE,
-	.depthWriteEnable = VK_FALSE,
-	.depthCompareOp = VK_COMPARE_OP_LESS
-	};
+	static constexpr VkPipelineDepthStencilStateCreateInfo DepthDefault = [] {
+		VkPipelineDepthStencilStateCreateInfo ci{};
+		ci.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+		ci.depthTestEnable = VK_TRUE;
+		ci.depthWriteEnable = VK_TRUE;
+		ci.depthCompareOp = VK_COMPARE_OP_LESS;
+		ci.depthBoundsTestEnable = VK_FALSE;
+		ci.stencilTestEnable = VK_FALSE;
+		ci.front = {}; // defaults
+		ci.back = {}; // defaults
+		ci.minDepthBounds = 0.0f;
+		ci.maxDepthBounds = 1.0f;
+		return ci;
+	}();
 
-	static inline const VkPipelineDepthStencilStateCreateInfo DepthNone = {
-	.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
-	.depthTestEnable = VK_FALSE,
-	.depthWriteEnable = VK_FALSE,
-	.depthCompareOp = VK_COMPARE_OP_ALWAYS,
-	.depthBoundsTestEnable = VK_FALSE,
-	.stencilTestEnable = VK_FALSE,
-	};
+	static constexpr VkPipelineDepthStencilStateCreateInfo DepthTestNoWrite = [] {
+		VkPipelineDepthStencilStateCreateInfo ci{};
+		ci.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+		ci.depthTestEnable = VK_TRUE;
+		ci.depthWriteEnable = VK_FALSE;
+		ci.depthCompareOp = VK_COMPARE_OP_LESS;
+		return ci;
+	}();
+
+	static constexpr VkPipelineDepthStencilStateCreateInfo DepthNone = [] {
+		VkPipelineDepthStencilStateCreateInfo ci{};
+		ci.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+		ci.depthTestEnable = VK_FALSE;
+		ci.depthWriteEnable = VK_FALSE;
+		ci.depthCompareOp = VK_COMPARE_OP_ALWAYS;
+		ci.depthBoundsTestEnable = VK_FALSE;
+		ci.stencilTestEnable = VK_FALSE;
+		return ci;
+	}();
 };
 
-static inline VkPipelineDepthStencilStateCreateInfo GetDepthStencilPreset(DepthMode mode) {
+static constexpr VkPipelineDepthStencilStateCreateInfo GetDepthStencilPreset(const DepthMode mode) {
 	switch (mode) {
 		case DepthMode::DepthDefault:
 			return VkDepthStates::DepthDefault;
@@ -361,38 +397,45 @@ static inline VkPipelineDepthStencilStateCreateInfo GetDepthStencilPreset(DepthM
 class VkRasterStates
 {
 public:
-	static inline const VkPipelineRasterizationStateCreateInfo RasterDefault = {
-	.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
-	.depthClampEnable = VK_FALSE,
-	.rasterizerDiscardEnable = VK_FALSE,
-	.polygonMode = VK_POLYGON_MODE_FILL,
-	.cullMode = VK_CULL_MODE_BACK_BIT,
-	.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
-	.depthBiasEnable = VK_FALSE,
-	.depthBiasConstantFactor = 0.0f,
-	.depthBiasClamp = 0.0f,
-	.depthBiasSlopeFactor = 0.0f,
-	.lineWidth = 1.0f,
-	};
 
-	static inline const VkPipelineRasterizationStateCreateInfo RasterWireframe = {
-	.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
-	.polygonMode = VK_POLYGON_MODE_LINE,
-	.cullMode = VK_CULL_MODE_NONE,
-	.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
-	.lineWidth = 1.0f
-	};
+	static constexpr VkPipelineRasterizationStateCreateInfo RasterDefault = [] {
+		VkPipelineRasterizationStateCreateInfo ci{};
+		ci.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+		ci.depthClampEnable = VK_FALSE;
+		ci.rasterizerDiscardEnable = VK_FALSE;
+		ci.polygonMode = VK_POLYGON_MODE_FILL;
+		ci.cullMode = VK_CULL_MODE_BACK_BIT;
+		ci.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+		ci.depthBiasEnable = VK_FALSE;
+		ci.depthBiasConstantFactor = 0.0f;
+		ci.depthBiasClamp = 0.0f;
+		ci.depthBiasSlopeFactor = 0.0f;
+		ci.lineWidth = 1.0f;
+		return ci;
+	}();
 
-	static inline const VkPipelineRasterizationStateCreateInfo Raster_NoCull = {
-	.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
-	.polygonMode = VK_POLYGON_MODE_FILL,
-	.cullMode = VK_CULL_MODE_NONE,
-	.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
-	.lineWidth = 1.0f
-	};
+	static constexpr VkPipelineRasterizationStateCreateInfo RasterWireframe = [] {
+		VkPipelineRasterizationStateCreateInfo ci{};
+		ci.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+		ci.polygonMode = VK_POLYGON_MODE_LINE;
+		ci.cullMode = VK_CULL_MODE_NONE;
+		ci.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+		ci.lineWidth = 1.0f;
+		return ci;
+	}();
+
+	static constexpr VkPipelineRasterizationStateCreateInfo Raster_NoCull= [] {
+		VkPipelineRasterizationStateCreateInfo ci{};
+		ci.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+		ci.polygonMode = VK_POLYGON_MODE_FILL;
+		ci.cullMode = VK_CULL_MODE_NONE;
+		ci.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+		ci.lineWidth = 1.0f;
+		return ci;
+	}();
 };
 
-static inline VkPipelineRasterizationStateCreateInfo GetRasterPreset(RasterMode mode) {
+static constexpr VkPipelineRasterizationStateCreateInfo GetRasterPreset(const RasterMode mode) {
 	switch (mode) {
 		case RasterMode::RasterDefault:
 			return VkRasterStates::RasterDefault;
@@ -408,28 +451,33 @@ static inline VkPipelineRasterizationStateCreateInfo GetRasterPreset(RasterMode 
 class VkMultiSamplingStates
 {
 public:
-	static inline const VkPipelineMultisampleStateCreateInfo MSAA_1x = {
-	.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
-	.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
-	.sampleShadingEnable = VK_FALSE,
-	.minSampleShading = 1.0f,
-	.pSampleMask = nullptr,
-	.alphaToCoverageEnable = VK_FALSE,
-	.alphaToOneEnable = VK_FALSE
-	};
 
-	static inline const VkPipelineMultisampleStateCreateInfo MSAA_4x = {
-	.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
-	.rasterizationSamples = VK_SAMPLE_COUNT_4_BIT,
-	.sampleShadingEnable = VK_TRUE,
-	.minSampleShading = 0.2f,
-	.pSampleMask = nullptr,
-	.alphaToCoverageEnable = VK_FALSE,
-	.alphaToOneEnable = VK_FALSE
-	};
+	static constexpr VkPipelineMultisampleStateCreateInfo MSAA_1x = [] {
+		VkPipelineMultisampleStateCreateInfo ci{};
+		ci.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+		ci.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+		ci.sampleShadingEnable = VK_FALSE;
+		ci.minSampleShading = 1.0f;
+		ci.pSampleMask = nullptr;
+		ci.alphaToCoverageEnable = VK_FALSE;
+		ci.alphaToOneEnable = VK_FALSE;
+		return ci;
+	}();
+
+	static constexpr VkPipelineMultisampleStateCreateInfo MSAA_4x = [] {
+		VkPipelineMultisampleStateCreateInfo ci{};
+		ci.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+		ci.rasterizationSamples = VK_SAMPLE_COUNT_4_BIT;
+		ci.sampleShadingEnable = VK_TRUE;
+		ci.minSampleShading = 0.2f;
+		ci.pSampleMask = nullptr;
+		ci.alphaToCoverageEnable = VK_FALSE;
+		ci.alphaToOneEnable = VK_FALSE;
+		return ci;
+	}();
 };
 
-static inline VkPipelineMultisampleStateCreateInfo GetMultisamplingPreset(MultiSamplingMode mode) {
+static constexpr VkPipelineMultisampleStateCreateInfo GetMultisamplingPreset(const MultiSamplingMode mode) {
 	switch (mode) {
 		default:
 			return VkMultiSamplingStates::MSAA_1x;
@@ -463,6 +511,7 @@ public:
 	};
 
 private:
+	WindowContext* m_windowContext;
 	uint8_t c_dummyPixel[4] = { 255, 255, 255, 255 };
 	bool m_pendingExit = false;
 	uint32_t m_lastDrawcallCount = 0;
@@ -471,8 +520,11 @@ private:
 	std::binary_semaphore* m_threadSemas[VULKAN_FRAMES_IN_FLIGHT] = { nullptr, nullptr };
 	FrameArena*  m_mapArenas[VULKAN_FRAMES_IN_FLIGHT];
 	std::vector<std::vector<MeshDrawCommand>> drawCmds[VULKAN_FRAMES_IN_FLIGHT];
-	std::vector<robin_hood::unordered_flat_set<uint32_t>> submeshKeysWithMultipleInstances[VULKAN_FRAMES_IN_FLIGHT];
-	std::vector<robin_hood::unordered_flat_map<uint32_t, BoundedInstanceData>> submeshDrawInstanceData[VULKAN_FRAMES_IN_FLIGHT];
+
+	std::vector<robin_hood::unordered_flat_set<uint32_t>>
+		submeshKeysWithMultipleInstances[VULKAN_FRAMES_IN_FLIGHT];
+	std::vector<robin_hood::unordered_flat_map<uint32_t, BoundedInstanceData>>
+		submeshDrawInstanceData[VULKAN_FRAMES_IN_FLIGHT];
 	
 
 	struct QueueFamilyIndices
@@ -485,16 +537,19 @@ private:
 		}
 	};
 
-	INLINE MeshDrawCommand subMeshEntity_to_drawCommand(SceneBase* scene, ArenaRegistry& reg, entt::entity entity);
+	INLINE MeshDrawCommand subMeshEntity_to_drawCommand(
+		SceneBase* scene, ArenaRegistry& reg, entt::entity entity);
 
-	QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device, VkSurfaceKHR surface) {
+	static QueueFamilyIndices findQueueFamilies(const VkPhysicalDevice device, const VkSurfaceKHR surface) {
 		QueueFamilyIndices indices_;
 
 		uint32_t queueFamilyCount = 0;
-		vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, nullptr);
+		vkGetPhysicalDeviceQueueFamilyProperties(
+			device, &queueFamilyCount, nullptr);
 
 		std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
-		vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, queueFamilies.data());
+		vkGetPhysicalDeviceQueueFamilyProperties(
+			device, &queueFamilyCount, queueFamilies.data());
 
 		for (uint32_t i = 0; i < queueFamilyCount; i++) {
 			if (queueFamilies[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) {
@@ -514,8 +569,7 @@ private:
 		}
 
 		return indices_;
-	};
-
+	}
 
 
 #ifdef VULKAN_VALIDATION
@@ -523,7 +577,7 @@ private:
 		"VK_LAYER_KHRONOS_validation"
 	};
 
-	inline bool checkValidationLayerSupport() {
+	static bool checkValidationLayerSupport() {
 		uint32_t layerCount;
 		vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
 
@@ -546,19 +600,16 @@ private:
 	}
 #endif
 
-	INLINE void _renderThreadMethod() {
-
-	}
-
-	VkDescriptorPool _makePool(VkDevice device, const PoolSpec& spec) {
-		VkDescriptorPoolCreateInfo ci{ VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO };
+	static VkDescriptorPool _makePool(const VkDevice device, const PoolSpec& spec) {
+		VkDescriptorPoolCreateInfo ci{};
+		ci.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
 		ci.flags = spec.flags;
 		ci.maxSets = spec.maxSets;
-		ci.poolSizeCount = (uint32_t)spec.sizes.size();
+		ci.poolSizeCount = static_cast<uint32_t>(spec.sizes.size());
 		ci.pPoolSizes = spec.sizes.data();
 
 		VkDescriptorPool pool{};
-		VkResult r = vkCreateDescriptorPool(device, &ci, nullptr, &pool);
+		const VkResult r = vkCreateDescriptorPool(device, &ci, nullptr, &pool);
 		if (r != VK_SUCCESS) throw std::runtime_error("vkCreateDescriptorPool failed");
 		return pool;
 	}
@@ -568,7 +619,7 @@ private:
 									std::vector<VkDescriptorSetLayout>& layouts, std::vector<BindSetCombo>& descriptorSetsList,
 									bool doAllocs) {
 
-		auto caps = queryDescriptorCaps(m_phyDevice);
+		//auto caps = queryDescriptorCaps(m_phyDevice);
 
 		for (auto& [set, key] : material.descriptorSetLayoutKeys) {
 
@@ -836,18 +887,18 @@ private:
 						auto allocResult = vkAllocateDescriptorSets(m_vkDevice, &allocInfo, &descriptorSet[j]);
 						if (allocResult == VK_ERROR_OUT_OF_POOL_MEMORY || allocResult == VK_ERROR_FRAGMENTED_POOL) {
 							if (set >= VULKAN_GLOBAL_DESCRIPTOR_SETS)
-								throw std::exception("BASE DESCRIPTOR POOLS TOO SMALL!");
+								throw std::runtime_error("BASE DESCRIPTOR POOLS TOO SMALL!");
 
 							descriptorPoolsDynamic.emplace_back(_makePool(m_vkDevice,
-																		  PoolSpec{
-																			  /*flags*/ VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT,
-																			  /*sizes*/{
-																				{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VULKAN_DESCPOOL_DYNAMIC_UNIFORMS },
-																				{ VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VULKAN_DESCPOOL_DYNAMIC_STORAGE },
-																				{ VK_DESCRIPTOR_TYPE_SAMPLER,        VULKAN_DESCPOOL_DYNAMIC_SAMPLER  },
-																				{ VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,  VULKAN_DESCPOOL_DYNAMIC_IMAGE }
-																			  },
-																		  /*maxSets*/ 256 }
+							PoolSpec{
+								/*flags*/ VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT,
+								/*sizes*/{
+												{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VULKAN_DESCPOOL_DYNAMIC_UNIFORMS },
+												{ VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VULKAN_DESCPOOL_DYNAMIC_STORAGE },
+												{ VK_DESCRIPTOR_TYPE_SAMPLER,        VULKAN_DESCPOOL_DYNAMIC_SAMPLER  },
+												{ VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,  VULKAN_DESCPOOL_DYNAMIC_IMAGE }
+								},
+								/*maxSets*/ 256 }
 							));
 							allocInfo.descriptorPool = descriptorPoolsDynamic.back();
 							Vk_CHECK(vkResult, vkAllocateDescriptorSets(m_vkDevice, &allocInfo, &descriptorSet[j]));
@@ -870,11 +921,11 @@ private:
 					for (size_t k = 0; k < VULKAN_FRAMES_IN_FLIGHT; ++k) {
 						shapeRendererDescSet[k] = descriptorSet[k];
 					}
-					break;;
+					break;
 				}
 
 				BindSetCombo combo{ static_cast<uint8_t>(binding), static_cast<uint8_t>(set), layoutHandle };
-				auto insertResult = bindingToDescriptorSet.insert({ combo, descriptorSet });
+				bindingToDescriptorSet.insert({ combo, descriptorSet });
 				descriptorSetsList.push_back(combo);
 			}
 
@@ -929,7 +980,7 @@ private:
 
 
 public:
-	WindowSurface* const windowSurface;
+
 	VkInstance m_vkInstance = nullptr;
 	VkSurfaceKHR m_vkSurface = nullptr;
 	VkPhysicalDevice m_phyDevice = nullptr;
@@ -1004,8 +1055,8 @@ public:
 	std::vector<BaseVSIn> vertices;
 	std::vector<uint32_t> indices;
 	std::array<VkVertexInputAttributeDescription, 5> vertexAttributes{};
-	VkBuffer vertexBuffer = nullptr;;
-	VkDeviceMemory vertexMemory = nullptr;;
+	VkBuffer vertexBuffer = nullptr;
+	VkDeviceMemory vertexMemory = nullptr;
 	VkBuffer indexBuffer = nullptr;
 	VkDeviceMemory indexMemory = nullptr;
 
@@ -1048,7 +1099,7 @@ public:
 	bool lightCluster_pipelineCreated = false;
 
 	uint32_t registerBaseMaterialInstance(const BaseMaterialInstance* const matInstance) {
-		auto index = matData_baseMatInstances.size();
+		const auto index = matData_baseMatInstances.size();
 		if (matInstance)
 			matData_baseMatInstances.push_back(*matInstance);
 		else
@@ -1062,6 +1113,7 @@ public:
 		return &matData_baseMatInstances[index];
 	}
 	
+	GLFWwindow* window() { return m_windowContext->window(); }
 
 	void setPendingExit() { m_pendingExit = true; }
 	const bool& isPendingExit() const { return m_pendingExit; }
@@ -1083,25 +1135,14 @@ public:
 			cleanUp();
 		glfwTerminate();
 	}
-	VulkanContext() = delete;
-	inline VulkanContext(WindowSurface* const wndSurface) :
-		windowSurface{ wndSurface },
-		commandPool{nullptr},
-		m_phyDevice{nullptr},
-		frameSync{},
-		m_graphicsQueue{nullptr},
-		m_vkInstance{nullptr},
-		m_vkDevice{nullptr},
-		m_graphicsQueueFamilyIndex{ static_cast<uint32_t>(-1) },
-		m_vkSurface{nullptr},
-		swapchain{nullptr},
+	explicit VulkanContext() :
+		m_windowContext{nullptr},
+		presentMode{},
 		swapchainFormat{},
 		swapchainExtent{},
-		presentMode{},
-		renderPassIndex{},
-		camData{},
-		lightCluster_pipeline{nullptr},
-		lightCluster_pipelineLayout{nullptr}
+		frameSync{},
+		lightCluster_pipelineLayout{nullptr},
+		lightCluster_pipeline{nullptr}
 	{
 		pendingLightUpdates.reserve(256);
 		rendPasses.reserve(2048);
@@ -1112,28 +1153,29 @@ public:
 			//drawCmds[i] = new FrameArenaVector<MeshDrawCommand>{ FrameArenaAllocator<MeshDrawCommand>{m_mapArenas[i]} };
 		}
 	}
-	INLINE VkResult _appendStageBuffer(uint8_t fit, size_t requestedSize ) {
-		VkResult vkResult{};
+
+	// TODO TODO
+	INLINE VkResult _appendStageBuffer(const uint8_t fit, const size_t requestedSize ) const {
+		constexpr VkResult vkResult{};
 		if (matStageCurrentSize[fit] >= requestedSize)
 			return vkResult;
 
-
-
+		return vkResult;
 	}
 
-	INLINE VkResult _checkStageRealloc(uint8_t fit, size_t requestedSize) {
+	INLINE VkResult _checkStageRealloc(const uint8_t fit, const size_t requestedSize) {
 		if (matStageCurrentSize[fit] >= requestedSize)
 			return VK_SUCCESS;
 		VkResult vkResult{};
 
-		auto newSize = requestedSize * 2;
+		const auto newSize = requestedSize * 2;
 		
 
 		static std::vector<uint8_t> tempBytes[VULKAN_FRAMES_IN_FLIGHT];
 		tempBytes[fit].reserve(matStageCurrentSize[fit]);
 		tempBytes[fit].clear();
-		std::memcpy(static_cast<uint8_t*>(tempBytes[fit].data()),
-					static_cast<uint8_t*>(matStagingPtr[fit]),
+		std::memcpy(tempBytes[fit].data(),
+					matStagingPtr[fit],
 					matStageCurrentSize[fit]);
 
 		
@@ -1152,7 +1194,7 @@ public:
 		matStagebufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 		Vk_CHECK(vkResult, vkCreateBuffer(m_vkDevice, &matStagebufferInfo, nullptr, &matStagingBuf[fit]));
 
-		VkMemoryRequirements memRequirements;
+		VkMemoryRequirements memRequirements{};
 		vkGetBufferMemoryRequirements(m_vkDevice, matStagingBuf[fit], &memRequirements);
 
 		VkMemoryAllocateInfo matStageAllocInfo{};
@@ -1167,8 +1209,8 @@ public:
 		vkMapMemory(m_vkDevice, matStagingMem[fit], 0, newSize, 0, &matStagingPtr[fit]);
 		
 		
-		std::memcpy(static_cast<uint8_t*>(matStagingPtr[fit]),
-					static_cast<uint8_t*>(tempBytes[fit].data()),
+		std::memcpy(matStagingPtr[fit],
+					tempBytes[fit].data(),
 					matStageCurrentSize[fit]);
 
 		matStageCurrentSize[fit] = newSize;
@@ -1192,17 +1234,17 @@ public:
 		return &texResources[resourceIndex];
 	}
 	INLINE std::vector<VkTextureResource>& textureResources() { return texResources; }
-	INLINE void registerMesh(BaseVSIn* vertices, uint32_t vertexCount, uint32_t* indices, uint32_t indexCount) {
+	INLINE void registerMesh(
+		const BaseVSIn* const verts, const uint32_t vertexCount,
+		const uint32_t* const incs, const uint32_t indexCount) {
 		
-		auto vertStartId = this->vertices.size();
+		const auto vertStartId = this->vertices.size();
 		this->vertices.resize(vertStartId + vertexCount);
-		std::memcpy(&this->vertices[vertStartId], vertices, vertexCount * sizeof(BaseVSIn));
+		std::memcpy(&this->vertices[vertStartId], verts, vertexCount * sizeof(BaseVSIn));
 
-		auto indexStartId = this->indices.size();
+		const auto indexStartId = this->indices.size();
 		this->indices.resize(indexStartId + indexCount);
-		std::memcpy(&this->indices[indexStartId], indices, indexCount * sizeof(uint32_t));
-
-		
+		std::memcpy(&this->indices[indexStartId], incs, indexCount * sizeof(uint32_t));
 	}
 
 	INLINE VkResult loadBaseMatData() {
@@ -1210,7 +1252,7 @@ public:
 		VkResult vkResult{};
 
 		for (size_t i = 0; i < VULKAN_FRAMES_IN_FLIGHT; ++i) {
-			VkDeviceSize bufferSize = sizeof(BaseMaterialInstance) * this->matData_baseMatInstances.size();
+			const VkDeviceSize bufferSize = sizeof(BaseMaterialInstance) * this->matData_baseMatInstances.size();
 			VkBufferCreateInfo createInfo{};
 			createInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
 			createInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
@@ -1232,12 +1274,12 @@ public:
 
 			void* data;
 			vkMapMemory(m_vkDevice, matDevMem_baseMatInstances[i], 0, bufferSize, 0, &data);
-			memcpy(data, this->matData_baseMatInstances.data(), (size_t)bufferSize);
+			memcpy(data, this->matData_baseMatInstances.data(), bufferSize);
 			vkUnmapMemory(m_vkDevice, matDevMem_baseMatInstances[i]);
 
 
 			// Update descriptor sets
-			VkDescriptorSet set = bindingToDescriptorSet[{MAT_BASE_MAT_INSTANCES_BIND, MAT_BASE_MAT_INSTANCES_SET, 0}][i];
+			const VkDescriptorSet set = bindingToDescriptorSet[{MAT_BASE_MAT_INSTANCES_BIND, MAT_BASE_MAT_INSTANCES_SET, 0}][i];
 			// Only update the buffers that changed
 			std::vector<VkWriteDescriptorSet> descriptorWrites;
 
@@ -1268,7 +1310,7 @@ public:
 		VkResult vkResult{};
 
 		for (size_t i = 0; i < VULKAN_FRAMES_IN_FLIGHT; ++i) {
-			VkDeviceSize bufferSize = sizeof(GPULight) * this->lightsData.size();
+			const VkDeviceSize bufferSize = sizeof(GPULight) * this->lightsData.size();
 			VkBufferCreateInfo createInfo{};
 			createInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
 			createInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
@@ -1290,7 +1332,7 @@ public:
 			Vk_CHECK(vkResult, vkBindBufferMemory(m_vkDevice, lightsBuffer[i], lightsMemory[i], 0));
 
 			// Update descriptor sets
-			VkDescriptorSet set = bindingToDescriptorSet[{MAT_GPULIGHTS_BIND, MAT_GPULIGHTS_SET, 0}][i];
+			const VkDescriptorSet set = bindingToDescriptorSet[{MAT_GPULIGHTS_BIND, MAT_GPULIGHTS_SET, 0}][i];
 			// Only update the buffers that changed
 			std::vector<VkWriteDescriptorSet> descriptorWrites;
 
@@ -1326,18 +1368,18 @@ public:
 		VkResult vkResult{};
 
 		// Vertexbuffer
-		bool destroyedVertex = false;
+		//bool destroyedVertex = false;
 		if (vertexBuffer) {
 			vkDestroyBuffer(m_vkDevice, vertexBuffer, nullptr);
 			vertexBuffer = VK_NULL_HANDLE;
-			destroyedVertex = true;
+			//destroyedVertex = true;
 		}
 		if (vertexMemory) {
 			vkFreeMemory(m_vkDevice, vertexMemory, nullptr);
 			vertexMemory = VK_NULL_HANDLE;
-			destroyedVertex = true;
+			//destroyedVertex = true;
 		}
-		VkDeviceSize vertexBufferSize = sizeof(BaseVSIn) * this->vertices.size();
+		const VkDeviceSize vertexBufferSize = sizeof(BaseVSIn) * this->vertices.size();
 		VkBufferCreateInfo vBufferInfo{};
 		vBufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
 		vBufferInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
@@ -1359,7 +1401,7 @@ public:
 
 		void* data;
 		vkMapMemory(m_vkDevice, vertexMemory, 0, vertexBufferSize, 0, &data);
-		memcpy(data, this->vertices.data(), (size_t)vertexBufferSize);
+		memcpy(data, this->vertices.data(), vertexBufferSize);
 		vkUnmapMemory(m_vkDevice, vertexMemory);
 
 		// IndexBuffer
@@ -1371,7 +1413,7 @@ public:
 			vkFreeMemory(m_vkDevice, indexMemory, nullptr);
 			indexMemory = VK_NULL_HANDLE;
 		}
-		VkDeviceSize indexBufferSize = sizeof(uint32_t) * this->indices.size();
+		const VkDeviceSize indexBufferSize = sizeof(uint32_t) * this->indices.size();
 		VkBufferCreateInfo iBufferInfo{};
 		iBufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
 		iBufferInfo.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
@@ -1393,14 +1435,14 @@ public:
 
 		//void* data;
 		vkMapMemory(m_vkDevice, indexMemory, 0, indexBufferSize, 0, &data);
-		memcpy(data, this->indices.data(), (size_t)indexBufferSize);
+		memcpy(data, this->indices.data(), indexBufferSize);
 		vkUnmapMemory(m_vkDevice, indexMemory);
 
 
 		return VK_SUCCESS;
 	}
 
-	INLINE VkResult initVulkan(const VkPresentModeKHR mode, bool prioIGpu = false) {
+	INLINE VkResult initVulkan(WindowContext* const wndCtx, const VkPresentModeKHR mode, const bool prioIGpu = false) {
 		VkResult vk{};
 
 		for (size_t i = 0; i < VULKAN_FRAMES_IN_FLIGHT; ++i) {
@@ -1408,7 +1450,8 @@ public:
 		}
 		presentMode = mode;
 		renderPassIndex = 0;
-		//Vk_CHECK(vk, createInstanceGlfw());
+		m_windowContext = wndCtx;
+
 		Vk_CHECK(vk, createInstance());
 		Vk_CHECK(vk, createSurface());
 		Vk_CHECK(vk, pickPhysDevice(prioIGpu));
@@ -1431,9 +1474,7 @@ public:
 		return VK_SUCCESS;
 	}
 
-	inline VkResult setupVertexBuffer() {
-		VkResult vkResult{};
-
+	VkResult setupVertexBuffer() {
 		vertexAttributes[0] = {
 			.location = 0,
 			.binding = 0,
@@ -1469,12 +1510,12 @@ public:
 			.offset = offsetof(BaseVSIn, texCoord)
 		};
 
-		VkVertexInputBindingDescription binding{};
-		binding.binding = 0;
-		binding.stride = sizeof(BaseVSIn);
-		binding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+		// VkVertexInputBindingDescription binding{};
+		// binding.binding = 0;
+		// binding.stride = sizeof(BaseVSIn);
+		// binding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
 
-		return vkResult;
+		return VK_SUCCESS;
 	}
 
 	INLINE VkResult createLightClusterPipeline(Shader* const lightCsShader) {
@@ -1488,8 +1529,9 @@ public:
 		lightsBindings.push_back({ MAT_CLUSTER_LIGHTINDICES_BIND, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1,
 					VK_SHADER_STAGE_COMPUTE_BIT, nullptr });
 
-		VkDescriptorSetLayoutCreateInfo dslCI_lights{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
-		dslCI_lights.bindingCount = (uint32_t)lightsBindings.size();
+		VkDescriptorSetLayoutCreateInfo dslCI_lights{};
+		dslCI_lights.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+		dslCI_lights.bindingCount = static_cast<uint32_t>(lightsBindings.size());
 		dslCI_lights.pBindings = lightsBindings.data();
 
 		VkDescriptorSetLayout setLayoutLights;
@@ -1497,7 +1539,8 @@ public:
 
 
 
-		VkDescriptorSetLayoutCreateInfo emptyCI{ VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO };
+		VkDescriptorSetLayoutCreateInfo emptyCI{};
+		emptyCI.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
 		emptyCI.bindingCount = 0;
 		emptyCI.pBindings = nullptr;
 
@@ -1510,17 +1553,19 @@ public:
 		camBindings.push_back({ MAT_CAMERADATA_BIND, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1,
 					VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_COMPUTE_BIT, nullptr });
 
-		VkDescriptorSetLayoutCreateInfo dslCI_cam{ VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO };
-		dslCI_cam.bindingCount = (uint32_t)camBindings.size();
+		VkDescriptorSetLayoutCreateInfo dslCI_cam{};
+		dslCI_cam.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+		dslCI_cam.bindingCount = static_cast<uint32_t>(camBindings.size());
 		dslCI_cam.pBindings = camBindings.data();
 
 		VkDescriptorSetLayout setLayoutCam;
 		Vk_CHECK(vkResult, vkCreateDescriptorSetLayout(m_vkDevice, &dslCI_cam, nullptr, &setLayoutCam));
 
-		std::array<VkDescriptorSetLayout, 3> setLayouts{ setLayoutCam, emptySet1, setLayoutLights };
+		std::array setLayouts{ setLayoutCam, emptySet1, setLayoutLights };
 
-		VkPipelineLayoutCreateInfo plCI{ VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO };
-		plCI.setLayoutCount = (uint32_t)setLayouts.size();
+		VkPipelineLayoutCreateInfo plCI{};
+		plCI.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+		plCI.setLayoutCount = static_cast<uint32_t>(setLayouts.size());
 		plCI.pSetLayouts = setLayouts.data();
 
 		VkPipelineLayout pipelineLayout;
@@ -1544,9 +1589,8 @@ public:
 		stageCI.module = csModule;
 		stageCI.pName = lightCsShader->entryPoint.c_str();
 
-		VkComputePipelineCreateInfo cpCI{
-			VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO
-		};
+		VkComputePipelineCreateInfo cpCI{};
+		cpCI.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
 		cpCI.stage = stageCI;
 		cpCI.layout = pipelineLayout;
 
@@ -1555,21 +1599,24 @@ public:
 		lightCluster_pipeline = computePipeline;
 
 		for (size_t i = 0; i < VULKAN_FRAMES_IN_FLIGHT; ++i) {
-			VkDescriptorSetAllocateInfo allocInfo1{ VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO };
+			VkDescriptorSetAllocateInfo allocInfo1{};
+			allocInfo1.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
 			allocInfo1.descriptorPool = descriptorPoolsDynamic.back();
 			allocInfo1.descriptorSetCount = 1;
 			allocInfo1.pSetLayouts = &setLayouts[0];
 			VkDescriptorSet descSet1;
 			Vk_CHECK(vkResult, vkAllocateDescriptorSets(m_vkDevice, &allocInfo1, &descSet1));
 
-			VkDescriptorSetAllocateInfo allocInfo2{ VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO };
+			VkDescriptorSetAllocateInfo allocInfo2{};
+			allocInfo2.sType =  VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO ;
 			allocInfo2.descriptorPool = descriptorPoolsDynamic.back();
 			allocInfo2.descriptorSetCount = 1;
 			allocInfo2.pSetLayouts = &setLayouts[1];
 			VkDescriptorSet descSet2;
 			Vk_CHECK(vkResult, vkAllocateDescriptorSets(m_vkDevice, &allocInfo2, &descSet2));
 
-			VkDescriptorSetAllocateInfo allocInfo3{ VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO };
+			VkDescriptorSetAllocateInfo allocInfo3{};
+			allocInfo3.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
 			allocInfo3.descriptorPool = descriptorPoolsDynamic.back();
 			allocInfo3.descriptorSetCount = 1;
 			allocInfo3.pSetLayouts = &setLayouts[2];
@@ -1650,9 +1697,9 @@ public:
 			write4.pNext = nullptr;
 			write4.pBufferInfo = &buffInfo4;
 
-			std::vector<VkWriteDescriptorSet> writes{ write1, write2, write3, write4 };
+			std::vector writes{ write1, write2, write3, write4 };
 
-			vkUpdateDescriptorSets(m_vkDevice, (uint32_t)writes.size(), writes.data(), 0, nullptr);
+			vkUpdateDescriptorSets(m_vkDevice, static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);
 		}
 
 		lightCluster_pipelineCreated = true;
@@ -1847,7 +1894,7 @@ public:
 		return VK_SUCCESS;
 	}
 
-	DescriptorCaps queryDescriptorCaps(VkPhysicalDevice phys) {
+	static DescriptorCaps queryDescriptorCaps(VkPhysicalDevice phys) {
 		DescriptorCaps caps{};
 
 		VkPhysicalDeviceProperties props{};
@@ -1858,10 +1905,11 @@ public:
 		caps.maxSetSamplers = props.limits.maxDescriptorSetSamplers;
 
 		// If you use descriptor indexing / UPDATE_AFTER_BIND, query props2:
-		VkPhysicalDeviceDescriptorIndexingProperties indexingProps{
-			VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_PROPERTIES
-		};
-		VkPhysicalDeviceProperties2 props2{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2 };
+		VkPhysicalDeviceDescriptorIndexingProperties indexingProps{};
+		indexingProps.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_PROPERTIES;
+
+		VkPhysicalDeviceProperties2 props2{};
+		props2.sType =  VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
 		props2.pNext = &indexingProps;
 		vkGetPhysicalDeviceProperties2(phys, &props2);
 
@@ -1872,10 +1920,10 @@ public:
 		caps.maxUAB_SamplerBuffers = indexingProps.maxDescriptorSetUpdateAfterBindSamplers;
 
 		// You should also check features to know if UPDATE_AFTER_BIND is actually supported:
-		VkPhysicalDeviceDescriptorIndexingFeatures indexingFeatures{
-			VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES
-		};
-		VkPhysicalDeviceFeatures2 features2{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2 };
+		VkPhysicalDeviceDescriptorIndexingFeatures indexingFeatures{};
+		indexingFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;
+		VkPhysicalDeviceFeatures2 features2{};
+		features2.sType =  VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
 		features2.pNext = &indexingFeatures;
 		vkGetPhysicalDeviceFeatures2(phys, &features2);
 
@@ -1888,7 +1936,7 @@ public:
 		return caps;
 	}
 
-	inline VkResult createDescriptorPool() {
+	VkResult createDescriptorPool() {
 		VkResult vkResult;
 		LOGLINE(LogType::Info, LogMod::Vulkan, "Creating Descriptor pools... ");
 
@@ -1911,7 +1959,7 @@ public:
 		//Vk_CHECK(vkResult, vkCreateDescriptorPool(m_vkDevice, &poolInfo, nullptr, &currentDescPool));
 		//descPools.push_back(currentDescPool);
 
-		std::vector<VkDescriptorPoolSize> baseSizes = {
+		const std::vector<VkDescriptorPoolSize> baseSizes = {
 			{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,     VULKAN_DESCPOOL_BASE_UNIFORMS},
 			{ VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,     VULKAN_DESCPOOL_BASE_STORAGE },
 			{ VK_DESCRIPTOR_TYPE_SAMPLER,            VULKAN_DESCPOOL_BASE_SAMPLER },
@@ -1925,7 +1973,7 @@ public:
 		//	{ VK_DESCRIPTOR_TYPE_SAMPLER,            VULKAN_DESCPOOL_TEXTURES_SAMPLER },
 		//	{ VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,      VULKAN_DESCPOOL_TEXTURES_IMAGE }
 		//};
-		std::vector<VkDescriptorPoolSize> dynamicSizes = {
+		const std::vector<VkDescriptorPoolSize> dynamicSizes = {
 			{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,     VULKAN_DESCPOOL_DYNAMIC_UNIFORMS},
 			{ VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,     VULKAN_DESCPOOL_DYNAMIC_STORAGE },
 			{ VK_DESCRIPTOR_TYPE_SAMPLER,            VULKAN_DESCPOOL_DYNAMIC_SAMPLER },
@@ -2000,25 +2048,43 @@ public:
 //		return VK_SUCCESS;
 //	}
 
-	inline VkResult createInstance() {
+	VkResult createInstance() {
 		VkResult vkResult;
 		LOGLINE_IND(LogType::Info, LogMod::Vulkan, "Creating VkInstance... ", 1);
 		VkApplicationInfo appInfo{};
 		appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
 		appInfo.apiVersion = VK_API_VERSION_1_3;
-		appInfo.pApplicationName = windowSurface->appName.c_str();
+		appInfo.pApplicationName = m_windowContext->appName_c_str();
 
 		// Create instance
 		VkInstanceCreateInfo instanceCreateInfo = {};
 		instanceCreateInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
 		instanceCreateInfo.pApplicationInfo = &appInfo;
 #ifdef VULKAN_VALIDATION
+
+#ifdef BUILD_WIN
 		const char* extensions[] = {
 			"VK_KHR_surface",
 			"VK_KHR_win32_surface",
 			"VK_EXT_debug_utils"
 		};
-		instanceCreateInfo.enabledExtensionCount = 3;
+#else
+#ifdef WAYLAND
+		const char* extensions[] = {
+			"VK_KHR_surface",
+			"VK_KHR_wayland_surface",
+			"VK_EXT_debug_utils"
+		};
+#else
+		const char* extensions[] = {
+			"VK_KHR_surface",
+			"VK_KHR_xlib_surface",
+			"VK_EXT_debug_utils"
+		};
+#endif
+#endif
+
+		instanceCreateInfo.enabledExtensionCount = 2;
 
 		if (checkValidationLayerSupport()) {
 			instanceCreateInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
@@ -2028,10 +2094,27 @@ public:
 		}
 		LOGLINE(LogType::Info, LogMod::Vulkan, "Validation is ON. ");
 #else
+
+#ifdef BUILD_WIN
 		const char* extensions[] = {
 			"VK_KHR_surface",
 			"VK_KHR_win32_surface",
 		};
+#else
+#ifdef WAYLAND
+		const char* extensions[] = {
+			"VK_KHR_surface",
+			"VK_KHR_wayland_surface",
+		};
+#else
+		const char* extensions[] = {
+			"VK_KHR_surface",
+			"VK_KHR_xlib_surface",
+		};
+#endif
+#endif
+
+
 		instanceCreateInfo.enabledExtensionCount = 2;
 		instanceCreateInfo.enabledLayerCount = 0;
 		LOGLINE(LogType::Info, LogMod::Vulkan, "Validation is OFF. ");
@@ -2042,23 +2125,46 @@ public:
 		LOGLINE_IND(LogType::Success, LogMod::Vulkan, "VkInstance created.", -1);
 		return VK_SUCCESS;
 	}
-
-	inline VkResult createSurface() {
+#ifndef BUILD_GLFW
+#ifdef BUILD_WIN
+	VkResult createSurface() {
 		VkResult vkResult;
 
 		// Create surface
+
 		LOGLINE(LogType::Info, LogMod::Vulkan, "Creating Vk_Win32 Surface... ");
 		VkWin32SurfaceCreateInfoKHR surfaceCreateInfo = {};
 		surfaceCreateInfo.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
-		surfaceCreateInfo.hinstance = windowSurface->windowInstance;
-		surfaceCreateInfo.hwnd = windowSurface->windowHandle;
+		surfaceCreateInfo.hinstance = m_windowContext->windowInstance;
+		surfaceCreateInfo.hwnd = m_windowContext->windowHandle;
 
 		Vk_CHECK(vkResult, vkCreateWin32SurfaceKHR(m_vkInstance, &surfaceCreateInfo, nullptr, &m_vkSurface));
+
+
 		LOG(LogType::Success, "Done.");
 		return VK_SUCCESS;
 	}
+#endif
+#else
+	VkResult createSurface()
+	{
+		VkResult vkResult{};
+		LOGLINE(LogType::Info, LogMod::Vulkan, "Creating GLFW Surface... ");
+		vkResult = glfwCreateWindowSurface(m_vkInstance, m_windowContext->window(), nullptr, &m_vkSurface);
+		if (vkResult == VK_ERROR_EXTENSION_NOT_PRESENT) {
+			uint32_t extCount = 0;
+			const auto extsPtr = glfwGetRequiredInstanceExtensions(&extCount);
+			for (std::size_t i = 0; i < extCount; ++i) {
+				LOGLINE(LogType::Info, LogMod::Vulkan, extsPtr[i]);
+			}
+			return vkResult;
+		}
+		LOG(LogType::Success, "Done.");
+		return VK_SUCCESS;
+	}
+#endif
 
-	inline VkResult pickPhysDevice(bool prioIGpu) {
+	VkResult pickPhysDevice(const bool prioIGpu) {
 		VkResult vkResult{};
 		// Enumerate physical devices
 		LOGLINE(LogType::Info, LogMod::Vulkan, "Choosing GPU... ");
@@ -2074,14 +2180,14 @@ public:
 		uint16_t bestScore = 0;
 		scores.resize(physicalDevices.size());
 		for (size_t d = 0; d < physicalDevices.size(); ++d) {
-			auto& device = physicalDevices[d];
+			const auto& device = physicalDevices[d];
 			scores[d] = 0;
 			uint32_t queueFamilyCount = 0;
 			vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, nullptr);
 			std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
 			vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, queueFamilies.data());
 			for (uint32_t i = 0; i < queueFamilyCount; i++) {
-				bool supportsGraphics = queueFamilies[i].queueFlags & VK_QUEUE_GRAPHICS_BIT;
+				const bool supportsGraphics = queueFamilies[i].queueFlags & VK_QUEUE_GRAPHICS_BIT;
 				VkBool32 supportsPresent = VK_FALSE;
 				Vk_CHECK(vkResult, vkGetPhysicalDeviceSurfaceSupportKHR(device, i, m_vkSurface, &supportsPresent));
 
@@ -2125,18 +2231,22 @@ public:
 
 		// --- Queue ---
 		float queuePriority = 1.0f;
-		VkDeviceQueueCreateInfo queueCI{ VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO };
+		VkDeviceQueueCreateInfo queueCI{ };
+		queueCI.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
 		queueCI.queueFamilyIndex = m_graphicsQueueFamilyIndex;
 		queueCI.queueCount = 1;
 		queueCI.pQueuePriorities = &queuePriority;
 
 		// --- Query support (1.3 -> 1.2 chain). Do NOT include legacy feature structs. ---
-		VkPhysicalDeviceVulkan13Features supp13{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES };
-		VkPhysicalDeviceVulkan12Features supp12{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES };
+		VkPhysicalDeviceVulkan13Features supp13{};
+		supp13.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
+		VkPhysicalDeviceVulkan12Features supp12{  };
+		supp12.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
 
 		supp13.pNext = &supp12;
 
-		VkPhysicalDeviceFeatures2 supp{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2 };
+		VkPhysicalDeviceFeatures2 supp{ };
+		supp.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
 		supp.pNext = &supp13;
 
 		vkGetPhysicalDeviceFeatures2(m_phyDevice, &supp);
@@ -2159,13 +2269,15 @@ public:
 		}
 
 		// for dynamic states
-		VkPhysicalDeviceExtendedDynamicState2FeaturesEXT ext2{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_2_FEATURES_EXT };
+		VkPhysicalDeviceExtendedDynamicState2FeaturesEXT ext2{};
+		ext2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_2_FEATURES_EXT;
 		ext2.extendedDynamicState2 = VK_TRUE;
 		ext2.extendedDynamicState2LogicOp = VK_TRUE;
 		//ext2.extendedDynamicState2PatchControlPoints = VK_TRUE;
 
 		// --- Build ENABLE chain (separate structs from the query) ---
-		VkPhysicalDeviceVulkan12Features en12{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES };
+		VkPhysicalDeviceVulkan12Features en12{};
+		en12.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
 		en12.descriptorIndexing = VK_TRUE;
 		en12.runtimeDescriptorArray = VK_TRUE;
 		en12.shaderSampledImageArrayNonUniformIndexing = VK_TRUE;
@@ -2174,12 +2286,14 @@ public:
 		en12.scalarBlockLayout = VK_TRUE;
 		en12.pNext = &ext2;
 
-		VkPhysicalDeviceVulkan13Features en13{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES };
+		VkPhysicalDeviceVulkan13Features en13{};
+		en13.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
 		en13.shaderDemoteToHelperInvocation = supp13.shaderDemoteToHelperInvocation; // enable if supported
 		en13.synchronization2 = VK_TRUE;
 		en13.pNext = &en12;
 
-		VkPhysicalDeviceFeatures2 enable{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2 };
+		VkPhysicalDeviceFeatures2 enable{};
+		enable.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
 		enable.pNext = &en13;
 		enable.features.samplerAnisotropy = VK_TRUE;
 		enable.features.vertexPipelineStoresAndAtomics = VK_TRUE;
@@ -2189,7 +2303,8 @@ public:
 		std::vector<const char*> exts;
 		exts.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
 
-		VkDeviceCreateInfo devCI{ VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO };
+		VkDeviceCreateInfo devCI{};
+		devCI.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
 		devCI.queueCreateInfoCount = 1;
 		devCI.pQueueCreateInfos = &queueCI;
 		devCI.enabledExtensionCount = static_cast<uint32_t>(exts.size());
@@ -2258,7 +2373,7 @@ public:
 	//}
 
 
-	inline VkResult createSwapchain() {
+	VkResult createSwapchain() {
 		VkResult vkResult;
 
 		LOGLINE(LogType::Info, LogMod::Vulkan, "Creating Swapchain... ");
@@ -2281,9 +2396,12 @@ public:
 				break;
 			}
 		}
-		surfaceFormat = surfaceFormat;
+		//surfaceFormat = surfaceFormat;
 		swapchainFormat = surfaceFormat.format;
-		swapchainExtent = { surfaceCaps.currentExtent.width, surfaceCaps.currentExtent.height };
+		if (surfaceCaps.currentExtent.width != 0xFFFFFFFF)
+			swapchainExtent = { surfaceCaps.currentExtent.width, surfaceCaps.currentExtent.height };
+		else
+			swapchainExtent = { m_windowContext->width, m_windowContext->height };
 
 		// Swapchain create info
 		VkSwapchainCreateInfoKHR swapchainCreateInfo = {};
@@ -2307,7 +2425,7 @@ public:
 		return VK_SUCCESS;
 	}
 
-	inline VkResult createImageViews() {
+	VkResult createImageViews() {
 		LOGLINE(LogType::Info, LogMod::Vulkan, "Creating ImageViews... ");
 		VkResult vkResult;
 		// Get swapchain images
@@ -2366,8 +2484,8 @@ public:
 			VkPhysicalDeviceMemoryProperties memProps;
 			vkGetPhysicalDeviceMemoryProperties(m_phyDevice, &memProps);
 			for (uint32_t j = 0; j < memProps.memoryTypeCount; ++j) {
-				if ((memReq.memoryTypeBits & (1 << j)) &&
-					(memProps.memoryTypes[j].propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)) {
+				if (memReq.memoryTypeBits & 1 << j &&
+					memProps.memoryTypes[j].propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) {
 					allocInfo.memoryTypeIndex = j;
 					break;
 				}
@@ -2396,7 +2514,7 @@ public:
 		return VK_SUCCESS;
 	}
 
-	inline VkResult createShaderModule(Shader& shader, VkShaderModule* outShaderModule) {
+	VkResult createShaderModule(const Shader& shader, VkShaderModule* outShaderModule) const {
 		VkResult vkResult{};
 		VkShaderModuleCreateInfo createInfo{};
 		createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
@@ -2406,7 +2524,7 @@ public:
 		return VK_SUCCESS;
 	}
 
-	inline VkResult createRenderPass() {
+	VkResult createRenderPass() {
 		LOGLINE(LogType::Info, LogMod::Vulkan, "Creating RenderPass... ");
 		VkResult vkResult{};
 
@@ -2623,15 +2741,15 @@ public:
 		VkViewport viewport{};
 		viewport.x = 0.0f;
 		viewport.y = 0.0f;
-		viewport.width = (float)swapchainExtent.width;
-		viewport.height = (float)swapchainExtent.height;
+		viewport.width = static_cast<float>(swapchainExtent.width);
+		viewport.height = static_cast<float>(swapchainExtent.height);
 		viewport.minDepth = 0.0f;
 		viewport.maxDepth = 1.0f;
 
 		VkRect2D scissor{};
 		scissor.offset = { 0, 0 };
 		scissor.extent = swapchainExtent;
-		std::vector<VkDynamicState> dynamicStates = {
+		std::vector dynamicStates = {
 			VK_DYNAMIC_STATE_VIEWPORT,
 			VK_DYNAMIC_STATE_SCISSOR,
 			VK_DYNAMIC_STATE_DEPTH_TEST_ENABLE,
@@ -2693,7 +2811,7 @@ public:
 		return VK_SUCCESS;
 	}
 
-	inline VkResult createFramebuffers() {
+	VkResult createFramebuffers() {
 		LOGLINE(LogType::Info, LogMod::Vulkan, "Creating Framebuffers... ");
 		VkResult vkResult{};
 
@@ -2702,7 +2820,7 @@ public:
 
 
 		for (size_t i = 0; i < swapchainImageViews.size(); i++) {
-			VkImageView attachments[] = {
+			const VkImageView attachments[] = {
 				swapchainImageViews[i],
 				depthStencilViews[i]
 			};
@@ -2723,16 +2841,17 @@ public:
 		return VK_SUCCESS;
 	}
 
-	inline VkResult createCommandPool() {
+	VkResult createCommandPool() {
 		LOGLINE(LogType::Info, LogMod::Vulkan, "Creating Command pool... ");
 		VkResult vkResult{};
 
-		QueueFamilyIndices queueFamilyIndices = findQueueFamilies(m_phyDevice, m_vkSurface);
+		const auto[graphicsFamily, presentFamily] =
+			findQueueFamilies(m_phyDevice, m_vkSurface);
 
 		VkCommandPoolCreateInfo poolInfo{};
 		poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
 		poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-		poolInfo.queueFamilyIndex = queueFamilyIndices.graphicsFamily.value();
+		poolInfo.queueFamilyIndex = graphicsFamily.value();
 
 		Vk_CHECK(vkResult, vkCreateCommandPool(m_vkDevice, &poolInfo, nullptr, &commandPool));
 
@@ -2740,7 +2859,7 @@ public:
 		return VK_SUCCESS;
 	}
 
-	inline VkResult createCommandBuffer() {
+	VkResult createCommandBuffer() {
 		LOGLINE(LogType::Info, LogMod::Vulkan, "Creating Command buffers... ");
 		VkResult vkResult{};
 
@@ -2758,7 +2877,7 @@ public:
 		return VK_SUCCESS;
 	}
 
-	inline VkResult createSyncObjects() {
+	VkResult createSyncObjects() {
 		LOGLINE(LogType::Info, LogMod::Vulkan, "Creating Sync objects... ");
 		VkResult vkResult{};
 
@@ -2781,7 +2900,7 @@ public:
 		return VK_SUCCESS;
 	}
 
-	inline VkResult createSamplerPresets() {
+	VkResult createSamplerPresets() {
 		VkResult vkResult;
 
 		LOGLINE(LogType::Info, LogMod::Vulkan, "Creating Sampler presets... ");
@@ -2894,7 +3013,7 @@ public:
 
 
 
-	inline VkResult recreateSwapchain() {
+	VkResult recreateSwapchain() {
 		VkResult vkResult{};
 
 		LOGLINE_IND(LogType::Info, LogMod::Vulkan, "Recreating Swapchain... ", 1);
@@ -2916,7 +3035,7 @@ public:
 		return VK_SUCCESS;
 	}
 
-	inline void cleanUpSwapchainOnly() {
+	void cleanUpSwapchainOnly() {
 		for (size_t i = 0; i < swapChainFramebuffers.size(); i++) {
 			vkDestroyFramebuffer(m_vkDevice, swapChainFramebuffers[i], nullptr);
 		}
@@ -2930,8 +3049,8 @@ public:
 		vkDestroySwapchainKHR(m_vkDevice, swapchain, nullptr);
 	}
 
-	inline void cleanupSyncObjects() {
-		for (auto& sync : frameSync) {
+	void cleanupSyncObjects() const {
+		for (const auto& sync : frameSync) {
 			vkDestroySemaphore(m_vkDevice, sync.imageAvailable, nullptr);
 			vkDestroyFence(m_vkDevice, sync.inFlight, nullptr);
 		}
@@ -2941,23 +3060,23 @@ public:
 		//imageRenderDone.clear();
 	}
 	
-	inline VkResult resetPipeline(size_t pipelineIndex, Shader& vs, Shader& ps) {
-		//VkResult vkResult{};
+	// VkResult resetPipeline(const size_t pipelineIndex, Shader& vs, Shader& ps) {
+	// 	VkResult vkResult{};
+	//
+	// 	LOGLINE_IND(LogType::Info, LogMod::Vulkan, "Hot Reloading shaders... ", 1);
+	//
+	// 	Vk_CHECK(vkResult, vkDeviceWaitIdle(vkDevice));
+	// 	vkDestroyPipelineLayout(vkDevice, pipelineLayouts[pipelineIndex], nullptr);
+	// 	vkDestroyPipeline(vkDevice, pipelines[pipelineIndex], nullptr);
+	//
+	// 	Vk_CHECK(vkResult, createGraphicsPipeline(vs, ps, pipelineIndex));
+	//
+	// 	LOGLINE_IND(LogType::Success, LogMod::Vulkan, "Hot Reload completed.", -1);
+	// 	return VK_SUCCESS;
+	//
+	// }
 
-		//LOGLINE_IND(LogType::Info, LogMod::Vulkan, "Hot Reloading shaders... ", 1);
-
-		//Vk_CHECK(vkResult, vkDeviceWaitIdle(vkDevice));
-		//vkDestroyPipelineLayout(vkDevice, pipelineLayouts[pipelineIndex], nullptr);
-		//vkDestroyPipeline(vkDevice, pipelines[pipelineIndex], nullptr);
-
-		//Vk_CHECK(vkResult, createGraphicsPipeline(vs, ps, pipelineIndex));
-
-		//LOGLINE_IND(LogType::Success, LogMod::Vulkan, "Hot Reload completed.", -1);
-		return VK_SUCCESS;
-
-	}
-
-	inline void cleanUp() {
+	void cleanUp() {
 
 		LOGLINE(LogType::Info, LogMod::Vulkan, "Cleaning up... ");
 
@@ -2971,7 +3090,7 @@ public:
 		//	vkDestroyPipelineLayout(m_vkDevice, layout, nullptr);
 		//pipelineLayouts.clear();
 
-		for (auto& pass : rendPasses)
+		for (const auto& pass : rendPasses)
 			vkDestroyRenderPass(m_vkDevice, pass, nullptr);
 		rendPasses.clear();
 
@@ -2994,7 +3113,7 @@ public:
 		LOG(LogType::Success, "Done.");
 	}
 
-	inline VkResult recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex) {
+	static VkResult recordCommandBuffer(const VkCommandBuffer commandBuffer, [[maybe_unused]] uint32_t imageIndex) {
 		//LOGLINE(LogType::Info, LogMod::Vulkan, "Recording command buffer... ");
 		VkResult vkResult{};
 
@@ -3011,12 +3130,13 @@ public:
 
 
 
-	inline void bindMaterialParameters(
-		VkCommandBuffer cmd,
-		Material* material,
-		std::vector<VkDescriptorSet>& descriptorSetsBySetIndex, // Assumed to be pre-filled
+	void bindMaterialParameters(
+		const VkCommandBuffer cmd,
+		const Material* const material,
+		const std::vector<VkDescriptorSet>& descriptorSetsBySetIndex, // Assumed to be pre-filled
 		const void* pushConstData = nullptr,
-		uint32_t pushConstSize = 0) {
+		const uint32_t pushConstSize = 0) const
+	{
 		assert(material && pipelineLayouts[material->pipelineLayoutId]);
 
 		// Bind descriptor sets (grouped by set index)
@@ -3053,16 +3173,22 @@ public:
 	void draw(const DrawContext& rendCtx);
 
 
-	inline void notifyViewResized(void* ctx, uint16_t width, uint16_t height) {
+	void notifyViewResized(
+		[[maybe_unused]] void* ctx,
+		[[maybe_unused]] const uint16_t width, [[maybe_unused]] const uint16_t height) {
 		pendingResize = true;
 	}
 
-	uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties, VkPhysicalDevice physicalDevice) {
+	static uint32_t findMemoryType(
+		const uint32_t typeFilter,
+		const VkMemoryPropertyFlags properties,
+		const VkPhysicalDevice physicalDevice)
+	{
 		VkPhysicalDeviceMemoryProperties memProperties;
 		vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memProperties);
 
 		for (uint32_t i = 0; i < memProperties.memoryTypeCount; i++) {
-			if ((typeFilter & (1 << i)) &&
+			if (typeFilter & 1 << i &&
 				(memProperties.memoryTypes[i].propertyFlags & properties) == properties) {
 				return i;
 			}
@@ -3072,9 +3198,9 @@ public:
 	}
 
 
-	VkResult transferTextureData(void* pixelData, const VkImage& image, uint8_t mipLevels,
-								 uint16_t width, uint16_t height, uint8_t bytesPerPixel,
-								 VkCommandPool cmdPool, VkQueue queue) {
+	VkResult transferTextureData(void* pixelData, const VkImage& image, const uint8_t mipLevels,
+								 const uint16_t width, const uint16_t height, const uint8_t bytesPerPixel,
+								 const VkCommandPool cmdPool, const VkQueue queue) const {
 
 		VkResult vkResult{};
 
@@ -3111,7 +3237,7 @@ public:
 		Vk_CHECK(vkResult, vkBindBufferMemory(m_vkDevice, stagingBuffer, stagingMemory, 0));
 		void* data;
 		Vk_CHECK(vkResult, vkMapMemory(m_vkDevice, stagingMemory, 0, imageSize, 0, &data));
-		memcpy(data, pixelData, static_cast<size_t>(imageSize));
+		memcpy(data, pixelData, imageSize);
 		vkUnmapMemory(m_vkDevice, stagingMemory);
 
 		VkImageMemoryBarrier barrier1{};
@@ -3349,8 +3475,11 @@ public:
 	}
 
 
-	void preDraw(RenderManager* const renderMan);
+	void preDraw(RenderManager* renderMan);
 	void postDraw();
 };
+#ifdef BUILD_WIN
 #pragma warning(pop)
+#endif
+
 #endif
