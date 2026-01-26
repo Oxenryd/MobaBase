@@ -17,12 +17,14 @@ if(MSVC)
 	message(STATUS "Enabling /GL and /LTCG for MSVC Release build")
 
 	# Enable /GL for compile step
-	add_compile_options(/GL)
-
+	add_compile_options("$<$<CONFIG:Release>:/GL>")
+	add_link_options("$<$<CONFIG:Release>:/LTCG>")
+	set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT
+    "$<$<CONFIG:Debug,Release,RelWithDebInfo>:ProgramDatabase>")
 	# Enable /LTCG for link step
-	set(CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} /LTCG")
-	set(CMAKE_STATIC_LINKER_FLAGS_RELEASE "${CMAKE_STATIC_LINKER_FLAGS_RELEASE} /LTCG")
-	set(CMAKE_SHARED_LINKER_FLAGS_RELEASE "${CMAKE_SHARED_LINKER_FLAGS_RELEASE} /LTCG")
+	#set(CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} /LTCG")
+	#set(CMAKE_STATIC_LINKER_FLAGS_RELEASE "${CMAKE_STATIC_LINKER_FLAGS_RELEASE} /LTCG")
+	#set(CMAKE_SHARED_LINKER_FLAGS_RELEASE "${CMAKE_SHARED_LINKER_FLAGS_RELEASE} /LTCG")
 else()
 	add_compile_options(-march=native)
 	add_compile_options(-Wno-template-body)
@@ -226,11 +228,11 @@ target_compile_options(MobaBase PRIVATE
 # DEFINES ----------------------------------------------------------------------------
 target_compile_definitions(MobaBase PRIVATE
 	GLFW_INCLUDE_VULKAN
-	# BUILD_WIN
+	BUILD_WIN
 	BUILD_DLL
 	BUILD_GLFW
 	# X11
-	WAYLAND
+	# WAYLAND
 	GLM_FORCE_SSE2
 	GLM_ENABLE_EXPERIMENTAL
 	DEBUGGING

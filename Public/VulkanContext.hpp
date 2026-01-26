@@ -17,8 +17,8 @@
 		#define NOMINMAX
 		#include <windows.h>
 	#endif
-	#include <vulkan/vulkan_win32.h>
-	#include <vulkan/vulkan_core.h>
+	//#include <vulkan/vulkan_win32.h>
+	//#include <vulkan/vulkan_core.h>
 #endif
 
 #ifdef BUILD_GLFW

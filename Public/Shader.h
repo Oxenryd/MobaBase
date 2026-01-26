@@ -191,7 +191,12 @@ public:
             {
                 const auto& rows = numeric.matrix.row_count;
                 switch (const auto& cols = numeric.matrix.column_count) {
+#ifdef BUILD_WIN
+                    default: std::unreachable();
+#else
                     default: __builtin_unreachable();
+#endif
+                    
                     case 2:
                     {
                         if (rows == 2) {

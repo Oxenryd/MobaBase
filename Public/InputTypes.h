@@ -284,7 +284,7 @@ struct alignas(16) MouseState
                            );
     }
 
-    constexpr void reset() {
+    void reset() {
         relativePosition = glm::ivec2(0, 0);
         absoluteScreenPosition = glm::ivec2(0, 0);
         wheel = glm::ivec2(0, 0);

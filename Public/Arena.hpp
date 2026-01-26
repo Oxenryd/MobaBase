@@ -10,6 +10,7 @@
 #include <vector>
 #include <semaphore>
 #include <format>
+#
 #include "API.h"
 
 #ifndef GLOBAL_MACROS_H
@@ -26,7 +27,25 @@ using NewHeapBaseAddress = size_t;
     #define HEAP_ARENA_MAX_PAGES 2048
 #endif
 
-
+#ifdef _MSC_VER
+#include <malloc.h>
+inline void* aligned_alloc_compat(std::size_t alignment, std::size_t size) {
+    return _aligned_malloc(size, alignment);
+}
+inline void aligned_free_compat(void* p) {
+    _aligned_free(p);
+}
+#else
+#include <cstdlib>
+inline void* aligned_alloc_compat(std::size_t alignment, std::size_t size) {
+    // C11/C++17 rule: size must be a multiple of alignment
+    size = (size + alignment - 1) / alignment * alignment;
+    return std::aligned_alloc(alignment, size);
+}
+inline void aligned_free_compat(void* p) {
+    std::free(p);
+}
+#endif
 
 struct ArenaPage
 {
@@ -61,7 +80,7 @@ public:
         : m_size(size + 1), m_lastStart(0), m_destruct{ destruct }
     {
         constexpr size_t alignment = 64;
-        m_memory = static_cast<uint8_t*>(std::aligned_alloc(alignment, m_size));
+        m_memory = static_cast<uint8_t*>(aligned_alloc_compat(alignment, m_size));
         //m_memory = new uint8_t[m_size];
         const auto memStart = reinterpret_cast<size_t>(m_memory);
         if (memStart == 0) {
@@ -76,7 +95,7 @@ public:
 
         if (size < sizeof(ArenaPage) * HEAP_ARENA_MAX_PAGES * 2) {
             LOG(LogType::Error, "Fail. Size too small.");
-            delete[] m_memory;
+            aligned_free_compat(m_memory);
             throw std::bad_alloc();
         }
 
@@ -93,7 +112,7 @@ public:
 
     ~HeapArena() {
         destroyAll();
-        delete[] m_memory;
+        aligned_free_compat(m_memory);
     }
 
     void* allocate(const size_t size, const size_t alignment = alignof(std::max_align_t)) {
@@ -141,7 +160,7 @@ public:
         const auto delta =
             static_cast<MemoryAddressDelta>(reinterpret_cast<size_t>(temp) - reinterpret_cast<size_t>(m_memory));
         reallocated.notify(delta);
-        delete m_memory;
+        aligned_free_compat(m_memory);
         m_size = newSizeBytes;
         if (m_pagesPtr.back().isFree()) {
             m_pagesPtr.back().size = static_cast<uint32_t>(m_size - m_pagesPtr.back().offset);
@@ -387,7 +406,8 @@ public:
     ~Arena() {
         destroyAll();
         //delete[] m_memory;
-        operator delete[](m_memory, std::align_val_t{ 64 });
+        aligned_free_compat(m_memory);
+        //operator delete[](m_memory, std::align_val_t{ 64 });
         m_memory = nullptr;
     }
 
@@ -468,7 +488,8 @@ public:
     }
 
     ~FrameArena() {
-        operator delete[](m_memory, std::align_val_t{ 64 });
+        aligned_free_compat(m_memory);
+        //operator delete[](m_memory, std::align_val_t{ 64 });
     }
 
     void* allocate(const size_t size, const size_t alignment = alignof(std::max_align_t)) {

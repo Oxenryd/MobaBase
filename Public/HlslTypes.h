@@ -147,10 +147,15 @@ struct alignas(16) GPULight
 
 static_assert(sizeof(GPULight) == 112, "GPULight must be 112 bytes");
 
+#ifdef BUILD_WIN
+#define LIGHT_CONST inline static
+#else
+#define LIGHT_CONST constexpr
+#endif
 
 namespace LightFactory
 {
-	constexpr GPULight Point(
+	LIGHT_CONST GPULight Point(
 		const glm::vec3& pos,
 		const float radius,
 		const glm::vec3& color = { 1.0f, 1.0f, 1.0f },
@@ -170,7 +175,7 @@ namespace LightFactory
 		return L;
 	}
 
-	constexpr GPULight Spot(
+	LIGHT_CONST GPULight Spot(
 		const glm::vec3& pos,
 		const glm::vec3& dir,
 		const float radius,
@@ -199,7 +204,7 @@ namespace LightFactory
 		return L;
 	}
 
-	constexpr GPULight Directional(
+	LIGHT_CONST GPULight Directional(
 		const glm::vec3& dir,
 		const glm::vec3& color = { 1.0f, 1.0f, 1.0f },
 		const float intensity = 1.0f)

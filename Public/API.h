@@ -4,7 +4,7 @@
 
 #ifndef API_H
 #define API_H
-#include <bits/c++config.h>
+
 
 inline void assume(bool cond) {
 #if defined(__clang__) || defined(__GNUC__)
@@ -23,6 +23,7 @@ inline void assume(bool cond) {
         #define ENGINE_API __declspec(dllimport)
     #endif
 #else
+    #include <bits/c++config.h>
     #define ENGINE_API __attribute__((visibility("default")))
 #endif
 

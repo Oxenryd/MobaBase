@@ -246,7 +246,7 @@ ErrorCode RenderManager::compileShader(Shader& shader) {
 	static bool pathSet = false;
 #ifdef BUILD_WIN
 	if (!pathSet) {
-		dxcBin = execDir / "dxc.exe";
+		dxcBin = execDir.string() + "/dxc.exe";
 		pathSet = true;
 	}
 #else
