@@ -13,7 +13,7 @@ This repository primarily exists as a **personal project and technical playgroun
 
 * **Cross-platform focus**
 
-  Targeting **Windows / Linux**, using **Vulkan** with **GLFW** (Windows-only at the moment due to some direct Win32 calls).
+  Targeting **Windows / Linux**, using **Vulkan** with **GLFW**.
 
 * **Pure C++ gameplay code**
 
@@ -50,7 +50,7 @@ Implemented or partially implemented systems include:
 
 * **Platform**
 
-  * Windows support (Linux planned once Win32 dependencies are rerouted through GLFW)
+  * Windows & Linux support
 
 ---
 
