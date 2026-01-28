@@ -228,11 +228,11 @@ target_compile_options(MobaBase PRIVATE
 # DEFINES ----------------------------------------------------------------------------
 target_compile_definitions(MobaBase PRIVATE
 	GLFW_INCLUDE_VULKAN
-	BUILD_WIN
+	#BUILD_WIN
 	BUILD_DLL
 	BUILD_GLFW
 	# X11
-	# WAYLAND
+	WAYLAND
 	GLM_FORCE_SSE2
 	GLM_ENABLE_EXPERIMENTAL
 	DEBUGGING

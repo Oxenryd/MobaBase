@@ -102,6 +102,15 @@ int main(int, char*)
 	EC = engine.init(&wndCtx);
 	EC_RETURN_FAILED_INT(EC);
 
+	// Print information on title
+	engine.onReadFPS.subscribe( [&](const Engine* eng, const uint32_t fps)
+		{
+			static std::string str{};
+			const uint32_t dCalls = eng->getVulkanContext()->lastDrawcallCount();
+			str = std::format("{} - FPS: {} - Draw Calls: {}", APP_NAME, fps, dCalls);
+			wndCtx.setWindowTitle(str);
+		});
+
 	// Start Engine
 	engine.createNewScene<GameScene>(512_MB, nullptr);
 	engine.setTargetUpdateDeltaTime(0.0);
