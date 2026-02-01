@@ -90,6 +90,7 @@ ErrorCode Engine::_initShaderManager() {
 #else
 		LOGLINE(LogType::Info, LogMod::Rendering, "Shader HotReload is OFF.");
 #endif
+
 		RenderManager::s_instance = m_renderMan;
 		LOGLINE_IND(LogType::Success, LogMod::Rendering, "ShaderManager initialized.", -1);
 		return ErrorCode::OK;

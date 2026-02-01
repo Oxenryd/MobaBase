@@ -30,10 +30,11 @@ public:
         m_camIndex = sceneRender().addCamera();
         Engine::getInstance()->setMainCamera(m_sceneIndex, m_camIndex);
         auto camTrans = Engine::getInstance()->mainCamera()->transform();
+        auto mainCam = Engine::getInstance()->mainCamera();
         camTrans.modifyPosition() = glm::vec3{0,3, 30};
 
 
-        auto dirLight = LightFactory::Directional(glm::vec3{-1, -0.85, -0.25});
+        auto dirLight = LightFactory::Directional(glm::vec3{-1, -0.5, -0.25});
         dirLight.positionVS[0] = 0;
         dirLight.positionVS[1] = 20;
         dirLight.positionVS[2] = 0;
@@ -65,9 +66,9 @@ public:
         //m_go2 = gameObjectSystem().createGameObject<GameObject>("Box");
         //m_go3 = gameObjectSystem().createGameObject<GameObject>("Box");
 
-        // "Cube/cube.obj" "crytek-sponza-hd/sponza.obj" "SmallRoom/smallRoom_mirror_window.obj"    "Sphere/sphere.obj"
+        // "Cube/cube.obj" "crytek-sponza-hd/sponza.obj" "SmallRoom/smallRoom_mirror_window.obj"    "Sphere/sphere.obj"   "Cube/cube.obj"
         m_go1 = gameObjectSystem().createGameObject<GameObject>("Model1");
-        const std::string path1 = std::format("{}{}", ASSETS_DIR, "crytek-sponza-hd/sponza.obj");
+        const std::string path1 = std::format("{}{}", ASSETS_DIR, "Cube/cube.obj");
         Mesh modelMesh1{};
         sceneRender().createMeshFromModel(path1, &modelMesh1, m_go1.entity());
         float volume = 0.0f;
@@ -212,38 +213,37 @@ public:
         //transformSystem().printHierarchy();
     }
 
-    void update(double dt) {
-
-        return;
+    void update(const double dt) {
 
         m_time += Timing::deltaTimeF();
 
         auto addPos = glm::vec3{0.0025f, 0, 0};//glm::vec3{std::cos(m_time), std::sin(m_time), 0};
 
         auto merryTrans = Transform{ &m_reg, m_go1 };
-        auto children = merryTrans.getChildrenEntities();
         merryTrans.rotate(glm::vec3{ 0.0f, 0.5f, 1.0f } * Timing::deltaTimeF());
+        auto children = merryTrans.getChildrenEntities();
 
-        auto view = m_reg.view<TransformComponent>();
-        {
-            PROFILE_SCOPE("TRANSFORM_UPDATE");
-            MWork::for_loop(0, children.size(), 16,
-                            [&](std::size_t i) {
 
-                                auto& transComp = view.get<TransformComponent>(children[i]);
-                                auto& rotation = transformSystem().rotations()[transComp.dataIndex];
-                                Transform::rotateLocal(rotation, glm::vec3{ 0.0f, 1.0f, 0.0f } *Timing::deltaTimeF());
-
-                                auto cos = std::cos(m_radSpeeds[i] * m_time) * m_startScales[i] * 0.66f;
-                                auto curScale = m_startScales[i] + cos;
-                                auto& scale = transformSystem().scales()[transComp.dataIndex];
-                                scale = glm::vec3{ curScale };
-
-                                transComp.state.setByEnum(ObjectState::DirtyTransform);
-                                transComp.state.setByEnum(ObjectState::ScaleDirty);
-                                transComp.state.setByEnum(ObjectState::RotationDirty);
-                            });
-        }
+        // auto view = m_reg.view<TransformComponent>();
+        // {
+        //     PROFILE_SCOPE("TRANSFORM_UPDATE");
+        //     MWork::for_loop(0, children.size(), 16,
+        //                     [&](std::size_t i) {
+        //
+        //                         auto& transComp = view.get<TransformComponent>(children[i]);
+        //                         auto& rotation = transformSystem().rotations()[transComp.dataIndex];
+        //                         Transform::rotateLocal(rotation, glm::vec3{ 0.0f, 1.0f, 0.0f } *Timing::deltaTimeF());
+        //
+        //                         auto cos = std::cos(m_radSpeeds[i] * m_time) * m_startScales[i] * 0.66f;
+        //                         auto curScale = m_startScales[i] + cos;
+        //                         auto& scale = transformSystem().scales()[transComp.dataIndex];
+        //                         scale = glm::vec3{ curScale };
+        //
+        //                         transComp.state.setByEnum(ObjectState::DirtyTransform);
+        //                         transComp.state.setByEnum(ObjectState::ScaleDirty);
+        //                         transComp.state.setByEnum(ObjectState::RotationDirty);
+        //                     });
+        // }
     }
 
     void lateUpdate(double dt) {

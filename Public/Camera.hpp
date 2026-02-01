@@ -70,7 +70,6 @@ public:
             m_camData.cameraPosition[0] = pos[0];// = glm::vec4{ pos, 1.0f };
             m_camData.cameraPosition[1] = pos[1];
             m_camData.cameraPosition[2] = pos[2];
-            m_camData.ambient = 1.0f;
 
             m_camData.view = rotMatrix;
             m_viewDirty = false;

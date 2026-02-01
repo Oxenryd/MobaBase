@@ -51,9 +51,11 @@ enum class ShadowType : uint32_t
 
 enum class LightFlags : uint32_t
 {
-	None = 0x00000000,
-	Enabled = 0x00000001,
-	Static = 0x00000002
+	None			= 0x00000000,
+	Enabled			= 0x00000001,
+	Static			= 0x00000002,
+	ShadowCaster	= 0x00000004,
+	ShadowFilterPCF = 0x00000008
 };
 
 INLINE auto operator|(LightFlags a, LightFlags b) {
@@ -114,7 +116,7 @@ struct alignas(16) GPULight
 	float volumetricFalloff;
 	float shadowBias;
 	float shadowNormalBias;
-	float _reserved0;
+	uint32_t shadowMatrixIndex;
 
 	// 96..111
 	uint32_t shadowType;
@@ -437,7 +439,7 @@ struct alignas (16) CameraData
 			glm::vec3(0.0f, 0.0f, 0.0f), // Target (look at)
 			glm::vec3(0.0f, 1.0f, 0.0f)  // Up vector
 		);
-		
+
 		proj = glm::perspectiveRH_ZO(
 			glm::radians(vFov),
 			aspectRatio,
@@ -445,7 +447,7 @@ struct alignas (16) CameraData
 			farPlane
 		);
 		proj[1][1] *= -1;
-		
+
 		invProj = 1.0f / proj;
 
 		clustersX = VULKAN_LIGHT_CLUSTERS_X;
@@ -523,8 +525,8 @@ struct alignas (16) TexturePack
 struct alignas (16) BaseMaterialInstance
 {
     TexturePack textures;
-	glm::vec3	ambient{1, 1, 1};
-	float		ambientIntensity{ 1 };
+	glm::vec3	ambient{1.0f, 1.0f, 1.0f};
+	float		ambientIntensity{ 0.05f};
     
 	glm::vec3	baseColor{ 1, 1, 1 };
 	float		albedoStrength{ 1 };

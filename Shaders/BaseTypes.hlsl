@@ -48,7 +48,7 @@ struct GPULight
     float volumetricFalloff;
     float shadowBias;
     float shadowNormalBias;
-    float _reserved0;
+    uint  shadowMatrixIndex;
 
     // 96..111
     uint shadowType;
@@ -166,6 +166,7 @@ struct LightType
     static const uint Directional = 0;
     static const uint Point = 1;
     static const uint Spot = 2;
+    static const uint ShadowCaster = 4;
 };
 
 struct Index32

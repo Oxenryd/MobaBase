@@ -739,8 +739,9 @@ void VulkanContext::draw(const DrawContext& ctx) {
 
 						// Push for instanced
 						BaseMatPush push{};
-						push.flags = (uint32_t)BaseMatPushFlags::Instanced;
-						vkCmdPushConstants(frame.cmdBuffer, pipelineLayouts[matBase->pipelineLayoutId], VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+						push.flags = static_cast<uint32_t>(BaseMatPushFlags::Instanced);
+						vkCmdPushConstants(frame.cmdBuffer, pipelineLayouts[matBase->pipelineLayoutId],
+							VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
 										   0, sizeof(BaseMatPush), &push);
 
 						auto& submesh = scene1->sceneRender().getSubMeshes()[cmd.submeshOffset];

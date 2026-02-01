@@ -61,7 +61,6 @@ ErrorCode SceneRenderSystem::loadModel(const std::string& filename, MeshComponen
 
 uint32_t SceneRenderSystem::addCamera(const CameraData* initData) const {
 	CameraData cData = initData ? *initData : CameraData{};
-
 	auto& scene = *Engine::getInstance()->getScene(m_sceneIndex);
 	const auto& cams = scene.gameObjectSystem().getAllOfType<Camera>();
 	auto index = cams.size();
