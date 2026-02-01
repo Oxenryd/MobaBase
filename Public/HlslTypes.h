@@ -139,7 +139,7 @@ struct alignas(16) GPULight
 		volumetricFalloff{ 1.0f },
 		shadowBias{ 0.0f },
 		shadowNormalBias{ 0.0f },
-		_reserved0{ 0 },
+		shadowMatrixIndex{ static_cast<uint32_t>(-1) },
 		shadowType{ 0 },
 		shadowLayerCount{ 0 },
 		_reserved1{ 0 },
