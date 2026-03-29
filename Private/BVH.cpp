@@ -73,9 +73,8 @@ void DualBVH::_updatePrimitives(DualBVH* _this) {
 
                                 });
                 _this->primitivesLock[0].release();
+                return;
             }
-            
-
 
             if (_this->primitivesLock[1].try_acquire()) {
                 auto group = _this->m_reg.group<TransformComponent, BoundingVolumeComponent, EnabledTag>();
@@ -96,11 +95,10 @@ void DualBVH::_updatePrimitives(DualBVH* _this) {
 
                                 });
                 _this->primitivesLock[1].release();
+                return;
             }
 
         }
-
-        //_this->primitivesLock.release();
     }
 }
 

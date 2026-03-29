@@ -613,6 +613,8 @@ public:
             runSems[1][i] = nullptr;
         }
         delete cullArenas[0][NUM_RUN_THREADS];
+        delete cullArenas[1][NUM_RUN_THREADS];
+        cullArenas[0][NUM_RUN_THREADS] = nullptr;
         cullArenas[1][NUM_RUN_THREADS] = nullptr;
 
         rebuildThreads->join();
@@ -661,7 +663,7 @@ public:
             runSems[0][i] = new std::binary_semaphore{ 1 };
             runSems[1][i] = new std::binary_semaphore{ 1 };
         }
-        cullArenas[0][NUM_RUN_THREADS] = new FrameArena{ 768_KB };
+        cullArenas[0][NUM_RUN_THREADS] = new FrameArena{ 768_KB };  // what??
         cullArenas[1][NUM_RUN_THREADS] = new FrameArena{ 768_KB };
 
         rebuildThreads = new std::thread{DualBVH::_updatePrimitives, this};
