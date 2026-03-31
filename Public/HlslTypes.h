@@ -8,6 +8,7 @@
 #include <glm/gtx/quaternion.hpp>
 
 #include "GlobalMacros.h"
+#include "Light.hpp"
 
 struct ShapeRendAABB
 {
@@ -24,39 +25,6 @@ struct ShapePush
 	uint32_t drawNumber;
 };
 
-
-enum class LightType : uint8_t
-{
-	Directional = 0,
-	Point = 1,
-	Spot = 2,
-	ENUM_END
-};
-
-constexpr static size_t NUM_OF_LIGHT_TYPES = static_cast<size_t>(LightType::ENUM_END);
-
-//enum LightType : uint32_t
-//{
-//	CastShadow = 1 << 0,
-//	// room for more: Static, Volumetric, ContactShadows...
-//};
-
-enum class ShadowType : uint32_t
-{
-	None,
-	DirCSM,
-	Spot2D,
-	PointCube
-};
-
-enum class LightFlags : uint32_t
-{
-	None			= 0x00000000,
-	Enabled			= 0x00000001,
-	Static			= 0x00000002,
-	ShadowCaster	= 0x00000004,
-	ShadowFilterPCF = 0x00000008
-};
 
 INLINE auto operator|(LightFlags a, LightFlags b) {
 	return static_cast<uint32_t>(a) | static_cast<uint32_t>(b);
@@ -159,19 +127,19 @@ INLINE auto operator|(LightFlags a, LightFlags b) {
 
 namespace LightFactory
 {
-	LIGHT_CONST GPULight Point(
+	LIGHT_CONST LightComponent Point(
 		const glm::vec3& pos,
 		const float radius,
 		const glm::vec3& color = { 1.0f, 1.0f, 1.0f },
 		const float intensity = 1.0f)
 	{
-		GPULight L{};
-		L.type = static_cast<uint32_t>(LightType::Point);
-		L.positionVS[0] = pos[0];
-		L.positionVS[1] = pos[1];
-		L.positionVS[2] = pos[2];
+		LightComponent L{};
+		L.type = LightType::Point;
+		L.position[0] = pos[0];
+		L.position[1] = pos[1];
+		L.position[2] = pos[2];
 		L.radius = radius;
-		L.invRange = radius > 0.0f ? 1.0f / radius : 0.0f;
+		L.inverseRange = radius > 0.0f ? 1.0f / radius : 0.0f;
 		L.color[0] = color[0];
 		L.color[1] = color[1];
 		L.color[2] = color[2];
@@ -179,7 +147,7 @@ namespace LightFactory
 		return L;
 	}
 
-	LIGHT_CONST GPULight Spot(
+	LIGHT_CONST LightComponent Spot(
 		const glm::vec3& pos,
 		const glm::vec3& dir,
 		const float radius,
@@ -188,17 +156,17 @@ namespace LightFactory
 		const glm::vec3& color = { 1.0f, 1.0f, 1.0f },
 		const float intensity = 1.0f)
 	{
-		GPULight L{};
-		L.type = static_cast<uint32_t>(LightType::Spot);
-		L.positionVS[0] = pos[0];
-		L.positionVS[1] = pos[1];
-		L.positionVS[2] = pos[2];
+		LightComponent L{};
+		L.type = LightType::Spot;
+		L.position[0] = pos[0];
+		L.position[1] = pos[1];
+		L.position[2] = pos[2];
 		auto normDir = glm::normalize(dir);
-		L.directionVS[0] = normDir[0];
-		L.directionVS[1] = normDir[1];
-		L.directionVS[2] = normDir[2];
+		L.direction[0] = normDir[0];
+		L.direction[1] = normDir[1];
+		L.direction[2] = normDir[2];
 		L.radius = radius;
-		L.invRange = radius > 0.0f ? 1.0f / radius : 0.0f;
+		L.inverseRange = radius > 0.0f ? 1.0f / radius : 0.0f;
 		L.spotInnerCos = glm::cos(glm::radians(innerDeg));
 		L.spotOuterCos = glm::cos(glm::radians(outerDeg));
 		L.color[0] = color[0];
@@ -208,23 +176,23 @@ namespace LightFactory
 		return L;
 	}
 
-	LIGHT_CONST GPULight Directional(
+	LIGHT_CONST LightComponent Directional(
 		const glm::vec3& dir,
 		const glm::vec3& color = { 1.0f, 1.0f, 1.0f },
 		const float intensity = 1.0f,
 		const glm::vec3& position = {0.0f, 50.0f, 0.0f})
 	{
-		GPULight L{};
-		L.type = static_cast<uint32_t>(LightType::Directional);
+		LightComponent L{};
+		L.type = LightType::Directional;
 		auto normDir = glm::normalize(dir);
-		L.directionVS[0] = normDir[0];
-		L.directionVS[1] = normDir[1];
-		L.directionVS[2] = normDir[2];
-		L.positionVS[0] = position[0];
-		L.positionVS[1] = position[1];
-		L.positionVS[2] = position[2];
+		L.direction[0] = normDir[0];
+		L.direction[1] = normDir[1];
+		L.direction[2] = normDir[2];
+		L.position[0] = position[0];
+		L.position[1] = position[1];
+		L.position[2] = position[2];
 		L.radius = 0.0f;       // Infinite range
-		L.invRange = 0.0f;
+		L.inverseRange = 0.0f;
 		L.color[0] = color[0];
 		L.color[1] = color[1];
 		L.color[2] = color[2];

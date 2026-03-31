@@ -16,7 +16,8 @@ ErrorCode AssetLoader::loadModel(
 	ArenaVector<SubMeshData>& subMeshBuffer,
 	ArenaVector<uint32_t>& indexBuffer,
 	RenderManager& render,
-	MeshComponent* outMeshInfo) {
+	MeshComponent* outMeshInfo,
+	std::vector<std::string>* subMeshNames) {
 
 	LOGLINE(LogType::Info, LogMod::Assets, std::format("Loading '{}'... ", filename));
 
@@ -47,6 +48,11 @@ ErrorCode AssetLoader::loadModel(
 
 		SubMeshData subMesh{};
 		subMesh.vertexOffset = static_cast<uint32_t>(vertexBuffer.size());
+
+		// Name
+		if (subMeshNames) {
+			subMeshNames->emplace_back(aiMesh->mName.C_Str());
+		}
 
 		// Vertices
 		uint32_t submeshVertices = 0;

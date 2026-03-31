@@ -51,7 +51,8 @@ public:
 		ArenaVector<SubMeshData>& subMeshBuffer,
 		ArenaVector<uint32_t>& indexBuffer,
 		RenderManager& render,
-		MeshComponent* outMeshInfo);
+		MeshComponent* outMeshInfo,
+		std::vector<std::string>* subMeshNames);
 
 	static Material& createMaterial(const aiMaterial* aiMat);
 

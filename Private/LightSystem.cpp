@@ -12,7 +12,7 @@ LightComponent& LightSystem::registerLight(const LightComponent& light, entt::en
 	}
 	auto& thisLight = m_reg->emplace<LightComponent>(entity, light);
 
-	Engine::getInstance()->getRenderManager()->vkContext()->registerNewLight(static_cast<GPULight>(light));
+	Engine::getInstance()->getRenderManager()->vkContext()->registerNewLight(light);
 
 	return thisLight;
 }

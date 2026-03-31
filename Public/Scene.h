@@ -8,7 +8,6 @@
 #include "ArenaAllocator.hpp"
 #include "TransformSystem.hpp"
 #include "GameObjectSystem.hpp"
-#include "TagSystem.hpp"
 #include "SceneRenderSystem.hpp"
 #include "LightSystem.hpp"
 #include "BVH.hpp"

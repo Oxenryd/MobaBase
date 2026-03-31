@@ -50,7 +50,8 @@ private:
 	ArenaVector<uint32_t> m_indices;
 	//ArenaVector<Camera> m_cameras;
 
-	ArenaUMap<std::string, MeshComponent> m_pathMeshMap;
+	using MeshNameVector = std::vector<std::string>;
+	ArenaUMap<std::string, std::pair<MeshComponent, MeshNameVector>> m_pathMeshMap;
 
 	bool m_drawAabbs = false;
 	bool m_drawOccluders = false;
@@ -134,7 +135,7 @@ public:
 		return hash;
 	}
 
-	ErrorCode loadModel(const std::string& filename, MeshComponent* outMeshInfo);
+	ErrorCode loadModel(const std::string& filename, MeshComponent* outMeshInfo, MeshNameVector* outMeshNames);
 
 	void afterDraw() {
 		m_pendingDrawCommands.clear();
@@ -164,7 +165,7 @@ public:
 	ArenaVector<SubMeshData>& getSubMeshes() { return m_subMeshes; }
 	//std::span<Camera> getCameras() { return std::span<Camera>(m_cameras); }
 
-	ErrorCode createMeshFromModel(const std::string& path, Mesh* outMesh, const entt::entity parent = entt::null);
+	ErrorCode createMeshFromModel(const std::string& path, Mesh* outMesh, const GameObject* parent = nullptr);
 
 	void setDrawAABBs(bool state) { m_drawAabbs = state; }
 	bool drawCoarseAbbs() const { return m_drawAabbs; }

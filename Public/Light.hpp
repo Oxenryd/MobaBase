@@ -1,11 +1,43 @@
 #ifndef LIGHT_HPP
 #define LIGHT_HPP
 
-#include "HlslTypes.h"
+//#include "HlslTypes.h"
 #include "ArenaAllocator.hpp"
-
+#include <glm/glm.hpp>
 //using LightComponent = GPULight;
 
+enum class LightType : uint8_t
+{
+	Directional = 0,
+	Point = 1,
+	Spot = 2,
+	ENUM_END
+};
+
+constexpr static size_t NUM_OF_LIGHT_TYPES = static_cast<size_t>(LightType::ENUM_END);
+
+//enum LightType : uint32_t
+//{
+//	CastShadow = 1 << 0,
+//	// room for more: Static, Volumetric, ContactShadows...
+//};
+
+enum class ShadowType : uint32_t
+{
+	None,
+	DirCSM,
+	Spot2D,
+	PointCube
+};
+
+enum class LightFlags : uint32_t
+{
+	None			= 0x00000000,
+	Enabled			= 0x00000001,
+	Static			= 0x00000002,
+	ShadowCaster	= 0x00000004,
+	ShadowFilterPCF = 0x00000008
+};
 
 struct alignas (16) LightComponent {
 	glm::vec3 position;
@@ -45,7 +77,7 @@ struct alignas (16) LightComponent {
 	color{ 1.0f, 1.0f, 1.0f},
 	intensity{1.0f},
 	type{ LightType::Directional },
-	flags{ (LightFlags::Enabled | LightFlags::Static)},
+	flags{ (static_cast<uint32_t>(LightFlags::Enabled) | static_cast<uint32_t>(LightFlags::Static)) },
 	cookieIndex{ UINT32_INVALID },
 	shadowIndex{ UINT32_INVALID },
 	spotOuterCos{ 1.0f },
@@ -78,8 +110,7 @@ public:
 	Light(ArenaRegistry* registry, entt::entity entity) :
 		m_reg{ registry }, m_entity{ entity } {}
 
-	operator Light& () = delete;
-	operator LightComponent& ();
+	explicit operator const LightComponent& () const;
 };
 
 #endif
