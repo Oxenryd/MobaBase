@@ -189,7 +189,7 @@ public:
 		if (magSq < 1e-8f) return;
 
 		// Load current quaternion [x, y, z, w]
-		__m128 q_current = _mm_load_ps(&rotation.x);
+		__m128 q_current = _mm_loadu_ps(reinterpret_cast<float*>(&rotation));
 
 		const float pitch = rotDeltaLocal.x * 0.5f;
 		const float yaw = rotDeltaLocal.y * 0.5f;
@@ -222,7 +222,7 @@ public:
 		result = MMath::normalize_simd(result);
 
 		// Store back
-		_mm_store_ps(&rotation.x, result);
+		_mm_storeu_ps(&rotation.x, result);
 	}
 
 };

@@ -39,8 +39,14 @@ FetchContent_Declare(
     GIT_REPOSITORY https://github.com/g-truc/glm.git
     GIT_TAG 1.0.3
 )
+
+set(GLM_FORCE_INTRINSICS        ON CACHE BOOL "" FORCE)
+#set(GLM_FORCE_ALIGNED_GENTYPES  ON CACHE BOOL "" FORCE)
+
 FetchContent_MakeAvailable(glm)
-		#EnTT
+
+
+#EnTT
 FetchContent_Declare(
   EnTT
   GIT_REPOSITORY https://github.com/skypjack/entt.git

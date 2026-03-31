@@ -166,12 +166,11 @@ void DualBVH::_buildThreadMethod(DualBVH* _this, ArenaRegistry& registry) {
             _this->m_groupPtr.store(&group, std::memory_order_release);
             for (auto entity : group) {
 
-
                 auto it = _this->entityToPrimitive[index].find(entity);
                 if (it == _this->entityToPrimitive[index].end()) {
-                    _this->primitivesLock[index].acquire();
+                    //_this->primitivesLock[index].acquire();
                     _this->rebuildPrimitives(registry, index);
-                    _this->primitivesLock[index].release();
+                    //this->primitivesLock[index].release();
                     break;
                 }
             }

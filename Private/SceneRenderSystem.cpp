@@ -66,7 +66,7 @@ uint32_t SceneRenderSystem::addCamera(const CameraData* initData) const {
 	auto index = cams.size();
 	const std::string name = std::format("Camera_{}.{}", index, static_cast<uint32_t>(m_sceneIndex));
 
-	const auto& newCam = scene.gameObjectSystem().createGameObject<Camera>(name, cData);
+	const auto& newCam = scene.gameObjectSystem().createGameObject<Camera>(name, nullptr, cData);
 	
 	auto& comp = m_reg->get<TransformComponent>(newCam.m_entity);
 	const auto camIndex = CamIndex{ m_sceneIndex, static_cast<uint32_t>(index) };

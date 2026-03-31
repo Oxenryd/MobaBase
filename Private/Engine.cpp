@@ -266,7 +266,7 @@ inline void Engine::_run() {
 		m_baseCosD = std::cos(m_totalTime);
 		m_baseSinD = std::sin(m_totalTime);
 		m_baseCosF = static_cast<float>(m_baseCosD);
-		m_baseCosF = static_cast<float>(m_baseSinD);
+		m_baseSinF = static_cast<float>(m_baseSinD);
 		{
 			PROFILE_SCOPE("FixedDelta");
 			while (m_fixedAccu >= m_targetFixedDeltaTime) {

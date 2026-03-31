@@ -20,5 +20,18 @@ public:
 		m_sceneIndex{ sceneIndex }, m_reg{ registry } {}
 
 	LightComponent& registerLight(const LightComponent& light, entt::entity entity);
+
+	template<typename GO, typename... LightInfo>
+		requires (std::derived_from<GO, GameObject> || std::same_as<GO, void>)
+	LightComponent& createNewLight(GO* goParent, const LightType type, const LightInfo&&... args) {
+		switch (type) {
+			case LightType::Directional:
+			default: {
+				auto newLight =
+			}
+		}
+	}
+
+
 };
 #endif

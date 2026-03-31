@@ -77,7 +77,6 @@ int __stdcall main(HINSTANCE hInstance, HINSTANCE instance, LPSTR str, int nCmdS
 #include "WindowContext.h"
 #include "Templates.hpp"
 
-
 auto APP_NAME = "VulkanTest";
 auto WINDOW_TITLE = "VulkanTest";
 constexpr unsigned short WND_WIDTH = 1280;

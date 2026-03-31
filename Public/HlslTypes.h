@@ -62,92 +62,94 @@ INLINE auto operator|(LightFlags a, LightFlags b) {
 	return static_cast<uint32_t>(a) | static_cast<uint32_t>(b);
 }
 
-struct alignas(16) GPULight
-{
-	// 0..15
-	union
-	{
-		float positionVS_radius[4];
-		struct
-		{
-			float positionVS[3];
-			float radius;
-		};
-	};
+// struct alignas(16) GPULight
+// {
+// 	// 0..15
+// 	union
+// 	{
+// 		float positionVS_radius[4];
+// 		struct
+// 		{
+// 			float positionVS[3];
+// 			float radius;
+// 		};
+// 	};
+//
+//
+// 	// 16..31
+// 	union
+// 	{
+// 		float directionVS_spotInnerCos[4];
+// 		struct
+// 		{
+// 			float directionVS[3];
+// 			float spotInnerCos;
+// 		};
+// 	};
+//
+//
+// 	// 32..47
+// 	union
+// 	{
+// 		float color_intensity[4];
+// 		struct
+// 		{
+// 			float color[3];
+// 			float intensity;
+// 		};
+// 	};
+//
+//
+// 	// 48..63
+// 	uint32_t type;
+// 	uint32_t flags;
+// 	uint32_t cookieIndex;
+// 	uint32_t shadowIndex;
+//
+// 	// 64..79
+// 	float spotOuterCos;
+// 	float falloffExp;
+// 	float invRange;
+// 	float volumetricIntensity;
+//
+// 	// 80..95
+// 	float volumetricFalloff;
+// 	float shadowBias;
+// 	float shadowNormalBias;
+// 	uint32_t shadowMatrixIndex;
+//
+// 	// 96..111
+// 	uint32_t shadowType;
+// 	uint32_t shadowLayerCount;
+// 	uint32_t _reserved1;
+// 	uint32_t _reserved2;
+//
+// 	GPULight() :
+// 		positionVS_radius{ 0.0f, 0.0f, 0.0f, 1.0f },
+// 		directionVS_spotInnerCos{ 0.0f, 0.0f, -1.0f, 1.0f },
+// 		color_intensity{ 1.0f, 1.0f, 1.0f, 1.0f },
+// 		type{ static_cast<uint32_t>(LightType::Directional) },
+// 		flags{ (LightFlags::Enabled | LightFlags::Static)},
+// 		cookieIndex{ UINT32_INVALID },
+// 		shadowIndex{ UINT32_INVALID },
+// 		spotOuterCos{ 1.0f },
+// 		falloffExp{ 1.5f },
+// 		invRange{ 1.0f },
+// 		volumetricIntensity{ 1.0f },
+// 		volumetricFalloff{ 1.0f },
+// 		shadowBias{ 0.0f },
+// 		shadowNormalBias{ 0.0f },
+// 		shadowMatrixIndex{ static_cast<uint32_t>(-1) },
+// 		shadowType{ 0 },
+// 		shadowLayerCount{ 0 },
+// 		_reserved1{ 0 },
+// 		_reserved2{ 0 }
+// 	{}
+// };
 
 
-	// 16..31
-	union
-	{
-		float directionVS_spotInnerCos[4];
-		struct
-		{
-			float directionVS[3];
-			float spotInnerCos;
-		};
-	};
 
-
-	// 32..47
-	union
-	{
-		float color_intensity[4];
-		struct
-		{
-			float color[3];
-			float intensity;
-		};
-	};
-
-
-	// 48..63
-	uint32_t type;
-	uint32_t flags;
-	uint32_t cookieIndex;
-	uint32_t shadowIndex;
-
-	// 64..79
-	float spotOuterCos;
-	float falloffExp;
-	float invRange;
-	float volumetricIntensity;
-
-	// 80..95
-	float volumetricFalloff;
-	float shadowBias;
-	float shadowNormalBias;
-	uint32_t shadowMatrixIndex;
-
-	// 96..111
-	uint32_t shadowType;
-	uint32_t shadowLayerCount;
-	uint32_t _reserved1;
-	uint32_t _reserved2;
-
-	GPULight() : // NOLINT(*-pro-type-member-init)
-		positionVS_radius{ 0.0f, 0.0f, 0.0f, 1.0f },
-		directionVS_spotInnerCos{ 0.0f, 0.0f, -1.0f, 1.0f },
-		color_intensity{ 1.0f, 1.0f, 1.0f, 1.0f },
-		type{ static_cast<uint32_t>(LightType::Directional) },
-		flags{ (LightFlags::Enabled | LightFlags::Static)},
-		cookieIndex{ UINT32_INVALID },
-		shadowIndex{ UINT32_INVALID },
-		spotOuterCos{ 1.0f },
-		falloffExp{ 1.5f },
-		invRange{ 1.0f },
-		volumetricIntensity{ 1.0f },
-		volumetricFalloff{ 1.0f },
-		shadowBias{ 0.0f },
-		shadowNormalBias{ 0.0f },
-		shadowMatrixIndex{ static_cast<uint32_t>(-1) },
-		shadowType{ 0 },
-		shadowLayerCount{ 0 },
-		_reserved1{ 0 },
-		_reserved2{ 0 }
-	{}
-};
-
-static_assert(sizeof(GPULight) == 112, "GPULight must be 112 bytes");
+//static_assert(sizeof(GPULight) == 112, "GPULight must be 112 bytes");
 
 #ifdef BUILD_WIN
 #define LIGHT_CONST inline static
@@ -209,7 +211,8 @@ namespace LightFactory
 	LIGHT_CONST GPULight Directional(
 		const glm::vec3& dir,
 		const glm::vec3& color = { 1.0f, 1.0f, 1.0f },
-		const float intensity = 1.0f)
+		const float intensity = 1.0f,
+		const glm::vec3& position = {0.0f, 50.0f, 0.0f})
 	{
 		GPULight L{};
 		L.type = static_cast<uint32_t>(LightType::Directional);
@@ -217,6 +220,9 @@ namespace LightFactory
 		L.directionVS[0] = normDir[0];
 		L.directionVS[1] = normDir[1];
 		L.directionVS[2] = normDir[2];
+		L.positionVS[0] = position[0];
+		L.positionVS[1] = position[1];
+		L.positionVS[2] = position[2];
 		L.radius = 0.0f;       // Infinite range
 		L.invRange = 0.0f;
 		L.color[0] = color[0];

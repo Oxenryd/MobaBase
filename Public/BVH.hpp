@@ -274,6 +274,7 @@ public:
     std::array<WorkerPkg*, NUM_BUILD_THREADS> workerPkgs;
     std::array<std::atomic<bool>, NUM_BUILD_THREADS> workPkgCondition;
     std::array<std::binary_semaphore*, NUM_BUILD_THREADS> startSemas;
+
     std::binary_semaphore primitivesLock[2] = { std::binary_semaphore{1}, std::binary_semaphore{1} };
     std::binary_semaphore primitivesStartSema{ 0 };
     //std::binary_semaphore primitivesLock{ 1 };
