@@ -8,14 +8,14 @@
 #include <set>
 
 INLINE MeshDrawCommand VulkanContext::subMeshEntity_to_drawCommand(SceneBase* scene, ArenaRegistry& reg, entt::entity entity) {
-	auto& subMeshComp = reg.get<SubMeshComponent>(entity);
-	SubMeshData& subMesh = scene->sceneRender().getSubMeshes()[subMeshComp.subMeshIndex];
+	auto& subMeshComp = reg.get<MeshFilterComponent>(entity);
+	MeshData& subMesh = scene->sceneRender().getSubMeshes()[subMeshComp.meshDataIndex];
 	MeshDrawCommand cmd{};
 	cmd.instanceIndex = subMesh.instanceIndex;
 	cmd.materialIndex = subMesh.materialIndex;
 	cmd.priority = 0xffff; //TODO
 	cmd.sceneIndex = scene->sceneIndex();
-	cmd.submeshOffset = subMeshComp.subMeshIndex;
+	cmd.submeshOffset = subMeshComp.meshDataIndex;
 	cmd.subMeshEntity = entity;
 
 	return cmd;

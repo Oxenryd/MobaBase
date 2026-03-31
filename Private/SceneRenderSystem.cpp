@@ -11,12 +11,12 @@
 
 ErrorCode SceneRenderSystem::loadModel(
 		const std::string& filename,
-		MeshComponent* outMeshInfo,
-		MeshNameVector* outMeshNames)
+		MeshLoadInfo** outMeshInfo,
+		MeshNameVector** outMeshNames)
 {
 	ErrorCode ec{};
 	const uint32_t startTexIndex = static_cast<uint32_t>(RenderManager::getInstance()->textures().size());
-	MeshComponent* mInfo = nullptr;
+	MeshLoadInfo* mInfo = nullptr;
 	MeshNameVector* names = nullptr;
 	const auto it = m_pathMeshMap.find(filename);
 	if (it != m_pathMeshMap.end()) {
@@ -26,7 +26,7 @@ ErrorCode SceneRenderSystem::loadModel(
 	} else {
 
 		auto [storedData, inserted] = m_pathMeshMap.insert(
-			{filename, {MeshComponent{}, MeshNameVector{}} });
+			{filename, {MeshLoadInfo{}, MeshNameVector{}} });
 		if (!inserted)
 			return ErrorCode::ASSETS_MODEL_LOAD_NEW_ALREADY_FOUND;
 
@@ -34,7 +34,7 @@ ErrorCode SceneRenderSystem::loadModel(
 		names = &storedData->second.second;
 
 		ec = AssetLoader::loadModel(filename,
-										 m_vertices, m_subMeshes, m_indices,
+										 m_vertices, m_meshes, m_indices,
 										 *RenderManager::getInstance(), mInfo, names);
 
 		const uint32_t endTexIndex = static_cast<uint32_t>(RenderManager::getInstance()->textures().size());
@@ -43,19 +43,19 @@ ErrorCode SceneRenderSystem::loadModel(
 
 			for (size_t i = 0; i < mInfo->subMeshCount; ++i) {
 
-				const auto& subMesh = m_subMeshes[mInfo->subMeshOffset + i];
+				const auto& mesh = m_meshes[mInfo->subMeshOffset + i];
 
-				const auto vOffset = subMesh.vertexOffset;
-				const auto vCount = subMesh.vertexCount;
-				const auto iOffset = subMesh.indexOffset;
-				const auto iCount = subMesh.indexCount;
+				const auto vOffset = mesh.vertexOffset;
+				const auto vCount = mesh.vertexCount;
+				const auto iOffset = mesh.indexOffset;
+				const auto iCount = mesh.indexCount;
 
 				RenderManager::getInstance()->vkContext()->registerMesh(
 					&m_vertices[vOffset], vCount,
 					&m_indices[iOffset], iCount);
 
 				if (names->at(i).empty()) {
-					names->at(i) = "Submesh";
+					names->at(i) = "Mesh";
 				}
 
 			}
@@ -71,12 +71,9 @@ ErrorCode SceneRenderSystem::loadModel(
 		}
 	}
 
-	if (outMeshInfo) {
-		outMeshInfo = mInfo;
-	}
-	if (names) {
-		outMeshNames = names;
-	}
+	*outMeshInfo = mInfo;
+	*outMeshNames = names;
+
 
 	return ec;
 }
@@ -104,78 +101,95 @@ uint32_t SceneRenderSystem::addCamera(const CameraData* initData) const {
 	return static_cast<uint32_t>(index);
 }
 
-ErrorCode SceneRenderSystem::createMeshFromModel(const std::string& path, Mesh* outMesh, const GameObject* parent) {
+ErrorCode SceneRenderSystem::createMeshFromModel(
+	const std::string& path, std::vector<Mesh>* outMeshes, const GameObject* parent)
+{
 
-	MeshComponent* meshComp = nullptr;
+	MeshLoadInfo* mLoadInfo = nullptr;
 	MeshNameVector* meshNames = nullptr;
-	const auto ec = loadModel(path, meshComp, meshNames);
-	if (EC_FAILED(ec))
+	const auto ec = loadModel(path, &mLoadInfo, &meshNames);
+	if (EC_FAILED(ec)) {
+		if (outMeshes)
+			outMeshes->clear();
 		return ec;
-
-	entt::entity meshEntity;
-	if (parent) {
-		const auto trans = m_reg->try_get<TransformComponent>(parent->entity());
-		if (!trans)
-			throw std::runtime_error("Meshes needs transforms!!");
-
-		meshEntity = parent->entity();
-		m_reg->emplace<MeshComponent>(parent->entity(), *meshComp);
-
-	} else {
-
-
-		// for now::
-		return ErrorCode::TRANSFORM_MESH_ORPHANED;
-
-		// meshEntity = m_reg->create();
-		// Engine::getInstance()->getScene(m_sceneIndex)->transformSystem().registryEmplace(
-		// 	meshEntity,
-		// 	nullptr, nullptr
-		// );
-		//
-		// meshComp = m_reg->emplace<MeshComponent>(meshEntity, meshComp);
 	}
 
 
-	const Mesh newMesh{m_reg, meshEntity };
-	if (outMesh) {
-		*outMesh = newMesh;
-	}
+	// entt::entity meshEntity;
+	// if (parent) {
+	// 	const auto trans = m_reg->try_get<TransformComponent>(parent->entity());
+	// 	if (!trans)
+	// 		throw std::runtime_error("Meshes needs transforms!!");
+	//
+	// 	meshEntity = parent->entity();
+	// 	m_reg->emplace<MeshComponent>(parent->entity(), *meshComp);
+	//
+	// } else {
+	//
+	//
+	// 	// for now::
+	// 	return ErrorCode::TRANSFORM_MESH_ORPHANED;
+	//
+	// 	// meshEntity = m_reg->create();
+	// 	// Engine::getInstance()->getScene(m_sceneIndex)->transformSystem().registryEmplace(
+	// 	// 	meshEntity,
+	// 	// 	nullptr, nullptr
+	// 	// );
+	// 	//
+	// 	// meshComp = m_reg->emplace<MeshComponent>(meshEntity, meshComp);
+	// }
+	//
+	//
+	// const Mesh newMesh{m_reg, meshEntity };
+	// if (outMesh) {
+	// 	*outMesh = newMesh;
+	// }
 
 	//float maxVol = 0.0f;
 	//entt::entity biggestSubEntity = entt::null;
+
+
 	size_t count = 0;
-	for (size_t i = meshComp->subMeshOffset; i < meshComp->subMeshOffset + meshComp->subMeshCount; ++i) {
+	for (size_t i = mLoadInfo->subMeshOffset; i < mLoadInfo->subMeshOffset + mLoadInfo->subMeshCount; ++i) {
 
 		auto subMeshGO = Engine::getInstance()->getScene(m_sceneIndex)->gameObjectSystem()
-			.createGameObject<GameObject>(meshNames->at(count++), nullptr);
+			.createGameObject<GameObject>(meshNames->at(count++), parent);
 
 
-		const entt::entity subEnt = m_reg->create();
-		SubMeshData& subMesh = m_subMeshes[i];
-		subMesh.entity = subEnt;
+		//const entt::entity subEnt = m_reg->create();
+		//MeshData& subMesh = m_meshes[i];
+		//subMesh.entity = subMeshGO.entity();
 
 		//subMesh.entity = parent != entt::null ? parent : m_reg->create();
 		//subMesh.parent = parent;
 		//[[maybe_unused]] auto& newSubMeshComp = 
 
-		m_reg->emplace<SubMeshComponent>(subEnt, SubMeshComponent{ meshEntity, static_cast<uint32_t>(i) });
 
-		const auto subVerts = std::span<BaseVSIn>(&m_vertices[subMesh.vertexOffset], subMesh.vertexCount);
+		MeshFilterComponent filter{};
+		filter.meshDataIndex = i;
+		m_reg->emplace<MeshFilterComponent>(subMeshGO.entity(), filter);
 
-		Engine::getInstance()->getScene(m_sceneIndex)->transformSystem().registryEmplace(
-			subEnt,
-			parent == entt::null ? nullptr : static_cast<void*>(&meshEntity), nullptr
-		);
+		const auto& meshData = m_meshes[filter.meshDataIndex];
+		const auto subVerts = std::span<BaseVSIn>(&m_vertices[meshData.vertexOffset], meshData.vertexCount);
+
+		// Engine::getInstance()->getScene(m_sceneIndex)->transformSystem().registryEmplace(
+		// 	subEnt,
+		// 	parent == entt::null ? nullptr : static_cast<void*>(&meshEntity), nullptr
+		// );
 
 		AABB box{};
 		box.encloseLocal(subVerts);
-		Engine::getInstance()->getScene(m_sceneIndex)->boundingSystem().registryEmplace(subEnt, &box, nullptr);
+		Engine::getInstance()->getScene(m_sceneIndex)->boundingSystem()
+			.registryEmplace(subMeshGO.entity(), &box, nullptr);
 
 		//if (parent != entt::null) {
 		//	auto newTransform = Transform{ m_reg, subMesh.entity };
 		//	newTransform.setParent(parent);
 		//}
+
+		if (outMeshes) {
+			outMeshes->emplace_back(m_reg, subMeshGO);
+		}
 	}
 	return ErrorCode::OK;
 }

@@ -9,7 +9,7 @@
 
 #include "HlslTypes.h"
 #include "ArenaAllocator.hpp"
-#include "MeshComponent.hpp"
+#include "Mesh.hpp"
 #include "DrawCommand.hpp"
 #include "AssetLoader.h"
 #include "Camera.hpp"
@@ -45,13 +45,13 @@ private:
 
 	ArenaUMap<VkBuffer, std::vector<VertexUpdate>> m_vertexUpdates;
 	//ArenaVector<MeshData> m_meshes;
-	ArenaVector<SubMeshData> m_subMeshes;
+	ArenaVector<MeshData> m_meshes;
 	ArenaVector<BaseVSIn> m_vertices;
 	ArenaVector<uint32_t> m_indices;
 	//ArenaVector<Camera> m_cameras;
 
 	using MeshNameVector = std::vector<std::string>;
-	ArenaUMap<std::string, std::pair<MeshComponent, MeshNameVector>> m_pathMeshMap;
+	ArenaUMap<std::string, std::pair<MeshLoadInfo, MeshNameVector>> m_pathMeshMap;
 
 	bool m_drawAabbs = false;
 	bool m_drawOccluders = false;
@@ -70,14 +70,14 @@ public:
 	SceneRenderSystem(ArenaRegistry* const registry, Arena* const arena, uint16_t sceneIndex) :
 		SystemECS{ registry, sceneIndex },
 		m_vertexUpdates{ ArenaAllocator<std::pair<const VkBuffer, VertexUpdate>>(arena) },
-		m_subMeshes{ ArenaAllocator<SubMeshData>{arena} },
+		m_meshes{ ArenaAllocator<MeshData>{arena} },
 		m_vertices{ ArenaAllocator<BaseVSIn>{arena} },
 		//m_meshes{ ArenaAllocator<MeshData>{arena} },
 		m_indices{ ArenaAllocator<uint32_t>{arena} },
 		m_pendingDrawCommands{ ArenaAllocator<DrawCommand>{arena} },
 		m_persistentDrawCommands{ ArenaAllocator<DrawCommand>{arena} },
 		m_persistentDcmdHashIndexMap{ ArenaAllocator<std::pair<const uint64_t, size_t>>(arena) },
-		m_pathMeshMap{ArenaAllocator<std::pair<std::string, MeshComponent>>{arena}},
+		m_pathMeshMap{ArenaAllocator<std::pair<std::string, MeshFilterComponent>>{arena}},
 		//m_cameras { ArenaAllocator<Camera>{arena} },
 		//s_pendingDrawCommands{ SCENE_MAX_SCENES, ArenaVector<DrawCommand>{RENDER_SCENE_MAX_THREADS, ArenaAllocator<DrawCommand>{arena} } },
 		s_threadPresistentDrawBuffers{ SCENE_MAX_SCENES, ArenaVector<MeshDrawCommand>{ArenaAllocator<MeshDrawCommand>{arena} } },
@@ -104,19 +104,29 @@ public:
 	INLINE void submitPersistent(entt::entity entity, uint32_t meshIndex, uint16_t prio) {
 		setFrameThreadIndex();
 
-		auto& mesh = m_reg->get<MeshComponent>(entity);
+		const auto& meshFilter = m_reg->get<MeshFilterComponent>(entity);
+		const auto& meshData = m_meshes[meshFilter.meshDataIndex];
+		MeshDrawCommand dCmd{};
+		dCmd.subMeshEntity = entity;
+		dCmd.priority = prio;
+		dCmd.instanceIndex = meshData.instanceIndex;
+		dCmd.sceneIndex = m_sceneIndex;
+		dCmd.submeshOffset = meshFilter.meshDataIndex;
+		dCmd.materialIndex = meshData.materialIndex;
+		s_threadPresistentDrawBuffers[m_sceneIndex].push_back(dCmd);
+
 		//auto& mesh = m_meshes[meshComp.meshIndex];
-		for (size_t i = 0; i < mesh.subMeshCount; ++i) {
-			auto& subMesh = m_subMeshes[mesh.subMeshOffset + i];
-			MeshDrawCommand dCmd{};
-			dCmd.subMeshEntity = subMesh.entity;
-			dCmd.priority = prio;
-			dCmd.instanceIndex = subMesh.instanceIndex;
-			dCmd.sceneIndex = m_sceneIndex;
-			dCmd.submeshOffset = static_cast<uint32_t>(mesh.subMeshOffset + i);
-			dCmd.materialIndex = subMesh.materialIndex;
-			s_threadPresistentDrawBuffers[m_sceneIndex].push_back(dCmd);
-		}
+		// for (size_t i = 0; i < mesh.subMeshCount; ++i) {
+		// 	auto& subMesh = m_meshes[mesh.subMeshOffset + i];
+		// 	MeshDrawCommand dCmd{};
+		// 	dCmd.subMeshEntity = subMesh.entity;
+		// 	dCmd.priority = prio;
+		// 	dCmd.instanceIndex = subMesh.instanceIndex;
+		// 	dCmd.sceneIndex = m_sceneIndex;
+		// 	dCmd.submeshOffset = static_cast<uint32_t>(mesh.subMeshOffset + i);
+		// 	dCmd.materialIndex = subMesh.materialIndex;
+		// 	s_threadPresistentDrawBuffers[m_sceneIndex].push_back(dCmd);
+		// }
 	}
 
 	uint64_t submitPersistentMeshDraw(MeshDrawCommand drawCmd) {
@@ -135,7 +145,7 @@ public:
 		return hash;
 	}
 
-	ErrorCode loadModel(const std::string& filename, MeshComponent* outMeshInfo, MeshNameVector* outMeshNames);
+	ErrorCode loadModel(const std::string& filename, MeshLoadInfo** outMeshInfo, MeshNameVector** outMeshNames);
 
 	void afterDraw() {
 		m_pendingDrawCommands.clear();
@@ -162,10 +172,11 @@ public:
 
 	//ArenaVector<MeshData> getMeshes() { return m_meshes; }
 	ArenaVector<BaseVSIn>& getVertices() { return m_vertices; }
-	ArenaVector<SubMeshData>& getSubMeshes() { return m_subMeshes; }
+	ArenaVector<MeshData>& getSubMeshes() { return m_meshes; }
 	//std::span<Camera> getCameras() { return std::span<Camera>(m_cameras); }
 
-	ErrorCode createMeshFromModel(const std::string& path, Mesh* outMesh, const GameObject* parent = nullptr);
+	ErrorCode createMeshFromModel(
+		const std::string& path, std::vector<Mesh>* outMeshes, const GameObject* parent = nullptr);
 
 	void setDrawAABBs(bool state) { m_drawAabbs = state; }
 	bool drawCoarseAbbs() const { return m_drawAabbs; }

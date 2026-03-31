@@ -46,12 +46,13 @@ public:
         auto const step = MMath::fTAU / numOfObjects;
         const std::string pathObject = std::format("{}{}", ASSETS_DIR, "Cube/cube.obj");
         for (size_t i = 0; i < numOfObjects; ++i) {
-            m_goList.emplace_back(gameObjectSystem().createGameObject<GameObject>(
-                std::format("Cube_{}", i),
-                &m_go1));
-            Mesh objectMesh{};
-            sceneRender().createMeshFromModel(pathObject, &objectMesh, m_goList.back().entity());
-            auto trans = objectMesh.getTransform();
+            // m_goList.emplace_back(gameObjectSystem().createGameObject<GameObject>(
+            //     std::format("Cube_{}", i),
+            //     &m_go1));
+            // Mesh objectMesh{};
+            std::vector<Mesh> meshes;
+            sceneRender().createMeshFromModel(pathObject, &meshes, &m_go1);
+            auto trans = meshes[0].getTransform();
             trans.modifyPosition() = glm::vec3{std::cos(step * i) * 12, std::sin(step * i) * 12, 0};
             trans.modifyRotation() = MRandom::nextRotation();
             //auto scale = MRandom::nextFloat(0.3f, 1.6f);
