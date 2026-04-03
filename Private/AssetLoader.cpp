@@ -1,5 +1,8 @@
 #include "AssetLoader.h"
 #include "Engine.h"
+#include "RenderManager.h"
+#include "VulkanContext.hpp"
+
 #include <format>
 
 #ifndef STB_IMAGE_IMPLEMENTATION
@@ -11,12 +14,12 @@
 
 ErrorCode AssetLoader::loadModel(
 	const std::string& filename,
-	//ArenaVector<MeshData>& meshes,
 	ArenaVector<BaseVSIn>& vertexBuffer,
-	ArenaVector<SubMeshData>& subMeshBuffer,
+	ArenaVector<MeshData>& subMeshBuffer,
 	ArenaVector<uint32_t>& indexBuffer,
 	RenderManager& render,
-	MeshComponent* outMeshInfo) {
+	MeshLoadInfo* outMeshInfo,
+	std::vector<std::string>* subMeshNames) {
 
 	LOGLINE(LogType::Info, LogMod::Assets, std::format("Loading '{}'... ", filename));
 
@@ -35,9 +38,9 @@ ErrorCode AssetLoader::loadModel(
 	} else if (!scene->mRootNode)
 		return _logReturnError(ErrorCode::ASSETS_MODEL_NO_ROOT, std::format("Assimp Error:  {}", importer.GetErrorString()));
 
-	MeshComponent mesh{};
-	mesh.subMeshOffset = static_cast<uint32_t>(subMeshBuffer.size());
-	mesh.subMeshCount = scene->mNumMeshes;
+	MeshLoadInfo meshInfo{};
+	meshInfo.subMeshOffset = static_cast<uint32_t>(subMeshBuffer.size());
+	meshInfo.subMeshCount = scene->mNumMeshes;
 	size_t vertCount = 0;
 	size_t indexCount = 0;
 	uint32_t newMats = 0;
@@ -45,8 +48,13 @@ ErrorCode AssetLoader::loadModel(
 	for (unsigned int i = 0; i < scene->mNumMeshes; ++i) {
 		const aiMesh* aiMesh = scene->mMeshes[i];
 
-		SubMeshData subMesh{};
+		MeshData subMesh{};
 		subMesh.vertexOffset = static_cast<uint32_t>(vertexBuffer.size());
+
+		// Name
+		if (subMeshNames) {
+			subMeshNames->emplace_back(aiMesh->mName.C_Str());
+		}
 
 		// Vertices
 		uint32_t submeshVertices = 0;
@@ -119,12 +127,12 @@ ErrorCode AssetLoader::loadModel(
 		subMeshBuffer.push_back(subMesh);
 	}
 	if (outMeshInfo) {
-		outMeshInfo->subMeshCount = static_cast<uint32_t>(subMeshBuffer.size()) - mesh.subMeshOffset;
-		outMeshInfo->subMeshOffset = mesh.subMeshOffset;
+		outMeshInfo->subMeshCount = static_cast<uint32_t>(subMeshBuffer.size()) - meshInfo.subMeshOffset;
+		outMeshInfo->subMeshOffset = meshInfo.subMeshOffset;
 	}
 
 	LOGLINE(LogType::Info, LogMod::Assets, std::format("\t{} meshes, {}/{} materials/new, {} total vertices... ",
-													   mesh.subMeshCount, scene->mNumMaterials, newMats, vertCount));
+													   meshInfo.subMeshCount, scene->mNumMaterials, newMats, vertCount));
 	LOG(LogType::Success, "Done.");
 	return ErrorCode::OK;
 }

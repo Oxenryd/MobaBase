@@ -101,7 +101,7 @@ private:
 		return *static_cast<std::vector<T>*>(m_typeVectors[typeId].ptr);
 	}
 
-	void _emplaceBaseSystems(GameObject& gObject, const std::string& name);
+	void _emplaceBaseSystems(GameObject& gObject, const std::string& name, const void* parent);
 
 public:
 	using iterator = GameObjectSystemIterator;
@@ -111,7 +111,7 @@ public:
 			entry.deleter(entry.ptr);
 	}
 	GameObjectSystem() = delete;
-	GameObjectSystem(const uint16_t sceneIndex, ArenaRegistry* const registry)
+	GameObjectSystem(ArenaRegistry* const registry,const uint16_t sceneIndex)
 		: SystemECS{ registry, sceneIndex }
 	{}
 
@@ -119,13 +119,13 @@ public:
 	iterator end() { return iterator(&m_ranges, m_ranges.size(), 0); }
 
 	template<typename T, typename... Args>
-	T& createGameObject(const std::string& name, Args&&... args) {
+	T& createGameObject(const std::string& name, const T* parent = nullptr, Args&&... args) {
 		auto& vec = _getVectorForType<T>();
 		vec.emplace_back(std::forward<Args>(args)...);
 		T& obj = vec.back();
 		obj.m_entity = m_reg->create();
 		obj.m_reg = m_reg;
-		_emplaceBaseSystems(obj, name);
+		_emplaceBaseSystems(obj, name, parent);
 		return obj;
 	}
 

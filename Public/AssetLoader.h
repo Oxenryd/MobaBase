@@ -11,7 +11,7 @@
 #include "ArenaAllocator.hpp"
 #include "GlobalMacros.h"
 #include "Log.hpp"
-#include "MeshComponent.hpp"
+#include "Mesh.hpp"
 #include "ErrorCodes.hpp"
 #include "HlslTypes.h"
 #include "Texture.hpp"
@@ -48,10 +48,11 @@ public:
 		const std::string& filename,
 		//ArenaVector<MeshData>& meshes,
 		ArenaVector<BaseVSIn>& vertexBuffer,
-		ArenaVector<SubMeshData>& subMeshBuffer,
+		ArenaVector<MeshData>& subMeshBuffer,
 		ArenaVector<uint32_t>& indexBuffer,
 		RenderManager& render,
-		MeshComponent* outMeshInfo);
+		MeshLoadInfo* outMeshInfo,
+		std::vector<std::string>* subMeshNames);
 
 	static Material& createMaterial(const aiMaterial* aiMat);
 

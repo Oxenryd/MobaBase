@@ -66,10 +66,11 @@ public:
 #pragma warning(pop)
 #endif
 
-	bool operator==(const GameObject& rhs) {
+	bool operator==(const GameObject& rhs) const {
 		return m_reg == rhs.m_reg && m_entity == rhs.m_entity && m_globalEntity == rhs.m_globalEntity;
 	}
-	operator entt::entity() { return m_entity; }
+
+	operator entt::entity() const { return m_entity; }
 
 	INLINE Enabled enabled() { return Enabled{ m_reg, m_entity }; }
 	INLINE Enabled enabled() const { return Enabled{ m_reg, m_entity }; }
@@ -78,7 +79,7 @@ public:
 	INLINE Layer layer() { return Layer{ m_globalEntity }; }
 	INLINE Layer layer() const { return Layer{ m_globalEntity }; }
 
-	INLINE entt::entity entity() const { return m_entity; }
+	INLINE const entt::entity& entity() const { return m_entity; }
 };
 
 static_assert(std::is_nothrow_move_constructible_v<GameObject>, "GameObject is not noexcept movable!");

@@ -1,4 +1,5 @@
 #include "GlobalComponents.hpp"
+#include "GlobalSystem.hpp"
 #include "Engine.h"
 
 Layer::operator LayerMask& () {

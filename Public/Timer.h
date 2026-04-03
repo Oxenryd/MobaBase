@@ -5,6 +5,9 @@
 
 class Engine;
 class Arena;
+class HeapArena;
+class FrameArena;
+
 enum class TimerState : uint32_t
 {
 	Invalid			= 0,
@@ -27,6 +30,9 @@ struct Timer
 private:
 	friend class TimerSystem;
 	friend class Engine;
+	friend class HeapArena;
+	friend class FrameArena;
+
 	uint32_t m_timerIndex;
 	TimerCountDirection m_direction;
 	Timer(uint32_t index, TimerCountDirection direction);

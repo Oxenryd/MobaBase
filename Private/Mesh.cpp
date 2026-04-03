@@ -1,11 +1,9 @@
-#include "MeshComponent.hpp"
+#include "Mesh.hpp"
 #include "Engine.h"
+#include "Scene.h"
+#include "SceneRenderSystem.hpp"
 
-std::span<BaseVSIn> SubMesh::getVertices() {
-	return std::span<BaseVSIn>();
-}
-
-BoundingVolume SubMesh::getBoundingVolume() {
+BoundingVolume Mesh::getBoundingVolume() {
 	return BoundingVolume{m_reg, m_entity};
 }
 
@@ -35,19 +33,19 @@ Transform Mesh::getTransform() {
 	return Transform(m_reg, m_entity);
 }
 
-MeshComponent& Mesh::getMeshComponent() {
+MeshFilterComponent& Mesh::getMeshFilterComponent() {
 	//const auto& [meshComp, trans] = m_reg->get<MeshComponent, TransformComponent>(m_entity);
-	return m_reg->get<MeshComponent>(m_entity);
+	return m_reg->get<MeshFilterComponent>(m_entity);
 	//return Engine::getInstance()->getScene(trans.sceneIndex)->sceneRender().getMeshes()[meshComp.meshIndex];
 }
 
-std::span<SubMeshData> Mesh::getSubmeshes() {
-	const auto& [meshComp, trans] = m_reg->get<MeshComponent, TransformComponent>(m_entity);
-	//auto& meshData = Engine::getInstance()->getScene(trans.sceneIndex)->sceneRender().getMeshes()[meshComp.meshIndex];
-	auto& subMeshes = Engine::getInstance()->getScene(trans.sceneIndex)->sceneRender().getSubMeshes();
-
-	return std::span<SubMeshData>(&subMeshes[meshComp.subMeshOffset], meshComp.subMeshCount);
-}
+// std::span<MeshData> Mesh::getSubmeshes() {
+// 	const auto& [meshComp, trans] = m_reg->get<MeshFilterComponent, TransformComponent>(m_entity);
+// 	//auto& meshData = Engine::getInstance()->getScene(trans.sceneIndex)->sceneRender().getMeshes()[meshComp.meshIndex];
+// 	auto& subMeshes = Engine::getInstance()->getScene(trans.sceneIndex)->sceneRender().getSubMeshes();
+//
+// 	return std::span<MeshData>(&subMeshes[meshComp.subMeshOffset], meshComp.subMeshCount);
+// }
 
 
 glm::vec3 Mesh::getAvgCenter() {
@@ -66,15 +64,13 @@ glm::vec3 Mesh::getAvgCenter() {
 
 std::span<BaseVSIn> Mesh::getVertices() {
 
-	const auto& [meshComp, trans] = m_reg->get<MeshComponent, TransformComponent>(m_entity);
-	//auto& meshData = Engine::getInstance()->getScene(trans.sceneIndex)->sceneRender().getMeshes()[meshComp.meshIndex];
-	auto& subMeshes = Engine::getInstance()->getScene(trans.sceneIndex)->sceneRender().getSubMeshes();
+	const auto& [meshComp, trans] = m_reg->get<MeshFilterComponent, TransformComponent>(m_entity);
+	const auto& subMeshes = Engine::getInstance()->getScene(trans.sceneIndex)->sceneRender().getSubMeshes();
 	auto& vertices = Engine::getInstance()->getScene(trans.sceneIndex)->sceneRender().getVertices();
+	auto& mData = subMeshes[meshComp.meshDataIndex];
+	//auto& lastSub = subMeshes[meshComp.subMeshOffset + meshComp.subMeshCount - 1];
 
-	auto& firstSub = subMeshes[meshComp.subMeshOffset];
-	auto& lastSub = subMeshes[meshComp.subMeshOffset + meshComp.subMeshCount - 1];
-
-	auto count = (lastSub.vertexOffset + lastSub.vertexCount) - firstSub.vertexOffset;
-	return std::span<BaseVSIn>(&vertices[firstSub.vertexOffset], count);
+	//auto count = (lastSub.vertexOffset + lastSub.vertexCount) - firstSub.vertexOffset;
+	return std::span<BaseVSIn>(&vertices[mData.vertexOffset], mData.vertexCount);
 }
 

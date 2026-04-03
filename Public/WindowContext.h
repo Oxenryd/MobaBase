@@ -1,7 +1,6 @@
 #ifndef WINDOWSURFACE_HPP
 #define WINDOWSURFACE_HPP
 
-#include "ErrorCodes.hpp"
 #ifdef BUILD_GLFW
 
 #ifndef GLFW_INCLUDE_VULKAN
@@ -10,6 +9,8 @@
 
 #include <GLFW/glfw3.h>
 #include <unordered_map>
+
+#include "ErrorCodes.hpp"
 
 enum class WindowState : uint8_t {
     RestoredFromMin = 0,
@@ -26,6 +27,9 @@ class WindowContext {
     GLFWwindow* m_window{nullptr};
     std::string m_appName{};
     std::string m_windowTitle{};
+    uint16_t m_width{0};
+    uint16_t m_height{0};
+    ErrorCode m_currentEC{ErrorCode::OK};
 
     static void framebufferSizeCallback(GLFWwindow* window, int width, int height) {
         const auto ctxIT = s_windowMap.find(window);
@@ -71,51 +75,51 @@ class WindowContext {
     }
 
 public:
-    uint16_t width{0};
-    uint16_t height{0};
     std::string& appName() { return m_appName; }
 
     Event<const int, const int> windowResized;
     Event<const WindowState> windowStateChanged;
 
-    WindowContext() = default;
-    WindowContext(WindowContext&& other) = default;
-    WindowContext(const WindowContext&) = delete;
-    WindowContext& operator=(const WindowContext&) = delete;
-
     template <std::integral I>
-    static ErrorCode create(
-        const char* appName, const char* wndTitle, const I width, const I height,
-        WindowContext* outCtx)
-    {
-        if (outCtx == nullptr)
-            return ErrorCode::GLFW_CONTEXT_IS_NULL;
+    WindowContext(const char* appName, const char* wndTitle, const I width, const I height) {
 
-        if (!glfwInit())
-            return ErrorCode::GLFW_UNKNOWN_INIT_ERROR;
+        if (!glfwInit()) {
+            m_currentEC = ErrorCode::GLFW_UNKNOWN_INIT_ERROR;
+            return;
+        }
 
         glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
         glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
 
-        outCtx->m_window = glfwCreateWindow(width, height, wndTitle, nullptr, nullptr);
-        if (!outCtx->m_window )
-            return ErrorCode::GLFW_FAILED_WND_CREATION;
+        m_window = glfwCreateWindow(width, height, wndTitle, nullptr, nullptr);
+        if (!m_window ) {
+            m_currentEC = ErrorCode::GLFW_FAILED_WND_CREATION;
+            return;
+        }
 
-        outCtx->m_appName = std::string{appName};
-        outCtx->m_windowTitle = std::string{wndTitle};
-        outCtx->width = static_cast<uint16_t>(width);
-        outCtx->height = static_cast<uint16_t>(height);
 
-        s_windowMap[outCtx->m_window] = outCtx;
+        m_appName = std::string{appName};
+        m_windowTitle = std::string{wndTitle};
+        m_width = static_cast<uint16_t>(width);
+        m_height = static_cast<uint16_t>(height);
 
-        glfwSetWindowTitle(outCtx->m_window, outCtx->m_appName.c_str());
-        glfwSetWindowSizeCallback(outCtx->m_window, framebufferSizeCallback);
-        glfwSetWindowIconifyCallback(outCtx->m_window, windowIconifyCallback);
-        glfwSetWindowMaximizeCallback(outCtx->m_window, windowMaximizeCallback);
-        glfwSetWindowFocusCallback(outCtx->m_window, windowFocusCallback);
-        glfwSetWindowCloseCallback(outCtx->m_window, windowCloseCallback);
+        s_windowMap[m_window] = this;
 
-        return ErrorCode::OK;
+        glfwSetWindowTitle(m_window, m_appName.c_str());
+        glfwSetWindowSizeCallback(m_window, framebufferSizeCallback);
+        glfwSetWindowIconifyCallback(m_window, windowIconifyCallback);
+        glfwSetWindowMaximizeCallback(m_window, windowMaximizeCallback);
+        glfwSetWindowFocusCallback(m_window, windowFocusCallback);
+        glfwSetWindowCloseCallback(m_window, windowCloseCallback);
+    }
+
+    WindowContext() = delete;
+    WindowContext(WindowContext&& other) = delete;
+    WindowContext(const WindowContext&) = delete;
+    WindowContext& operator=(const WindowContext&) = delete;
+    WindowContext& operator=(WindowContext&& other) = delete;
+    ~WindowContext() {
+        glfwDestroyWindow(m_window);
     }
 
     [[nodiscard]] const char* appName_c_str() const { return m_appName.c_str(); }
@@ -140,6 +144,11 @@ public:
     VkResult createSurface(const VkInstance instance, VkSurfaceKHR* out) const {
         return glfwCreateWindowSurface(instance, m_window, nullptr, out);
     }
+
+    ErrorCode getCurrentError() const { return m_currentEC; }
+
+    uint16_t width() const { return m_width; }
+    uint16_t height() const { return m_height; }
 };
 
 #endif

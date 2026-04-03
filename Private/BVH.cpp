@@ -2,9 +2,11 @@
 #include "BoundingVolume.hpp"
 #include "Transform.hpp"
 #include "Frustum.hpp"
-#include "MWork.hpp"
+#include "MJob.hpp"
 #include "Profiler.hpp"
 #include "Engine.h"
+#include "Scene.h"
+#include "BoundingSystem.h"
 
 
 
@@ -57,7 +59,7 @@ void DualBVH::_updatePrimitives(DualBVH* _this) {
             if (_this->primitivesLock[0].try_acquire()) {
                 auto group = _this->m_reg.group<TransformComponent, BoundingVolumeComponent, EnabledTag>();
                 auto& prims0 = _this->primitives[0];
-                MWork::for_loop(0, prims0.size(), 6,
+                MJob::for_loop(0, prims0.size(), 6,
                                 [&](size_t i) {
                                     auto& prim = prims0[i];
                                     const auto& trans = group.get<TransformComponent>(prim.entity);
@@ -73,14 +75,13 @@ void DualBVH::_updatePrimitives(DualBVH* _this) {
 
                                 });
                 _this->primitivesLock[0].release();
+                return;
             }
-            
-
 
             if (_this->primitivesLock[1].try_acquire()) {
                 auto group = _this->m_reg.group<TransformComponent, BoundingVolumeComponent, EnabledTag>();
                 auto& prims1 = _this->primitives[1];
-                MWork::for_loop(0, prims1.size(), 6,
+                MJob::for_loop(0, prims1.size(), 6,
                                 [&](size_t i) {
                                     auto& prim = prims1[i];
                                     const auto& trans = group.get<TransformComponent>(prim.entity);
@@ -96,11 +97,10 @@ void DualBVH::_updatePrimitives(DualBVH* _this) {
 
                                 });
                 _this->primitivesLock[1].release();
+                return;
             }
 
         }
-
-        //_this->primitivesLock.release();
     }
 }
 
@@ -168,12 +168,11 @@ void DualBVH::_buildThreadMethod(DualBVH* _this, ArenaRegistry& registry) {
             _this->m_groupPtr.store(&group, std::memory_order_release);
             for (auto entity : group) {
 
-
                 auto it = _this->entityToPrimitive[index].find(entity);
                 if (it == _this->entityToPrimitive[index].end()) {
-                    _this->primitivesLock[index].acquire();
+                    //_this->primitivesLock[index].acquire();
                     _this->rebuildPrimitives(registry, index);
-                    _this->primitivesLock[index].release();
+                    //this->primitivesLock[index].release();
                     break;
                 }
             }
@@ -950,7 +949,7 @@ void DualBVH::frustumCullWithOcclusion(
     static std::atomic<uint32_t> tIndex[2];
     tIndex[frameIndex].store(0, std::memory_order_release);
     const auto threadsToStart = std::min(frontier[frameIndex].size(), T);//std::clamp( std::min(T, std::min(frontier[frameIndex].size() / T, 1ull)), 1ull, T);
-    MWork::for_loop(0, frontier[frameIndex].size(), threadsToStart,
+    MJob::for_loop(0, frontier[frameIndex].size(), threadsToStart,
                     [&](const size_t i) {
 
                         const auto thisTIndex = tIndex[frameIndex].fetch_add(1, std::memory_order_acq_rel);
@@ -1136,7 +1135,7 @@ void DualBVH::frustumCullWithOcclusion(
     }
 }
 
-DualBVH::TraversalResult DualBVH::broadPhaseCollision(const uint8_t index) const {
+TraversalResult DualBVH::broadPhaseCollision(const uint8_t index) const {
     TraversalResult result;
     if (isEmpty(index)) return result;
 

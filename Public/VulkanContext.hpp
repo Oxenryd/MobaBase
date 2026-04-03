@@ -52,7 +52,7 @@
 #include "Material.hpp"
 #include "RenderManager.h"
 #include "RenderTarget.hpp"
-#include "HlslTypes.h"
+#include "Light.hpp"
 
 #define Vk_FAILED(ec) ((ec) != VK_SUCCESS)
 #define Vk_CHECK(ecVar, expr) (ecVar) = (expr); if (Vk_FAILED(ecVar)) return (ecVar);
@@ -1080,7 +1080,7 @@ public:
 	VkBuffer matBuf_baseMatInstances[VULKAN_FRAMES_IN_FLIGHT] = { nullptr, nullptr };
 	VkDeviceMemory matDevMem_baseMatInstances[VULKAN_FRAMES_IN_FLIGHT] = { nullptr, nullptr };
 
-	std::vector<GPULight> lightsData;
+	std::vector<LightComponent> lightsData;
 	VkBuffer lightsBuffer[VULKAN_FRAMES_IN_FLIGHT] = { nullptr, nullptr };
 	VkDeviceMemory lightsMemory[VULKAN_FRAMES_IN_FLIGHT] = { nullptr, nullptr };
 	std::vector<Index32> lightsClusterIndicesData;
@@ -1091,7 +1091,7 @@ public:
 	VkBuffer lightsClusterCountBuffer[VULKAN_FRAMES_IN_FLIGHT] = { nullptr, nullptr };
 	VkDeviceMemory lightsClusterCountMemory[VULKAN_FRAMES_IN_FLIGHT] = { nullptr, nullptr };
 
-	std::vector<GPULight> pendingLightUpdates;
+	std::vector<LightComponent> pendingLightUpdates;
 
 	VkPipelineLayout lightCluster_pipelineLayout;
 	VkPipeline lightCluster_pipeline;
@@ -1219,7 +1219,7 @@ public:
 	}
 	
 
-	INLINE void registerNewLight(const GPULight& light) {
+	INLINE void registerNewLight(const LightComponent& light) {
 
 
 		pendingLightUpdates.push_back(light);
@@ -1310,7 +1310,7 @@ public:
 		VkResult vkResult{};
 
 		for (size_t i = 0; i < VULKAN_FRAMES_IN_FLIGHT; ++i) {
-			const VkDeviceSize bufferSize = sizeof(GPULight) * this->lightsData.size();
+			const VkDeviceSize bufferSize = sizeof(LightComponent) * this->lightsData.size();
 			VkBufferCreateInfo createInfo{};
 			createInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
 			createInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
@@ -2122,7 +2122,7 @@ public:
 		instanceCreateInfo.ppEnabledExtensionNames = extensions;
 		Vk_CHECK(vkResult, vkCreateInstance(&instanceCreateInfo, nullptr, &m_vkInstance));
 
-		LOGLINE_IND(LogType::Success, LogMod::Vulkan, "VkInstance created.", -1);
+		LOGLINE_IND(LogType::Success, LogMod::Vulkan, "Done.", -1);
 		return VK_SUCCESS;
 	}
 #ifndef BUILD_GLFW
@@ -2401,7 +2401,7 @@ public:
 		if (surfaceCaps.currentExtent.width != 0xFFFFFFFF)
 			swapchainExtent = { surfaceCaps.currentExtent.width, surfaceCaps.currentExtent.height };
 		else
-			swapchainExtent = { m_windowContext->width, m_windowContext->height };
+			swapchainExtent = { m_windowContext->width(), m_windowContext->height() };
 
 		// Swapchain create info
 		VkSwapchainCreateInfoKHR swapchainCreateInfo = {};

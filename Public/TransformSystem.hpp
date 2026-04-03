@@ -582,7 +582,7 @@ public:
 
 
 
-	INLINE void registryEmplace(const entt::entity entity, [[maybe_unused]] void* valueInPtr, [[maybe_unused]] void** valueOutPtr) override {
+	INLINE void registryEmplace(const entt::entity entity, [[maybe_unused]] const void* valueInPtr, [[maybe_unused]] void** valueOutPtr) override {
 		auto& transComp = m_reg->emplace_or_replace<TransformComponent>(entity, TransformComponent{});
 		
 		const auto matrixIndex = static_cast<uint32_t>(m_modelTransforms.size());
@@ -605,7 +605,7 @@ public:
 
 
 		if (valueInPtr) {
-			const auto parent = static_cast<entt::entity*>(valueInPtr);
+			const auto parent = static_cast<const entt::entity*>(valueInPtr);
 			setParent(entity, parent);
 		} else {
 			_checkEntityIsRoot(entity);
@@ -693,7 +693,7 @@ public:
 	}
 
 
-	INLINE void printHierarchy() {
+	void printHierarchy() {
 		Log::logLine(LogType::Info, LogMod::Engine,
 					 std::format("\nTransform Hierarchy for Scene index {} - *\n",
 					 	static_cast<uint32_t>(m_sceneIndex)) );
@@ -705,7 +705,7 @@ public:
 		Log::logLine(LogType::Success, LogMod::Engine, "Done.");
 	}
 
-	INLINE void logTransformTag(entt::entity entity, const uint32_t depth) {
+	void logTransformTag(entt::entity entity, const uint32_t depth) {
 		const Transform transform{ m_reg, entity };
 		const auto tag = transform.getTag();
 		const std::string tagStr = tag.empty() ? "untagged" : std::string{ tag };

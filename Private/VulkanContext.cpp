@@ -2,20 +2,25 @@
 #include "VulkanContext.hpp"
 #include "Profiler.hpp"
 #include "Robin_Hood.h"
+#include "Mesh.hpp"
+#include "Scene.h"
+#include "EnabledTag.hpp"
+#include "TransformSystem.hpp"
+#include "Camera.hpp"
+#include "SceneRenderSystem.hpp"
+#include "BVH.hpp"
 
-#include <format>
 #include <chrono>
-#include <set>
 
 INLINE MeshDrawCommand VulkanContext::subMeshEntity_to_drawCommand(SceneBase* scene, ArenaRegistry& reg, entt::entity entity) {
-	auto& subMeshComp = reg.get<SubMeshComponent>(entity);
-	SubMeshData& subMesh = scene->sceneRender().getSubMeshes()[subMeshComp.subMeshIndex];
+	auto& subMeshComp = reg.get<MeshFilterComponent>(entity);
+	MeshData& subMesh = scene->sceneRender().getSubMeshes()[subMeshComp.meshDataIndex];
 	MeshDrawCommand cmd{};
 	cmd.instanceIndex = subMesh.instanceIndex;
 	cmd.materialIndex = subMesh.materialIndex;
 	cmd.priority = 0xffff; //TODO
 	cmd.sceneIndex = scene->sceneIndex();
-	cmd.submeshOffset = subMeshComp.subMeshIndex;
+	cmd.submeshOffset = subMeshComp.meshDataIndex;
 	cmd.subMeshEntity = entity;
 
 	return cmd;
@@ -739,8 +744,9 @@ void VulkanContext::draw(const DrawContext& ctx) {
 
 						// Push for instanced
 						BaseMatPush push{};
-						push.flags = (uint32_t)BaseMatPushFlags::Instanced;
-						vkCmdPushConstants(frame.cmdBuffer, pipelineLayouts[matBase->pipelineLayoutId], VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+						push.flags = static_cast<uint32_t>(BaseMatPushFlags::Instanced);
+						vkCmdPushConstants(frame.cmdBuffer, pipelineLayouts[matBase->pipelineLayoutId],
+							VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
 										   0, sizeof(BaseMatPush), &push);
 
 						auto& submesh = scene1->sceneRender().getSubMeshes()[cmd.submeshOffset];

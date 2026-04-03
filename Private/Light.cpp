@@ -1,6 +1,6 @@
 #include "Light.hpp"
 
-Light::operator LightComponent& () {
-	return m_reg->get<GPULight>(m_entity);
+Light::operator const LightComponent& () const {
+	return m_reg->get<LightComponent>(m_entity);
 }
 

@@ -9,6 +9,7 @@
 #include <unordered_map>
 
 #ifdef LOGGING
+	#define LOG_BLANK Log::logEmpty();
 	#define LOGLINE(type, mod, msg) Log::logLine(type, mod, msg)
 	#define LOGLINE_IND(type, mod, msg, ind) Log::logLine(type, mod, msg, ind)
 	#define LOG(type, msg) Log::log(type, msg)
@@ -96,6 +97,7 @@ class LoggerType
 {
 public:
 	virtual ~LoggerType() {};
+	virtual void logEmptyImpl() {};
 	virtual void logImpl(const LogType& type, const std::string_view& msg) = 0;
 	virtual void logLineImpl(const LogType& type, const LogMod& module, const std::string_view& msg, const int8_t ind) = 0;
 };
@@ -104,12 +106,13 @@ class DefaultTerminalLogger : public LoggerType
 {
 private:
 	uint8_t m_indent = 0;
-	constexpr const char* _col(TermColor color) const {
+	static constexpr const char* _col(TermColor color) {
 		return CON_COL_FG[static_cast<uint8_t>(color)];
 	}
 public:
 	virtual ~DefaultTerminalLogger() override {}
-	inline void logLineImpl(const LogType& type, const LogMod& module, const std::string_view& msg, const int8_t indent) override {
+	virtual
+	void logLineImpl(const LogType& type, const LogMod& module, const std::string_view& msg, const int8_t indent) override {
 		
 		if (indent < 0) {
 			m_indent--;
@@ -136,7 +139,10 @@ public:
 		}
 		std::string indentStr{};
 		for (size_t i = 0; i < m_indent; ++i) {
-			indentStr.append("   -> ");
+			if (i == m_indent - 1)
+				indentStr.append(" ⮡ ");
+			else
+				indentStr.append("   ");
 		}
 		std::cout << '\n' << std::chrono::system_clock::now() << ":\t"
 		<< MODULE_STRINGS[static_cast<uint8_t>(module)] << indentStr << colStr
@@ -148,7 +154,7 @@ public:
 				m_indent = 0xf0;
 		}
 	}
-	inline void logImpl(const LogType& type, const std::string_view& msg) override {
+	void logImpl(const LogType& type, const std::string_view& msg) override {
 		std::string colStr;
 		switch (type) {
 			case LogType::Error:
@@ -167,13 +173,16 @@ public:
 
 		std::cout << colStr << msg << _col(TermColor::Reset) << std::flush;
 	}
+	void logEmptyImpl() override {
+		std::cout << '\n' << std::flush;
+	}
 };
 
 class Log
 {
 public:
 	template<typename... LoggerTs>
-	inline static void init() {
+	static void init() {
 
 #ifndef LOGGING
 		return;
@@ -188,17 +197,21 @@ public:
 		
 		logLine(LogType::Info, LogMod::Log, "Initialized.");
 	}
-	inline static void logLine(const LogType& type, const LogMod& module, const std::string_view& msg) {
+	static void logLine(const LogType& type, const LogMod& module, const std::string_view& msg) {
 		for (auto* logger : s_loggers)
 			logger->logLineImpl(type, module, msg, 0);
 	}
-	inline static void logLine(const LogType& type, const LogMod& module, const std::string_view& msg, int8_t ind) {
+	static void logLine(const LogType& type, const LogMod& module, const std::string_view& msg, int8_t ind) {
 		for (auto* logger : s_loggers)
 			logger->logLineImpl(type, module, msg, ind);
 	}
-	inline static void log(const LogType& type, const std::string_view& msg) {
+	static void log(const LogType& type, const std::string_view& msg) {
 		for (auto* logger : s_loggers)
 			logger->logImpl(type, msg);
+	}
+	static void logEmpty() {
+		for (auto* logger : s_loggers)
+			logger->logEmptyImpl();
 	}
 
 	inline static void deInit() {

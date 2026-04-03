@@ -1,6 +1,8 @@
 #include "Transform.hpp"
 #include "TransformSystem.hpp"
 #include "Engine.h"
+#include "Scene.h"
+#include "GlobalSystem.hpp"
 
 TransformComponent& Transform::_markDirty(uint8_t what) {
 	auto& comp = m_reg->get<TransformComponent>(m_entity);

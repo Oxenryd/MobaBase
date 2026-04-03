@@ -23,7 +23,7 @@
 //   void  deallocate(void* p, std::size_t bytes, std::size_t align);
 // If your interface differs, wrap it in a small adapter with those two methods.
 
-namespace MWork
+namespace MJob
 {
 
     // ----------------- Await points -----------------
@@ -369,8 +369,8 @@ namespace MWork
             // Drain: repeatedly try to observe zero outstanding groups at this await point.
             // Simpler approach: spin on 'inflight' and sleep efficiently by waiting on a per-AP semaphore.
             // For now we just block on a barrier loop that watches a counter.
-            // (Hook up your engine’s phase system and call 'wait(h)' for each handle you queued to that AP.)
-            // This method is a placeholder—opt for explicit handle tracking for determinism.
+            // (Hook up your engineï¿½s phase system and call 'wait(h)' for each handle you queued to that AP.)
+            // This method is a placeholderï¿½opt for explicit handle tracking for determinism.
         }
 
     private:
@@ -384,11 +384,11 @@ namespace MWork
                 {
                     PROFILE_SCOPE("MWork::workerLoop");
                     Job job;
-                    // If there’s a race between acquire and empty queue due to other workers stealing work,
+                    // If thereï¿½s a race between acquire and empty queue due to other workers stealing work,
                     // just keep trying until we get one (or observe shutdown).
                     while (!m_queue.dequeue(job)) {
                         if (m_shutdown.load(std::memory_order_acquire)) return;
-                        // spin a little—queue should be non-empty because a token was released
+                        // spin a littleï¿½queue should be non-empty because a token was released
                     }
 
                     JobGroup* g = job.group;
@@ -481,7 +481,7 @@ namespace MWork
     template <class Fn>
     JobHandle for_loop(std::size_t begin, std::size_t end, std::size_t shards, Fn&& body) {
         PROFILE_SCOPE("MWork::for_loop");
-        return MWork::for_range_chunked(begin, end, 0, shards, MWork::JobAwaitPoint::Immediate, body);
+        return MJob::for_range_chunked(begin, end, 0, shards, MJob::JobAwaitPoint::Immediate, body);
     }
 
 } // namespace MWork

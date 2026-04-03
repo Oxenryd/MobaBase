@@ -1,17 +1,23 @@
 #ifndef SCENE_H
 #define SCENE_H
 
-#include <entt/entt.hpp>
-#include <concepts>
-#include <type_traits>
+//#include <entt/entt.hpp>
 
-#include "ArenaAllocator.hpp"
-#include "TransformSystem.hpp"
-#include "GameObjectSystem.hpp"
-#include "TagSystem.hpp"
+//#include "ArenaAllocator.hpp"
+//#include "TransformSystem.hpp"
+//#include "GameObjectSystem.hpp"
 #include "SceneRenderSystem.hpp"
-#include "LightSystem.hpp"
-#include "BVH.hpp"
+//#include "BVH.hpp"
+
+#include "BasicTypes.hpp"
+#include "Concepts.h"
+
+class SceneRenderSystem;
+class TransformSystem;
+class BoundingSystem;
+class BVHSystem;
+class LightSystem;
+class GameObjectSystem;
 
 enum class SceneTransitionStatus
 {
@@ -37,19 +43,17 @@ class SceneBase
 
 protected:
     //HeapArena m_heap;
-    Arena m_arena;
+    Arena* m_arena;
     uint16_t m_sceneIndex;
     bool m_pendingUnload = false;
     bool m_firstFrame = true;
-    ArenaRegistry m_reg;
-    SceneRenderSystem m_renderSys;
-    //TagSystem m_nameTagSys;
-    BoundingSystem m_boundingSys;
-    TransformSystem m_transformSys;
-    GameObjectSystem m_gameObjectSys;
-    BVHSystem m_bvhSys;
-    
-    LightSystem m_lightSys;
+    ArenaRegistry* m_reg;
+    SceneRenderSystem* m_renderSys;
+    BoundingSystem* m_boundingSys;
+    TransformSystem* m_transformSys;
+    GameObjectSystem* m_gameObjectSys;
+    BVHSystem* m_bvhSys;
+    LightSystem* m_lightSys;
     
     
     
@@ -65,27 +69,7 @@ public:
     SceneBase& operator=(const SceneBase&) = delete;
     SceneBase(SceneBase&&) = delete;
     SceneBase& operator=(SceneBase&&) = delete;
-    SceneBase(const size_t arenaSize, const uint16_t sceneIndex) :
-        m_arena{ arenaSize },
-        m_sceneIndex{sceneIndex},
-        m_reg{ ArenaAllocator<entt::entity>{&m_arena} },
-        m_renderSys{ &m_reg, &m_arena, sceneIndex },
-        m_boundingSys{ &m_reg, &m_arena, sceneIndex },
-        m_transformSys{&m_reg, sceneIndex, &m_arena},
-        m_gameObjectSys{ sceneIndex, &m_reg},
-        m_bvhSys{m_reg},
-        m_lightSys{&m_reg, sceneIndex}
-    {
-        m_reg.storage<TransformComponent>().reserve(ECS_BASE_COMPONENTS_RESERVATION_COUNT);
-        m_reg.storage<EnabledTag>().reserve(ECS_BASE_COMPONENTS_RESERVATION_COUNT);
-        m_reg.storage<BoundingVolumeComponent>().reserve(ECS_BASE_COMPONENTS_RESERVATION_COUNT);
-        m_reg.storage<MeshComponent>().reserve(ECS_BASE_COMPONENTS_RESERVATION_COUNT);
-        m_reg.group<TransformComponent, BoundingVolumeComponent, EnabledTag>();
-       // m_reg.storage<SubMeshComponent>().reserve(ECS_BASE_COMPONENTS_RESERVATION_COUNT);
-
-        cullResults.visibleEntities.reserve(1024);
-        broadPhaseResults.collisionPairs.reserve(1024);
-    }
+    SceneBase(size_t arenaSize, uint16_t sceneIndex);
     //SceneBase() : SceneBase(DEFAULT_HEAP_SIZE) {}
 
     //HeapArena& heapArena() { return m_heap; }
@@ -101,19 +85,19 @@ public:
     virtual SceneTransitionStatus transitioningDispatch() { return SceneTransitionStatus::Done; }
 
     // Base Systems accessors
-    ArenaRegistry& registry() { return m_reg; }
-    TransformSystem& transformSystem() { return m_transformSys; }
-    GameObjectSystem& gameObjectSystem() { return m_gameObjectSys; }  
-    BoundingSystem& boundingSystem() { return m_boundingSys; }
-    SceneRenderSystem& sceneRender() { return m_renderSys; }
-    LightSystem& lightSystem() { return m_lightSys; }
-    BVHSystem& bvhSystem() { return m_bvhSys; }
+    ArenaRegistry& registry() { return *m_reg; }
+    TransformSystem& transformSystem() { return *m_transformSys; }
+    GameObjectSystem& gameObjectSystem() { return *m_gameObjectSys; }
+    BoundingSystem& boundingSystem() { return *m_boundingSys; }
+    SceneRenderSystem& sceneRender() { return *m_renderSys; }
+    LightSystem& lightSystem() { return *m_lightSys; }
+    BVHSystem& bvhSystem() { return *m_bvhSys; }
     void setUnload() { m_pendingUnload = true; }
     uint16_t sceneIndex() const { return m_sceneIndex; }
     bool pendingUnload() const { return m_pendingUnload; }
 
-    DualBVH::TraversalResult cullResults;
-    DualBVH::TraversalResult broadPhaseResults;
+    TraversalResult cullResults;
+    TraversalResult broadPhaseResults;
 };
 
 template<typename Derived>
@@ -160,7 +144,8 @@ public:
         if constexpr (requires (Derived & d) { d.lateUpdate(dt); }) {
             static_cast<Derived&>(*this).lateUpdate(dt);
         }
-        m_renderSys.afterDraw();
+
+        m_renderSys->afterDraw();
     }
 
     void fixedUpdateDispatch() override {
@@ -188,12 +173,6 @@ public:
     static SceneBase* createDefault(const size_t arenaSize, const uint16_t index, void*) {
         return new DefaultScene{ arenaSize, index};
     }
-};
-
-template<typename T>
-concept SceneConcept = requires(T t, void* arg, double dt, uint16_t index, size_t size) {
-    { std::is_base_of_v<SceneBase, T> };
-    { T::createDefault(size, index, arg) } -> std::convertible_to<SceneBase*>;
 };
 
 

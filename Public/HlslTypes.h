@@ -6,8 +6,38 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtx/quaternion.hpp>
+#include <array>
+#include <span>
+
 
 #include "GlobalMacros.h"
+#include "Concepts.h"
+
+template <typename T, int N>
+struct FloatArray
+{
+private:
+	T m_data[N];
+
+public:
+	T& operator[](int index) { return m_data[index]; }
+
+	template<IsGlmVecCompatible<N> V>
+	FloatArray& operator=(const V& vec) {
+		std::memcpy(m_data, &vec, sizeof(T) * N);
+		return *this;
+	}
+
+	T* data() { return m_data; }
+	T* data() const { return m_data; }
+
+	explicit operator const T*() { return m_data; }
+	explicit operator std::array<T, N>&()  { return m_data; }
+	explicit operator std::span<T>() { return std::span<T>{m_data, N}; }
+};
+
+typedef FloatArray<float, 3> FArray3;
+typedef FloatArray<float, 4> FArray4;
 
 struct ShapeRendAABB
 {
@@ -24,211 +54,14 @@ struct ShapePush
 	uint32_t drawNumber;
 };
 
-
-enum class LightType : uint8_t
-{
-	Directional = 0,
-	Point = 1,
-	Spot = 2,
-	ENUM_END
-};
-
-constexpr static size_t NUM_OF_LIGHT_TYPES = static_cast<size_t>(LightType::ENUM_END);
-
-//enum LightType : uint32_t
-//{
-//	CastShadow = 1 << 0,
-//	// room for more: Static, Volumetric, ContactShadows...
-//};
-
-enum class ShadowType : uint32_t
-{
-	None,
-	DirCSM,
-	Spot2D,
-	PointCube
-};
-
-enum class LightFlags : uint32_t
-{
-	None = 0x00000000,
-	Enabled = 0x00000001,
-	Static = 0x00000002
-};
-
-INLINE auto operator|(LightFlags a, LightFlags b) {
-	return static_cast<uint32_t>(a) | static_cast<uint32_t>(b);
-}
-
-struct alignas(16) GPULight
-{
-	// 0..15
-	union
-	{
-		float positionVS_radius[4];
-		struct
-		{
-			float positionVS[3];
-			float radius;
-		};
-	};
-
-
-	// 16..31
-	union
-	{
-		float directionVS_spotInnerCos[4];
-		struct
-		{
-			float directionVS[3];
-			float spotInnerCos;
-		};
-	};
-
-
-	// 32..47
-	union
-	{
-		float color_intensity[4];
-		struct
-		{
-			float color[3];
-			float intensity;
-		};
-	};
-
-
-	// 48..63
-	uint32_t type;
-	uint32_t flags;
-	uint32_t cookieIndex;
-	uint32_t shadowIndex;
-
-	// 64..79
-	float spotOuterCos;
-	float falloffExp;
-	float invRange;
-	float volumetricIntensity;
-
-	// 80..95
-	float volumetricFalloff;
-	float shadowBias;
-	float shadowNormalBias;
-	float _reserved0;
-
-	// 96..111
-	uint32_t shadowType;
-	uint32_t shadowLayerCount;
-	uint32_t _reserved1;
-	uint32_t _reserved2;
-
-	GPULight() : // NOLINT(*-pro-type-member-init)
-		positionVS_radius{ 0.0f, 0.0f, 0.0f, 1.0f },
-		directionVS_spotInnerCos{ 0.0f, 0.0f, -1.0f, 1.0f },
-		color_intensity{ 1.0f, 1.0f, 1.0f, 1.0f },
-		type{ static_cast<uint32_t>(LightType::Directional) },
-		flags{ (LightFlags::Enabled | LightFlags::Static)},
-		cookieIndex{ UINT32_INVALID },
-		shadowIndex{ UINT32_INVALID },
-		spotOuterCos{ 1.0f },
-		falloffExp{ 1.5f },
-		invRange{ 1.0f },
-		volumetricIntensity{ 1.0f },
-		volumetricFalloff{ 1.0f },
-		shadowBias{ 0.0f },
-		shadowNormalBias{ 0.0f },
-		_reserved0{ 0 },
-		shadowType{ 0 },
-		shadowLayerCount{ 0 },
-		_reserved1{ 0 },
-		_reserved2{ 0 }
-	{}
-};
-
-static_assert(sizeof(GPULight) == 112, "GPULight must be 112 bytes");
-
 #ifdef BUILD_WIN
 #define LIGHT_CONST inline static
 #else
 #define LIGHT_CONST constexpr
 #endif
 
-namespace LightFactory
-{
-	LIGHT_CONST GPULight Point(
-		const glm::vec3& pos,
-		const float radius,
-		const glm::vec3& color = { 1.0f, 1.0f, 1.0f },
-		const float intensity = 1.0f)
-	{
-		GPULight L{};
-		L.type = static_cast<uint32_t>(LightType::Point);
-		L.positionVS[0] = pos[0];
-		L.positionVS[1] = pos[1];
-		L.positionVS[2] = pos[2];
-		L.radius = radius;
-		L.invRange = radius > 0.0f ? 1.0f / radius : 0.0f;
-		L.color[0] = color[0];
-		L.color[1] = color[1];
-		L.color[2] = color[2];
-		L.intensity = intensity;
-		return L;
-	}
-
-	LIGHT_CONST GPULight Spot(
-		const glm::vec3& pos,
-		const glm::vec3& dir,
-		const float radius,
-		const float innerDeg,
-		const float outerDeg,
-		const glm::vec3& color = { 1.0f, 1.0f, 1.0f },
-		const float intensity = 1.0f)
-	{
-		GPULight L{};
-		L.type = static_cast<uint32_t>(LightType::Spot);
-		L.positionVS[0] = pos[0];
-		L.positionVS[1] = pos[1];
-		L.positionVS[2] = pos[2];
-		auto normDir = glm::normalize(dir);
-		L.directionVS[0] = normDir[0];
-		L.directionVS[1] = normDir[1];
-		L.directionVS[2] = normDir[2];
-		L.radius = radius;
-		L.invRange = radius > 0.0f ? 1.0f / radius : 0.0f;
-		L.spotInnerCos = glm::cos(glm::radians(innerDeg));
-		L.spotOuterCos = glm::cos(glm::radians(outerDeg));
-		L.color[0] = color[0];
-		L.color[1] = color[1];
-		L.color[2] = color[2];
-		L.intensity = intensity;
-		return L;
-	}
-
-	LIGHT_CONST GPULight Directional(
-		const glm::vec3& dir,
-		const glm::vec3& color = { 1.0f, 1.0f, 1.0f },
-		const float intensity = 1.0f)
-	{
-		GPULight L{};
-		L.type = static_cast<uint32_t>(LightType::Directional);
-		auto normDir = glm::normalize(dir);
-		L.directionVS[0] = normDir[0];
-		L.directionVS[1] = normDir[1];
-		L.directionVS[2] = normDir[2];
-		L.radius = 0.0f;       // Infinite range
-		L.invRange = 0.0f;
-		L.color[0] = color[0];
-		L.color[1] = color[1];
-		L.color[2] = color[2];
-		L.intensity = intensity;
-		return L;
-	}
-}
-
 
 struct ShadowMatrix { glm::mat4 viewProj; };
-
-
 
 struct BindSetCombo
 {
@@ -437,7 +270,7 @@ struct alignas (16) CameraData
 			glm::vec3(0.0f, 0.0f, 0.0f), // Target (look at)
 			glm::vec3(0.0f, 1.0f, 0.0f)  // Up vector
 		);
-		
+
 		proj = glm::perspectiveRH_ZO(
 			glm::radians(vFov),
 			aspectRatio,
@@ -445,7 +278,7 @@ struct alignas (16) CameraData
 			farPlane
 		);
 		proj[1][1] *= -1;
-		
+
 		invProj = 1.0f / proj;
 
 		clustersX = VULKAN_LIGHT_CLUSTERS_X;
@@ -523,8 +356,8 @@ struct alignas (16) TexturePack
 struct alignas (16) BaseMaterialInstance
 {
     TexturePack textures;
-	glm::vec3	ambient{1, 1, 1};
-	float		ambientIntensity{ 1 };
+	glm::vec3	ambient{1.0f, 1.0f, 1.0f};
+	float		ambientIntensity{ 0.05f};
     
 	glm::vec3	baseColor{ 1, 1, 1 };
 	float		albedoStrength{ 1 };

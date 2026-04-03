@@ -17,22 +17,29 @@
 //};
 
 
-struct SubMeshComponent
-{
-	entt::entity meshEntity;
-	uint32_t subMeshIndex{ UINT32_INVALID };
-};
+// struct SubMeshComponent
+// {
+// 	entt::entity meshEntity;
+// 	uint32_t subMeshIndex{ UINT32_INVALID };
+// };
 
-struct MeshComponent
+struct MeshLoadInfo
 {
-	uint32_t subMeshOffset;
 	uint32_t subMeshCount;
+	uint32_t subMeshOffset;
 };
 
-struct alignas (32) SubMeshData
+struct MeshFilterComponent
+{
+	uint32_t meshDataIndex;
+	//uint32_t subMeshOffset;
+	//uint32_t subMeshCount;
+};
+
+struct alignas (32) MeshData
 {
 	//entt::entity parent{ entt::null };
-	entt::entity entity{ entt::null };
+	//entt::entity entity{ entt::null };
 	uint32_t vertexOffset{ UINT32_INVALID };
 	uint32_t vertexCount{ UINT32_INVALID };
 	uint32_t indexOffset{ UINT32_INVALID };
@@ -42,17 +49,17 @@ struct alignas (32) SubMeshData
 };
 
 
-struct SubMesh
-{
-private:
-	ArenaRegistry* m_reg;
-	entt::entity m_entity;
-
-public:
-	glm::vec3 getAvgCenter();
-	std::span<BaseVSIn> getVertices();
-	BoundingVolume getBoundingVolume();
-};
+// struct SubMesh
+// {
+// private:
+// 	ArenaRegistry* m_reg;
+// 	entt::entity m_entity;
+//
+// public:
+// 	glm::vec3 getAvgCenter();
+// 	std::span<BaseVSIn> getVertices();
+// 	BoundingVolume getBoundingVolume();
+// };
 
 struct Mesh
 {
@@ -95,24 +102,29 @@ public:
 
 		return *this;
 	}
-	bool operator==(const Mesh& rhs) {
+	bool operator==(const Mesh& rhs) const {
 		return m_reg == rhs.m_reg && m_entity == rhs.m_entity;
 	}
 	Transform getTransform();
-	MeshComponent& getMeshComponent();
+	MeshFilterComponent& getMeshFilterComponent();
 	glm::vec3 getAvgCenter();
 	std::span<BaseVSIn> getVertices();
-	std::span<SubMeshData> getSubmeshes();
+	//std::span<MeshData> getSubmeshes();
 	//void rigSubMeshTransforms();
+
+	BoundingVolume getBoundingVolume();
+
+
+	operator entt::entity() const {return m_entity;}
 };
 
 
 namespace entt
 {
 	template<>
-	struct storage_type<MeshComponent, ArenaRegistry>
+	struct storage_type<MeshFilterComponent, ArenaRegistry>
 	{
-		using type = ArenaStorage<MeshComponent>;
+		using type = ArenaStorage<MeshFilterComponent>;
 	};
 }
 

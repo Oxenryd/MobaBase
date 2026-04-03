@@ -41,9 +41,9 @@ public:
 
 
 
-	void registryEmplace(const entt::entity entity, void* valuePtr, void** valueOut) override {
+	void registryEmplace(const entt::entity entity, const void* valuePtr, void** valueOut) override {
 		
-		const auto* box = static_cast<AABB*>(valuePtr);
+		const auto* box = static_cast<const AABB*>(valuePtr);
 
 		const auto indexLocal = static_cast<uint32_t>(m_aabbLocals.size());
 		const auto indexWorld = static_cast<uint32_t>(m_aabbs.size());

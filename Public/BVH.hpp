@@ -231,11 +231,6 @@ public:
     // Entity to primitive mapping for fast lookups
     std::array<std::unordered_map<entt::entity, uint32_t>, 2> entityToPrimitive;
 
-    // Configuration
-    static constexpr uint32_t MAX_DEPTH = 32;
-    static constexpr uint32_t MAX_LEAF_PRIMITIVES = 4;
-    static constexpr float REBUILD_THRESHOLD = 0.3f; // 30% of objects moved
-
     std::array<std::atomic<uint32_t>, 2> rootIndex;
     //std::array<uint32_t, 2> nodeCount;
     std::atomic<uint32_t> nodeCount[2];
@@ -274,6 +269,7 @@ public:
     std::array<WorkerPkg*, NUM_BUILD_THREADS> workerPkgs;
     std::array<std::atomic<bool>, NUM_BUILD_THREADS> workPkgCondition;
     std::array<std::binary_semaphore*, NUM_BUILD_THREADS> startSemas;
+
     std::binary_semaphore primitivesLock[2] = { std::binary_semaphore{1}, std::binary_semaphore{1} };
     std::binary_semaphore primitivesStartSema{ 0 };
     //std::binary_semaphore primitivesLock{ 1 };
@@ -291,35 +287,6 @@ public:
 
 
     std::vector<entt::entity> alwaysVisible[2];
-    struct BuildSettings
-    {
-        uint32_t maxDepth = MAX_DEPTH;
-        uint32_t maxLeafPrimitives = MAX_LEAF_PRIMITIVES;
-        bool useMedianSplit = true;  // false = SAH, true = median
-        float rebuildThreshold = REBUILD_THRESHOLD;
-        explicit BuildSettings() {}
-    };
-
-    struct TraversalResult
-    {
-        std::vector<entt::entity> visibleEntities;
-        std::vector<entt::entity> activeOccluders;
-        std::vector<std::pair<entt::entity, entt::entity>> collisionPairs;
-        uint32_t nodesVisited = 0;
-        uint32_t primitivesVisited = 0;
-        uint32_t nodesCulledByFrustum = 0;
-        uint32_t nodesCulledByOcclusion = 0;
-
-        void clear() {
-            visibleEntities.clear();
-            activeOccluders.clear();
-            collisionPairs.clear();
-            nodesVisited = 0;
-            primitivesVisited = 0;
-            nodesCulledByFrustum = 0;
-            nodesCulledByOcclusion = 0;
-        }
-    };
 
     // Occlusion data
     struct OccluderData
@@ -613,6 +580,8 @@ public:
             runSems[1][i] = nullptr;
         }
         delete cullArenas[0][NUM_RUN_THREADS];
+        delete cullArenas[1][NUM_RUN_THREADS];
+        cullArenas[0][NUM_RUN_THREADS] = nullptr;
         cullArenas[1][NUM_RUN_THREADS] = nullptr;
 
         rebuildThreads->join();
@@ -622,8 +591,8 @@ public:
         rebuildThreads = nullptr;
         //rebuildThreads[1] = nullptr;
     }
-    explicit DualBVH(ArenaRegistry& registry, const BuildSettings& settings = BuildSettings{}) :
-        m_reg{registry}, settings(settings)
+    explicit DualBVH(ArenaRegistry* registry, const BuildSettings& settings = BuildSettings{}) :
+        m_reg{*registry}, settings(settings)
         //, primitivesStartSema{ std::binary_semaphore{0}, std::binary_semaphore{0} },
         //primitivesLock{ std::binary_semaphore{1}, std::binary_semaphore{1} }
     {
@@ -642,7 +611,7 @@ public:
         rebuildThread = new std::thread{
             _buildThreadMethod,
             this,
-            std::ref(registry) };
+            std::ref(*registry) };
 
         workersRunning = true;
         for (size_t i = 0; i < NUM_BUILD_THREADS; ++i) {
@@ -661,7 +630,7 @@ public:
             runSems[0][i] = new std::binary_semaphore{ 1 };
             runSems[1][i] = new std::binary_semaphore{ 1 };
         }
-        cullArenas[0][NUM_RUN_THREADS] = new FrameArena{ 768_KB };
+        cullArenas[0][NUM_RUN_THREADS] = new FrameArena{ 768_KB };  // what??
         cullArenas[1][NUM_RUN_THREADS] = new FrameArena{ 768_KB };
 
         rebuildThreads = new std::thread{DualBVH::_updatePrimitives, this};
@@ -875,7 +844,7 @@ class BVHSystem
     uint8_t currentIndex = UINT8_INVALID;
 
 public:
-    explicit BVHSystem(ArenaRegistry& registry) :
+    explicit BVHSystem(ArenaRegistry* registry) :
         m_bvh{registry} {}
     // Called once per frame in main thread
     void updateBVH(ArenaRegistry& registry, const double dt, const double time) {
@@ -901,7 +870,7 @@ public:
     //}
 
     // Called from render thread with occlusion culling
-    auto performFrustumCullingWithOcclusion(DualBVH::TraversalResult& result,
+    auto performFrustumCullingWithOcclusion(TraversalResult& result,
                                             const Camera* const cam,
                                             ArenaRegistry* const registry,
                                             DualBVH::OcclusionMethod method = DualBVH::OcclusionMethod::SIMPLE_DEPTH) { 
