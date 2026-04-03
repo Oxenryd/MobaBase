@@ -4,6 +4,8 @@
 #include <concepts>
 #include <type_traits>
 
+#include <glm/glm.hpp>
+
 class SceneBase;
 
 template<typename T>
@@ -27,6 +29,9 @@ concept IsRenderSysCompatible = requires(T t)
     {T::afterDraw()} -> std::same_as<void>;
 };
 
-
-
+template<typename T, size_t N>
+concept IsGlmVecCompatible = requires
+{
+    { std::is_convertible_v<glm::vec<N, float>, T> };
+};
 #endif
