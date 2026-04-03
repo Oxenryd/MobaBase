@@ -2,6 +2,7 @@
 #include "Scene.h"
 #include "Engine.h"
 #include "GlobalSystem.hpp"
+#include "TransformSystem.hpp"
 
 void GameObjectSystem::_emplaceBaseSystems(GameObject& gObject, const std::string& name, const void* parent) {
 	auto* scene = Engine::getInstance()->getScene(m_sceneIndex);

@@ -1,12 +1,16 @@
 #ifndef LIGHTSYSTEM_HPP
 #define LIGHTSYSTEM_HPP
 
-#include <vector>
-#include <entt/entt.hpp>
+#include "Scene.h"
 
-#include "GameObject.hpp"
-#include "Transform.hpp"
+#include "Concepts.h"
+#include "VulkanContext.hpp"
+#include "RenderManager.h"
+#include "Engine.h"
 #include "Light.hpp"
+#include "GameObjectSystem.hpp"
+
+
 
 class LightSystem
 {
@@ -19,21 +23,25 @@ public:
 	LightSystem(ArenaRegistry* registry, const uint16_t sceneIndex) :
 		m_sceneIndex{ sceneIndex }, m_reg{ registry } {}
 
-	LightComponent& registerLight(const LightComponent& light, entt::entity entity);
-
-	template<typename GO, typename... LightInfo>
-		requires (std::derived_from<GO, GameObject> || std::same_as<GO, void>)
-	LightComponent& createNewLight(GO* goParent, const GameObject* parent = nullptr, const LightInfo&&... args) {
-
-		Engine::getInstance()
+	template<GO_Derived T, typename... LightInfo>
+	LightComponent& createNewLight(T* parent, const LightInfo&&... args) {
 
 		auto newLight = LightComponent{std::forward<LightInfo>(args)...};
-		m_reg->emplace<LightComponent>()
+		std::string name{};
+		switch (newLight.type) {
+			default:
+			case LightType::Directional: {
+				name = "DirectionalLight";
+			}
+		}
 
+		const entt::entity entity = parent
+			? parent->entity()
+			: Engine::getInstance()->getScene(m_sceneIndex)->gameObjectSystem().createGameObject(name, parent).entity();
 
-		return newLight;
+		LightComponent& l = m_reg->emplace<LightComponent>(entity, newLight);
+		Engine::getInstance()->getRenderManager()->vkContext()->registerNewLight(l);
+		return l;
 	}
-
-
 };
 #endif

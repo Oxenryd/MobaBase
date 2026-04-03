@@ -5,6 +5,11 @@
 #include "Timing.h"
 #include "InputManager.hpp"
 #include "GlobalSystem.hpp"
+#include "Mesh.hpp"
+#include "SceneRenderSystem.hpp"
+#include "LightSystem.hpp"
+#include "GameObjectSystem.hpp"
+#include "TransformSystem.hpp"
 
 class GameScene final : public Scene<GameScene>
 {
@@ -33,11 +38,11 @@ public:
         auto camTrans = Engine::getInstance()->mainCamera()->transform();
         camTrans.modifyPosition() = glm::vec3{0,3, 30};
         auto mainCam = Engine::getInstance()->mainCamera();
+        auto l = lightSystem().createNewLight(static_cast<GameObject*>(nullptr));
 
-        // todo - make sure GO is created for lights
-        const auto dirLight = LightFactory::Directional(glm::vec3{-1, -0.5, -0.25});
-        m_skyLight = m_reg.create();
-        [[maybe_unused]] auto& lightRef = lightSystem().registerLight(dirLight, m_skyLight);
+        //const auto dirLight = LightFactory::Directional(glm::vec3{-1, -0.5, -0.25});
+        //m_skyLight = m_reg.create();
+        //[[maybe_unused]] auto& lightRef = lightSystem().registerLight(dirLight, m_skyLight);
 
         // not complete
         // m_go1 = gameObjectSystem().createGameObject<GameObject>("MerryGoRound");
@@ -222,7 +227,7 @@ public:
         // one object test
         auto const sin = Engine::sinF();
 
-        auto merryTrans = Transform{ &m_reg, m_go1 };
+        auto merryTrans = Transform{ m_reg, m_go1 };
         merryTrans.rotate(glm::vec3{ 0.0f, 0.5f, 1.0f } * Timing::deltaTimeF());
         //merryTrans.modifyPosition() = glm::vec3(sin * 5.0f, 0.0f, Engine::cosF() * 5.0f);
 

@@ -5,6 +5,7 @@
 #include "BoundingVolume.hpp"
 #include "Engine.h"
 #include "Scene.h"
+#include "TransformSystem.hpp"
 
 void BoundingSystem::run() {
 	const auto grp = m_reg->group<TransformComponent, BoundingVolumeComponent, EnabledTag>();

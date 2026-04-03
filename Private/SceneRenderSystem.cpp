@@ -2,6 +2,8 @@
 #include "Engine.h"
 #include "VulkanContext.hpp"
 #include "Scene.h"
+#include "GameObjectSystem.hpp"
+#include "BoundingSystem.h"
 
 #include <format>
 

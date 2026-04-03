@@ -193,12 +193,12 @@ target_sources(MobaBase
 		"Private/Camera.cpp"
 		"Private/Timing.cpp"
 		"Private/Texture.cpp"
-		"Private/LightSystem.cpp"
 		"Private/Mesh.cpp"
 		"Private/Light.cpp"
 		"Private/BoundingVolume.cpp"
 		"Private/BoundingSystem.cpp"
 		"Private/BVH.cpp"
+		"Private/Scene.cpp"
 )
 
 

@@ -10,6 +10,8 @@
 #include "TimerSystem.h"
 #include "ArenaAllocator.hpp"
 #include "GlobalSystem.hpp"
+#include "TransformSystem.hpp"
+#include "BVH.hpp"
 
 #include <immintrin.h>
 
@@ -455,24 +457,24 @@ inline void Engine::_updateEarly(double dt) {
 
 		{
 			PROFILE_SCOPE("SceneTransforms");
-			m_scenes[index]->m_transformSys.run(m_scenes[index]->m_boundingSys);
+			m_scenes[index]->m_transformSys->run(*m_scenes[index]->m_boundingSys);
 
 		}
 
 		{
 			PROFILE_SCOPE("BoundingSystemUpdate");
-			m_scenes[index]->m_boundingSys.run();
+			m_scenes[index]->m_boundingSys->run();
 		}
 
 		{
 			PROFILE_SCOPE("SceneGameObjects");
-			m_scenes[index]->m_gameObjectSys.run();
+			m_scenes[index]->m_gameObjectSys->run();
 		}
 		
 
 		{
 			PROFILE_SCOPE("Scene_BVH_Update");
-			m_scenes[index]->bvhSystem().updateBVH(m_scenes[index]->m_reg, m_updateDeltaTime, 0.01667f);
+			m_scenes[index]->bvhSystem().updateBVH(*m_scenes[index]->m_reg, m_updateDeltaTime, 0.01667f);
 		}
 	}
 	onEarlyUpdateExit.notify(this);

@@ -6,6 +6,7 @@
 #include "Profiler.hpp"
 #include "Engine.h"
 #include "Scene.h"
+#include "BoundingSystem.h"
 
 
 
@@ -1134,7 +1135,7 @@ void DualBVH::frustumCullWithOcclusion(
     }
 }
 
-DualBVH::TraversalResult DualBVH::broadPhaseCollision(const uint8_t index) const {
+TraversalResult DualBVH::broadPhaseCollision(const uint8_t index) const {
     TraversalResult result;
     if (isEmpty(index)) return result;
 

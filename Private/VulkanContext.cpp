@@ -4,6 +4,11 @@
 #include "Robin_Hood.h"
 #include "Mesh.hpp"
 #include "Scene.h"
+#include "EnabledTag.hpp"
+#include "TransformSystem.hpp"
+#include "Camera.hpp"
+#include "SceneRenderSystem.hpp"
+#include "BVH.hpp"
 
 #include <chrono>
 

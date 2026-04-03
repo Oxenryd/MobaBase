@@ -856,4 +856,40 @@ INLINE void aabbViewZRange(const AABB& b, const glm::vec3& n, const float& w,
 	zmax = zc + ze;
 }
 
+static constexpr uint32_t BVH_MAX_DEPTH = 32;
+static constexpr uint32_t BVH_MAX_LEAF_PRIMITIVES = 4;
+static constexpr float BVH_REBUILD_THRESHOLD = 0.3f; // 30% of objects moved
+
+struct BuildSettings
+{
+	uint32_t maxDepth = BVH_MAX_DEPTH;
+	uint32_t maxLeafPrimitives = BVH_MAX_LEAF_PRIMITIVES;
+	bool useMedianSplit = true;  // false = SAH, true = median
+	float rebuildThreshold = BVH_REBUILD_THRESHOLD;
+	explicit BuildSettings() {}
+};
+
+struct TraversalResult
+{
+	std::vector<entt::entity> visibleEntities;
+	std::vector<entt::entity> activeOccluders;
+	std::vector<std::pair<entt::entity, entt::entity>> collisionPairs;
+	uint32_t nodesVisited = 0;
+	uint32_t primitivesVisited = 0;
+	uint32_t nodesCulledByFrustum = 0;
+	uint32_t nodesCulledByOcclusion = 0;
+
+	void clear() {
+		visibleEntities.clear();
+		activeOccluders.clear();
+		collisionPairs.clear();
+		nodesVisited = 0;
+		primitivesVisited = 0;
+		nodesCulledByFrustum = 0;
+		nodesCulledByOcclusion = 0;
+	}
+};
+
+
+
 #endif
