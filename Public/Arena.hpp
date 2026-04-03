@@ -84,13 +84,12 @@ public:
         //m_memory = new uint8_t[m_size];
         const auto memStart = reinterpret_cast<size_t>(m_memory);
         if (memStart == 0) {
-            LOGLINE(LogType::Info, LogMod::Memory, "Creating HeapArena, Addr: " + std::to_string(memStart) +
+            LOGLINE(LogType::Error, LogMod::Memory, "Creating HeapArena failed" + std::to_string(memStart) +
                     ", " + std::to_string(m_size / 1024) + "kB... ");
-            LOG(LogType::Error, "Fail. Out of memory.");
             throw std::bad_alloc();
         }
       
-        LOGLINE(LogType::Info, LogMod::Memory, "Creating HeapArena, Addr: " + std::to_string(memStart) +
+        LOGLINE(LogType::Success, LogMod::Memory, "Created HeapArena, Addr: " + std::to_string(memStart) +
                 ", " + std::to_string(m_size / 1024) + "kB... ");
 
         if (size < sizeof(ArenaPage) * HEAP_ARENA_MAX_PAGES * 2) {
@@ -107,7 +106,6 @@ public:
             m_destructorsPtr.emplace_back();
         
         m_lastSize = size;
-        LOG(LogType::Success, "Done.");
     }
 
     ~HeapArena() {
@@ -365,9 +363,8 @@ public:
             ? static_cast<uint8_t*>(m_heap->allocate(size))
             : static_cast<uint8_t*>(operator new[](size, std::align_val_t{64}));
         m_arenaId = memProvider ? m_heap->registerArena() : UINT32_INVALID;
-        LOGLINE(LogType::Info, LogMod::Memory, "Creating Arena, Addr: " + std::to_string(reinterpret_cast<size_t>(m_memory)) +
+        LOGLINE(LogType::Success, LogMod::Memory, "Created Arena, Addr: " + std::to_string(reinterpret_cast<size_t>(m_memory)) +
                 ", " + std::to_string(m_size / 1024) + "kB... ");
-        LOG(LogType::Success, "Done.");
     }
     Arena(const Arena& other) :
         m_heap{other.m_heap},
@@ -464,14 +461,13 @@ public:
     [[nodiscard]] float ratioUsed() const { return static_cast<float>(m_offset) / static_cast<float>(m_size); }
 
     void destroyAll() {
-        LOGLINE(LogType::Info, LogMod::Memory, "Destroying Arena elements, Addr: " +
+        LOGLINE(LogType::Success, LogMod::Memory, "Destroying Arena elements, Addr: " +
                 std::to_string(reinterpret_cast<size_t>(m_memory)) + "... ");
         //for (auto& entry : *m_destructorsPtr) {
         //    entry.destroyFunc(entry.object);
         //}
         //m_destructorsPtr->clear();
         reset();
-        LOG(LogType::Success, "Done.");
     }
 };
 
@@ -483,8 +479,13 @@ class FrameArena
 
 public:
     explicit FrameArena(const size_t size) : m_size(size) {
-        m_memory = static_cast<uint8_t*>(operator new[](size, std::align_val_t{ 64 }));//new uint8_t[size];
-        if (!m_memory) throw std::bad_alloc();
+        m_memory = static_cast<uint8_t*>(aligned_alloc_compat(64, m_size));
+        //m_memory = static_cast<uint8_t*>(operator new[](size, std::align_val_t{ 64 }));//new uint8_t[size];
+        if (!m_memory)
+            throw std::bad_alloc();
+
+        // LOGLINE(LogType::Success, LogMod::Memory, "Created FrameArena, Addr: " + std::to_string(reinterpret_cast<size_t>(m_memory)) +
+        // ", " + std::to_string(m_size / 1024) + "kB... ");
     }
 
     ~FrameArena() {

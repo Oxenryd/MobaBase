@@ -166,9 +166,11 @@ message(STATUS "Available targets: ${all_targets}")
 
 
 # SOURCES -----------------------------------------------------------------------------
-add_executable (MobaBase
-		Public/API.h
-		Public/Format_fixes.hpp)
+#add_executable (MobaBase
+#		Public/API.h
+#		Public/Format_fixes.hpp)
+
+add_executable(MobaBase)
 
 target_sources(MobaBase
 	PRIVATE

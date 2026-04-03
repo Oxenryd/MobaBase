@@ -1,5 +1,6 @@
 #include "Mesh.hpp"
 #include "Engine.h"
+#include "Scene.h"
 
 BoundingVolume Mesh::getBoundingVolume() {
 	return BoundingVolume{m_reg, m_entity};

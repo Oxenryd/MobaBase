@@ -1,5 +1,7 @@
 #include "Engine.h"
 #include "BoundingVolume.hpp"
+#include "TransformComponent.hpp"
+#include "Scene.h"
 
 void BoundingVolume::setFlags(BoundingVolumeFlags flags) {
 	BoundingVolumeComponent& boundComp = *this;

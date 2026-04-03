@@ -16,20 +16,22 @@ private:
 
 
 public:
-	LightSystem(ArenaRegistry* registry, uint16_t sceneIndex) :
+	LightSystem(ArenaRegistry* registry, const uint16_t sceneIndex) :
 		m_sceneIndex{ sceneIndex }, m_reg{ registry } {}
 
 	LightComponent& registerLight(const LightComponent& light, entt::entity entity);
 
 	template<typename GO, typename... LightInfo>
 		requires (std::derived_from<GO, GameObject> || std::same_as<GO, void>)
-	LightComponent& createNewLight(GO* goParent, const LightType type, const LightInfo&&... args) {
-		switch (type) {
-			case LightType::Directional:
-			default: {
-				auto newLight =
-			}
-		}
+	LightComponent& createNewLight(GO* goParent, const GameObject* parent = nullptr, const LightInfo&&... args) {
+
+		Engine::getInstance()
+
+		auto newLight = LightComponent{std::forward<LightInfo>(args)...};
+		m_reg->emplace<LightComponent>()
+
+
+		return newLight;
 	}
 
 

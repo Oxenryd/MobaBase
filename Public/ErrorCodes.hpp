@@ -23,6 +23,13 @@ enum class ErrorCode : uint32_t
 	FILE_READ_ERROR						= 5001,
 
 	// GRAPHICS
+
+	// Context
+	CONTEXT_NULL						= 8000,
+
+	// Editor
+	EDITOR_NOT_IMPLEMENTED				= 9000,
+
 	// Shaders
 	SHADER_COMPILE_FAILED				= 10000,
 	SHADER_COULD_NOT_READ_FILE			= 10001,
@@ -67,7 +74,7 @@ enum class ErrorCode : uint32_t
 	GLFW_FAILED_WND_CREATION			= 70003,
 
 	// Gameobjects/Transforms
-	TRANSFORM_MESH_ORPHANED		= 80000
+	TRANSFORM_MESH_ORPHANED				= 80000
 };
 
 #endif

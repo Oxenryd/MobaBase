@@ -2122,7 +2122,7 @@ public:
 		instanceCreateInfo.ppEnabledExtensionNames = extensions;
 		Vk_CHECK(vkResult, vkCreateInstance(&instanceCreateInfo, nullptr, &m_vkInstance));
 
-		LOGLINE_IND(LogType::Success, LogMod::Vulkan, "VkInstance created.", -1);
+		LOGLINE_IND(LogType::Success, LogMod::Vulkan, "Done.", -1);
 		return VK_SUCCESS;
 	}
 #ifndef BUILD_GLFW
@@ -2401,7 +2401,7 @@ public:
 		if (surfaceCaps.currentExtent.width != 0xFFFFFFFF)
 			swapchainExtent = { surfaceCaps.currentExtent.width, surfaceCaps.currentExtent.height };
 		else
-			swapchainExtent = { m_windowContext->width, m_windowContext->height };
+			swapchainExtent = { m_windowContext->width(), m_windowContext->height() };
 
 		// Swapchain create info
 		VkSwapchainCreateInfoKHR swapchainCreateInfo = {};

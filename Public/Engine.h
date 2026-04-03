@@ -10,24 +10,50 @@
 #endif
 
 
-#include "Format_fixes.hpp"
-#include "VulkanContext.hpp"
+//#include "Format_fixes.hpp"
+//#include "VulkanContext.hpp"
 
 #include <cstdint>
-#include <list>
 #include <algorithm>
+#include <set>
+#include <memory>
 
-#include "WindowContext.h"
-#include "InputManager.hpp"
-#include "Debug.hpp"
-#include "Delegate.hpp"
-#include "ArenaAllocator.hpp"
-#include "TimerSystem.h"
-#include "RenderManager.h"
-#include "Scene.h"
-#include "GlobalSystem.hpp"
-#include "MRandom.hpp"
-#include "MWork.hpp"
+#include "Concepts.h"
+#include "GlobalMacros.h"
+#include "MJob.hpp"
+#include "ErrorCodes.hpp"
+
+//#include "ArenaAllocator.hpp"
+//#include "GlobalSystem.hpp"
+//#include "TimerSystem.h"
+
+
+//#include "WindowContext.h"
+//#include "InputManager.hpp"
+//#include "Debug.hpp"
+//#include "Delegate.hpp"
+
+
+//#include "RenderManager.h"
+//#include "Scene.h"
+
+//#include "MRandom.hpp"
+//#include "MWork.hpp"
+
+
+// Forwards
+enum class SceneTransitionMode : uint8_t;
+class RenderManager;
+class WindowContext;
+class InputManager;
+class VulkanContext;
+class SceneBase;
+class Camera;
+class HeapArena;
+class FrameArena;
+class GlobalSystem;
+class TimerSystem;
+class Timer;
 
 
 constexpr double			DEFAULT_DELTATIME_JITTER_SETTING = 0.002;
@@ -81,7 +107,21 @@ class Engine
 {
 	static inline Engine* s_instance = nullptr;
 
-	HeapArena m_baseArena;
+	// Base Arenas
+	HeapArena* m_baseArena;
+	FrameArena* m_jobsArena;
+
+	// Context
+	std::unique_ptr<WindowContext> m_wnd;
+
+	// Base Systems
+	TimerSystem* m_baseTimers;
+	Timer* m_fpsCountTimer;
+	InputManager* m_inputMan = nullptr;
+	RenderManager* m_renderMan = nullptr;
+	VulkanContext* m_vkCtx = nullptr;
+	GlobalSystem* m_globalSystem;
+
 	std::string m_appName;
 	std::vector<SceneBase*> m_scenes;
 	std::set<uint32_t> m_activeSceneIndices;
@@ -93,7 +133,7 @@ class Engine
 	uint32_t m_framesSinceLastFpsRead{};
 	EngineStatus m_status = EngineStatus::Stopped;
 	bool m_sceneTransitionRequested = false;
-	SceneTransitionMode m_sceneTransitMode = SceneTransitionMode::WaitForDone;
+	SceneTransitionMode m_sceneTransitMode;
 	double m_lastReadFps{};
 	float m_baseCosF{};
 	float m_baseSinF{};
@@ -104,41 +144,36 @@ class Engine
 	uint32_t m_framesToTrace = 3;
 	uint32_t m_framesTraced = UINT32_INVALID;
 	bool m_pendingTrace = false;
-	
+	ErrorCode m_currentEC;
 	size_t m_totalFrames = 0;
 	double m_totalTime = 0.0;
 	std::chrono::steady_clock::time_point m_lastUpdateTime;
 	CamIndex m_mainCamIndex{ UINT16_INVALID, UINT32_INVALID };
-
 
 	INLINE double _tickDt();
 	INLINE void _updateEarly(double dt);
 	INLINE void _updateLate(double dt);
 	INLINE void _updateFixed();
 	INLINE void _run();
-	INLINE ErrorCode _initShaderManager();
-	INLINE ErrorCode _initInputManager();
-	INLINE ErrorCode _initGraphics();
+	INLINE ErrorCode _init(size_t heapSize = 256_MB, bool editor = false);
+	INLINE ErrorCode _initVulkan();
+	INLINE ErrorCode _initRendering();
 	INLINE ErrorCode _initBaseShaders() const;
-	INLINE ErrorCode _initBaseCallbacks();
-	INLINE ErrorCode _initJobSystem();
+	INLINE ErrorCode _initArenas(size_t heapSize);
+	INLINE ErrorCode _initBaseSystems();
 
-	// Base Systems
-	RenderManager* m_renderMan = nullptr;
-	WindowContext* m_wnd = nullptr;
-	InputManager* m_inputMan = nullptr;
-	VulkanContext* m_vkCtx = nullptr;
-	FrameArena* m_workArena = nullptr;
-
-
-	GlobalSystem m_globalSystem;
-
-	TimerSystem m_baseTimers;
-	Timer m_fpsCountTimer;
 
 public:
 	~Engine();
-	Engine(const char* appName, size_t heapSize);
+	Engine() = delete;
+	Engine(const Engine&) = delete;
+	Engine& operator=(const Engine&) = delete;
+	Engine& operator=(Engine&&) = delete;
+	explicit Engine(
+		std::unique_ptr<WindowContext> wndCtx,
+		const std::string& appName,
+		size_t heapSize = 256_MB,
+		bool editor = false);
 	
 	Camera* mainCamera() const;
 
@@ -164,29 +199,13 @@ public:
 		return m_scenes[index];
 	}
 
-	INLINE ErrorCode registerActiveScene(SceneBase* const scene) {
-		const auto it = m_activeSceneIndices.find({ scene->m_sceneIndex });
-		if (it != m_activeSceneIndices.end()) {
-			return ErrorCode::SCENE_ALREADY_ACTIVE;
-		}
-		m_activeSceneIndices.insert({ scene->m_sceneIndex });
-		return ErrorCode::OK;
-	}
-	INLINE ErrorCode unregisterActiveScene(SceneBase* const scene) {
-		const auto it = m_activeSceneIndices.find({ scene->m_sceneIndex });
-		if (it == m_activeSceneIndices.end()) {
-			return ErrorCode::SCENE_UNTRACKED_SCENE_REFERENCE;
-		}
-		m_activeSceneIndices.erase(scene->m_sceneIndex);
-		return ErrorCode::OK;
-	}
-	INLINE ArenaRegistry& getSceneRegistry(const SceneBase* const scene) const {
-		return m_scenes[scene->m_sceneIndex]->registry();
-	}
+	ErrorCode registerActiveScene(SceneBase* const scene);
+	INLINE ErrorCode unregisterActiveScene(SceneBase* const scene);
+	INLINE ArenaRegistry& getSceneRegistry(const SceneBase* const scene) const;
 
 	INLINE void armFrameTrace() { m_pendingTrace = true; }
-	INLINE GlobalSystem& getGlobalSystem() { return m_globalSystem; }
-	INLINE HeapArena& baseArena() { return m_baseArena; }
+	INLINE GlobalSystem& getGlobalSystem() { return *m_globalSystem; }
+	INLINE HeapArena& baseArena() { return *m_baseArena; }
 	INLINE double deltaTime() const { return m_updateDeltaTime; }
 	INLINE double fixedDeltaTime() const { return m_targetFixedDeltaTime; }
 	INLINE double totalTime() const { return m_totalTime; }
@@ -217,10 +236,10 @@ public:
 	}
 
 	void setMainCamera(uint16_t sceneIndex, uint32_t camIndex);
-	ErrorCode init(WindowContext* wndCtx = nullptr);
-	INLINE WindowContext* getWndSurface() const { return m_wnd; }
+	INLINE WindowContext* getWindowContext() const { return m_wnd.get(); }
 	INLINE InputManager* getInputManager() const { return m_inputMan; }
 	INLINE VulkanContext* getVulkanContext() const { return m_vkCtx; }
+	INLINE ErrorCode getCurrentError() const { return m_currentEC; }
 
 	static Engine* getInstance() { return s_instance; }
 };

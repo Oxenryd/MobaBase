@@ -2,47 +2,144 @@
 #include "RenderManager.h"
 #include "GameObjectSystem.hpp"
 #include "Profiler.hpp"
+#include "MJob.hpp"
+#include "Scene.h"
+#include "VulkanContext.hpp"
+#include "InputManager.hpp"
+#include "Timer.h"
+#include "TimerSystem.h"
+#include "ArenaAllocator.hpp"
+#include "GlobalSystem.hpp"
 
 #include <immintrin.h>
 
 thread_local std::unordered_map<uint16_t, size_t> SceneRenderSystem::s_threadIndex;
 
 
-Engine::Engine(const char* appName, const size_t heapSize) :
-	m_baseArena{heapSize},
-	m_appName{appName},
-	m_targetUpdateDeltaTime{ FPS_400 },
-	m_targetFixedDeltaTime{ FPS_60 },
-	m_lastReadFps{m_targetUpdateDeltaTime},
-	m_lastUpdateTime{ std::chrono::steady_clock::now() },
-	m_baseTimers{ 1 },
-	m_fpsCountTimer{ m_baseTimers.createTimer(true, 1.0) }
- {
-	assert(s_instance == nullptr && "THERE CAN BE ONLY ONE!");
+Engine::Engine(
+	std::unique_ptr<WindowContext> wndCtx,
+	const std::string& appName,
+	const size_t heapSize,
+	const bool editor) :
+		m_appName{appName},
+		m_targetUpdateDeltaTime{ FPS_400 },
+		m_targetFixedDeltaTime{ FPS_60 },
+		m_sceneTransitMode{ SceneTransitionMode::WaitForDone },
+		m_lastReadFps{ m_targetUpdateDeltaTime },
+		m_currentEC{ErrorCode::OK},
+		m_lastUpdateTime{ std::chrono::steady_clock::now() },
+		m_wnd{std::move(wndCtx)}
+{
+	LOGLINE(LogType::Info, LogMod::Engine, "Initializing Engine... ");
+
+	if (s_instance)
+		throw std::runtime_error("Engine Singleton instance already present.");
 
 	s_instance = this;
 
-	//m_wnd = m_baseArena.construct<WindowContext>();
-	
+	if (!m_wnd.get())
+		throw std::runtime_error("Window context is null.");
 
-	m_baseTimers.m_incOnTimes[m_fpsCountTimer.m_timerIndex].subscribe([this]()
+	m_currentEC = _init(heapSize, editor);
+}
+
+ErrorCode Engine::_init(const size_t heapSize, const bool editor) {
+
+	ErrorCode EC{};
+
+	if (editor)
+		return ErrorCode::EDITOR_NOT_IMPLEMENTED;
+
+	EC_CHECK(EC, _initArenas(heapSize));
+	EC_CHECK(EC, _initBaseSystems());
+	EC_CHECK(EC, _initVulkan());
+	EC_CHECK(EC, _initRendering());
+	EC_CHECK(EC, _initBaseShaders());
+
+	return ErrorCode::OK;
+}
+
+ErrorCode Engine::_initArenas(const size_t heapSize) {
+
+	LOGLINE_IND(LogType::Info, LogMod::Memory, "Creating base arenas... ", 1);
+	m_baseArena = new HeapArena{heapSize};
+	m_jobsArena = new FrameArena{ 32_MB };
+	LOGLINE_IND(LogType::Success, LogMod::Memory, "Done.", -1);
+	return ErrorCode::OK;
+}
+
+ErrorCode Engine::_initRendering() {
+
+	LOGLINE_IND(LogType::Info, LogMod::Rendering, "Initializing RenderManager... ", 1);
+	m_renderMan = m_baseArena->construct<RenderManager>(m_vkCtx, 128_MB );
+#ifdef SHADER_HOTRELOAD
+	LOGLINE(LogType::Info, LogMod::Rendering, "Shader HotReload is ON.");
+	m_renderMan->m_hotreloadTimer = m_baseArena->construct<Timer>(m_baseTimers->createTimer(true, 1.5) };
+		m_baseTimers.m_incOnTimes[m_renderMan->m_hotreloadTimer->m_timerIndex].subscribe([this]()
+								{
+									m_renderMan->hotReload();
+								});
+
+m_renderMan->onShaderHotReloaded.subscribe([this](void*) {
+this->getVulkanContext()->resetPipeline(0,
+					 this->m_renderMan->vertexShaders()[0],
+					 this->m_renderMan->pixelShaders()[0]);
+													  });
+#else
+	LOGLINE(LogType::Info, LogMod::Rendering, "Shader HotReload is OFF.");
+#endif
+	RenderManager::s_instance = m_renderMan;
+	LOGLINE_IND(LogType::Success, LogMod::Rendering, "Done.", -1);
+
+	return ErrorCode::OK;
+}
+
+ErrorCode Engine::_initBaseSystems() {
+	LOG_BLANK
+	LOGLINE_IND(LogType::Info, LogMod::Engine, "Setting up base systems... ", 1);
+	LOGLINE(LogType::Info, LogMod::Engine, "Timers... ");
+	m_baseTimers = m_baseArena->construct<TimerSystem>(1);
+	m_fpsCountTimer = m_baseArena->construct<Timer>(m_baseTimers->createTimer(true, 1.0));
+	m_baseTimers->m_incOnTimes[m_fpsCountTimer->m_timerIndex].subscribe([this]()
 		{
 			onReadFPS.notify(this, m_framesSinceLastFpsRead);
 			m_framesSinceLastFpsRead = 0;
 		});
+	LOGLINE(LogType::Success, LogMod::Engine, "Done.");
+
+
+	LOGLINE(LogType::Info, LogMod::Engine, "InputManager... ");
+	m_inputMan = m_baseArena->construct<InputManager>(m_wnd.get());
+	LOGLINE(LogType::Success, LogMod::Engine, "Done.");
+
+
+	LOGLINE(LogType::Info, LogMod::Engine, "Job system... ");
+	MJob::init(std::thread::hardware_concurrency(), WORK_QUEUE_CAP, m_jobsArena);
+	LOGLINE(LogType::Success, LogMod::Engine, "Done.");
+
+	LOGLINE(LogType::Info, LogMod::Engine, "Global object system... ");
+	m_globalSystem = m_baseArena->construct<GlobalSystem>();
+	LOGLINE(LogType::Success, LogMod::Engine, "Done.");
+
+
+	LOGLINE_IND(LogType::Success, LogMod::Engine, "Systems initialized.", -1);
+	return ErrorCode::OK;
+
 }
 
 Engine::~Engine() {
 
-	if (m_workArena) {
-		MWork::shutdown();
-		delete m_workArena;
-		m_workArena = nullptr;
+	if (m_jobsArena) {
+		MJob::shutdown();
+		delete m_jobsArena;
+		m_jobsArena = nullptr;
 	}
 
 	for (const auto* scene : m_scenes) {
 		delete scene;
 	}
+
+
 }
 
 
@@ -73,40 +170,34 @@ inline double Engine::_tickDt() {
 	return m_updateDeltaTime;
 }
 
-ErrorCode Engine::_initShaderManager() {
-	LOGLINE_IND(LogType::Info, LogMod::Rendering, "Setting up ShaderManager... ", 1);
 
-	m_renderMan = m_baseArena.construct<RenderManager>(RenderManager{m_vkCtx, 128_MB });
-
-
-
-#ifdef SHADER_HOTRELOAD
-		LOGLINE(LogType::Info, LogMod::Rendering, "Shader HotReload is ON.");
-		m_renderMan->m_hotreloadTimer = new Timer{ m_baseTimers.createTimer(true, 1.5) };
-		m_baseTimers.m_incOnTimes[m_renderMan->m_hotreloadTimer->m_timerIndex].subscribe([this]()
-								{
-									m_renderMan->hotReload();
-								});
-#else
-		LOGLINE(LogType::Info, LogMod::Rendering, "Shader HotReload is OFF.");
-#endif
-
-		RenderManager::s_instance = m_renderMan;
-		LOGLINE_IND(LogType::Success, LogMod::Rendering, "ShaderManager initialized.", -1);
-		return ErrorCode::OK;
-}
-
-ErrorCode Engine::_initInputManager() {
-	m_inputMan = baseArena().construct<InputManager>(m_wnd); //new InputManager(m_wnd);
-
+ErrorCode Engine::registerActiveScene(SceneBase* const scene) {
+	const auto it = m_activeSceneIndices.find({ scene->m_sceneIndex });
+	if (it != m_activeSceneIndices.end()) {
+		return ErrorCode::SCENE_ALREADY_ACTIVE;
+	}
+	m_activeSceneIndices.insert({ scene->m_sceneIndex });
 	return ErrorCode::OK;
 }
 
-ErrorCode Engine::_initGraphics() {
+ErrorCode Engine::unregisterActiveScene(SceneBase* const scene) {
+	const auto it = m_activeSceneIndices.find({ scene->m_sceneIndex });
+	if (it == m_activeSceneIndices.end()) {
+		return ErrorCode::SCENE_UNTRACKED_SCENE_REFERENCE;
+	}
+	m_activeSceneIndices.erase(scene->m_sceneIndex);
+	return ErrorCode::OK;
+}
+ArenaRegistry& Engine::getSceneRegistry(const SceneBase* const scene) const {
+	return m_scenes[scene->m_sceneIndex]->registry();
+}
+
+ErrorCode Engine::_initVulkan() {
 
 	// Create Vulkan Context
-	LOGLINE(LogType::Info, LogMod::Vulkan, "Creating Vulkan context... ");
-	m_vkCtx = m_baseArena.construct<VulkanContext>(); //new VulkanContext();
+	LOG_BLANK
+	LOGLINE_IND(LogType::Info, LogMod::Vulkan, "Creating Vulkan context... ", 1);
+	m_vkCtx = m_baseArena->construct<VulkanContext>();
 #ifdef IGPU_PRIO
 	VkPresentModeKHR presentMode = VK_PRESENT_MODE_FIFO_KHR;
 #else
@@ -122,7 +213,7 @@ ErrorCode Engine::_initGraphics() {
 
 #ifdef BUILD_GLFW
 
-	auto vk = m_vkCtx->initVulkan(m_wnd, presentMode, igpuPriority);
+	auto vk = m_vkCtx->initVulkan(m_wnd.get(), presentMode, igpuPriority);
 #else
 	auto vk = m_vkCtx->initVulkan(presentMode, nullptr, igpuPriority);
 #endif
@@ -130,7 +221,7 @@ ErrorCode Engine::_initGraphics() {
 		LOG(LogType::Error, "Failed. Code: " + std::to_string(static_cast<uint32_t>(vk)));
 		return static_cast<ErrorCode>(vk);
 	}
-	LOGLINE(LogType::Success, LogMod::Vulkan, "Vulkan init Complete.\n");
+	LOGLINE_IND(LogType::Success, LogMod::Vulkan, "Done.\n", -1);
 
 	return ErrorCode::OK;
 }
@@ -172,27 +263,6 @@ ErrorCode Engine::_initBaseShaders() const {
 	return ErrorCode::OK;
 }
 
-ErrorCode Engine::_initBaseCallbacks() {
-
-	// Shader Hotreloaded
-#ifdef SHADER_HOTRELOAD	
-	m_renderMan->onShaderHotReloaded.subscribe([this](void*) {
-		this->getVulkanContext()->resetPipeline(0,
-							 this->m_renderMan->vertexShaders()[0],
-							 this->m_renderMan->pixelShaders()[0]);
-															  });
-#endif
-	return ErrorCode::OK;
-}
-
-ErrorCode Engine::_initJobSystem() {
-
-	m_workArena = new FrameArena{ 32_MB };
-	MWork::init(std::thread::hardware_concurrency(), WORK_QUEUE_CAP, m_workArena);
-
-
-	return ErrorCode::OK;
-}
 
 
 void Engine::start() {
@@ -232,7 +302,7 @@ void Engine::start() {
 
 inline void Engine::_run() {
 
-	m_baseTimers.startTimer(m_fpsCountTimer);
+	m_baseTimers->startTimer(*m_fpsCountTimer);
 
 	while (m_status != EngineStatus::PendingStop && !glfwWindowShouldClose(m_vkCtx->window())) {
 
@@ -278,8 +348,8 @@ inline void Engine::_run() {
 		//Wait for last frames jobs	before resetting arena
 		{
 			PROFILE_SCOPE("MWork_WaitPoint_NextFrame");
-			MWork::waitAwaitPoint(MWork::JobAwaitPoint::StartNextFrame);
-			MWork::reset();
+			MJob::waitAwaitPoint(MJob::JobAwaitPoint::StartNextFrame);
+			MJob::reset();
 		}
 
 		{
@@ -296,7 +366,7 @@ inline void Engine::_run() {
 
 		{
 			PROFILE_SCOPE("Timers");
-			m_baseTimers.update(dt);
+			m_baseTimers->update(dt);
 		}
 
 		if (m_vkCtx) {
@@ -369,25 +439,7 @@ void Engine::setMainCamera(const uint16_t sceneIndex, const uint32_t camIndex) {
 	
 }
 
-ErrorCode Engine::init(WindowContext* wndCtx) {
 
-	if (wndCtx)
-		m_wnd = wndCtx;
-
-	ErrorCode EC{};
-	EC_CHECK(EC, _initGraphics());
-
-	EC_CHECK(EC, _initShaderManager());
-	EC_CHECK(EC, _initInputManager());
-	
-	EC_CHECK(EC, _initBaseShaders());
-	EC_CHECK(EC, _initBaseCallbacks());
-
-	EC_CHECK(EC, _initJobSystem());
-
-
-	return ErrorCode::OK;
-}
 
 inline void Engine::_updateEarly(double dt) {
 	PROFILE_SCOPE("EarlyUpdate");

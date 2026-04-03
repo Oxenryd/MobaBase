@@ -1,5 +1,6 @@
 #include "Camera.hpp"
 #include "Engine.h"
+#include "Scene.h"
 
 
 Camera* Camera::getCamera(uint16_t sceneIndex, uint32_t camIndex) {

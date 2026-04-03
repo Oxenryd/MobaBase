@@ -75,6 +75,7 @@ int __stdcall main(HINSTANCE hInstance, HINSTANCE instance, LPSTR str, int nCmdS
 
 #include "Engine.h"
 #include "WindowContext.h"
+#include "VulkanContext.hpp"
 #include "Templates.hpp"
 
 auto APP_NAME = "VulkanTest";
@@ -87,19 +88,16 @@ int main(int, char*)
 	// Setup logger
 	Log::init<DefaultTerminalLogger>();
 
-	// Create Engine
-	Engine engine{ APP_NAME, 256_MB };
-
 	// Create Window Context
-	WindowContext wndCtx{};
-	ErrorCode EC = WindowContext::create(APP_NAME, WINDOW_TITLE, WND_WIDTH, WND_HEIGHT, &wndCtx);
-	if (EC_FAILED(EC)) {
+	auto wndCtx = std::make_unique<WindowContext>(APP_NAME, WINDOW_TITLE, WND_WIDTH, WND_HEIGHT);
+	if (EC_FAILED(wndCtx->getCurrentError())) {
 		LOGLINE(LogType::Error, LogMod::Window, "Could not create Window Surface... ");
-		return static_cast<int>(EC);
+		return static_cast<int>(wndCtx->getCurrentError());
 	}
-	// Setup rest of engine
-	EC = engine.init(&wndCtx);
-	EC_RETURN_FAILED_INT(EC);
+
+	// Create engine
+	Engine engine{ std::move(wndCtx), APP_NAME };
+	EC_RETURN_FAILED_INT(engine.getCurrentError());
 
 	// Print information on title
 	engine.onReadFPS.subscribe( [&](const Engine* eng, const uint32_t fps)
@@ -107,7 +105,7 @@ int main(int, char*)
 			static std::string str{};
 			const uint32_t dCalls = eng->getVulkanContext()->lastDrawcallCount();
 			str = std::format("{} - FPS: {} - Draw Calls: {}", APP_NAME, fps, dCalls);
-			wndCtx.setWindowTitle(str);
+			eng->getWindowContext()->setWindowTitle(str);
 		});
 
 	// Start Engine

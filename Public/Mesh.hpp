@@ -113,6 +113,9 @@ public:
 	//void rigSubMeshTransforms();
 
 	BoundingVolume getBoundingVolume();
+
+
+	operator entt::entity() const {return m_entity;}
 };
 
 

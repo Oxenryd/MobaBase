@@ -1,5 +1,8 @@
 #include "Texture.hpp"
 #include "Engine.h"
+#include "RenderManager.h"
+#include "VulkanContext.hpp"
+
 #ifndef STB_IMAGE_WRITE_IMPLEMENTATION
 	#define STB_IMAGE_WRITE_IMPLEMENTATION
 #endif

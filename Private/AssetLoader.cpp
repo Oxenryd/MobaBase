@@ -1,5 +1,8 @@
 #include "AssetLoader.h"
 #include "Engine.h"
+#include "RenderManager.h"
+#include "VulkanContext.hpp"
+
 #include <format>
 
 #ifndef STB_IMAGE_IMPLEMENTATION

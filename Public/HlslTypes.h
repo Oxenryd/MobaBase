@@ -26,7 +26,7 @@ struct ShapePush
 };
 
 
-INLINE auto operator|(LightFlags a, LightFlags b) {
+INLINE auto operator| (LightFlags a, LightFlags b) {
 	return static_cast<uint32_t>(a) | static_cast<uint32_t>(b);
 }
 
@@ -184,18 +184,12 @@ namespace LightFactory
 	{
 		LightComponent L{};
 		L.type = LightType::Directional;
-		auto normDir = glm::normalize(dir);
-		L.direction[0] = normDir[0];
-		L.direction[1] = normDir[1];
-		L.direction[2] = normDir[2];
-		L.position[0] = position[0];
-		L.position[1] = position[1];
-		L.position[2] = position[2];
+		const auto normDir = glm::normalize(dir);
+		L.direction = normDir;
+		L.position = position;
 		L.radius = 0.0f;       // Infinite range
 		L.inverseRange = 0.0f;
-		L.color[0] = color[0];
-		L.color[1] = color[1];
-		L.color[2] = color[2];
+		L.color = color;
 		L.intensity = intensity;
 		return L;
 	}
