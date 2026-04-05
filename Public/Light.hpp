@@ -1,9 +1,11 @@
 #ifndef LIGHT_HPP
 #define LIGHT_HPP
 
+#include <glm/glm.hpp>
+
 #include "HlslTypes.h"
 #include "ArenaAllocator.hpp"
-#include <glm/glm.hpp>
+
 
 enum class LightType : uint32_t
 {

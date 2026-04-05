@@ -12,6 +12,7 @@
 #include "BasicTypes.hpp"
 #include "Concepts.h"
 
+class Engine;
 class SceneRenderSystem;
 class TransformSystem;
 class BoundingSystem;
@@ -35,7 +36,7 @@ enum class SceneTransitionMode : uint8_t
 	
 };
 
-class Engine;
+
 class SceneBase
 {
     friend Engine;
@@ -54,17 +55,14 @@ protected:
     GameObjectSystem* m_gameObjectSys;
     BVHSystem* m_bvhSys;
     LightSystem* m_lightSys;
-    
-    
-    
-    
+
     //template<typename T>
     //void _registerComponent() {
     //    m_reg.storage<T>(ArenaAllocator<T>{&m_arena}).reserve(ECS_BASE_COMPONENTS_RESERVATION_COUNT);
     //}
 
 public:
-    virtual ~SceneBase() = default;
+    ~SceneBase() {};
     SceneBase(const SceneBase&) = delete;
     SceneBase& operator=(const SceneBase&) = delete;
     SceneBase(SceneBase&&) = delete;
@@ -100,39 +98,39 @@ public:
     TraversalResult broadPhaseResults;
 };
 
+
 template<typename Derived>
 class Scene : public SceneBase
 {
 public:
-    ~Scene() override {}
+    ~Scene() {
+        static_assert(ConceptChecks::isValidSceneConcept<Derived>(), "Invalid SceneBase");
+    }
     Scene() = delete;
     Scene(const size_t arenaSize, const uint16_t index) : SceneBase(arenaSize, index) {}
-    //static SceneBase* defaultCreation(void* arg) {
-    //    return new Derived{};
-    //}
 
     void loadDispatch() override {
-        if constexpr (requires (Derived & d) { d.load(); }) {
+        if constexpr (requires (Derived& d) { d.load(); }) {
             static_cast<Derived&>(*this).m_firstFrame = true;
             static_cast<Derived&>(*this).load();
         }
     }
 
     void unloadDispatch() override {
-        if constexpr (requires (Derived & d) { d.unload(); }) {
+        if constexpr (requires (Derived& d) { d.unload(); }) {
             static_cast<Derived&>(*this).unload();
         }
     }
 
     void startDispatch() override {
         m_firstFrame = false;
-        if constexpr (requires (Derived & d) { d.start(); }) {
+        if constexpr (requires (Derived& d) { d.start(); }) {
             static_cast<Derived&>(*this).start();
         }
     }
 
     void updateDispatch(double dt) override {          
-        if constexpr (requires (Derived & d) { d.update(dt); }) {
+        if constexpr (requires (Derived& d) { d.update(dt); }) {
             static_cast<Derived&>(*this).update(dt);
             static_cast<Derived&>(*this).m_firstFrame = false;
         }
@@ -149,13 +147,13 @@ public:
     }
 
     void fixedUpdateDispatch() override {
-        if constexpr (requires (Derived & d) { d.fixedUpdate(); }) {
+        if constexpr (requires (Derived& d) { d.fixedUpdate(); }) {
             static_cast<Derived&>(*this).fixedUpdate();
         }
     }
 
     SceneTransitionStatus transitioningDispatch() override {
-        if constexpr (requires (Derived & d) {
+        if constexpr (requires (Derived& d) {
             { d.transitioning() } -> std::convertible_to<SceneTransitionStatus>;
         }) {
             return static_cast<Derived&>(*this).transitioning();
@@ -165,70 +163,17 @@ public:
     }
 };
 
+
 class DefaultScene final : public Scene<DefaultScene>
 {
 public:
     DefaultScene(const size_t arenaSize, const uint16_t index)
         : Scene{ arenaSize, index } {}
-    static SceneBase* createDefault(const size_t arenaSize, const uint16_t index, void*) {
+
+    static SceneBase* create(const size_t arenaSize, const uint16_t index, void*) {
         return new DefaultScene{ arenaSize, index};
     }
 };
-
-
-//class SceneHandle
-//{
-//public:
-//    using UpdateFn = void(*)(void*, double);
-//    using LateUpdateFn = void(*)(void*, double);
-//    using TransitioningFn = SceneTransitionStatus(*)(void*);
-//    using DestroyFn = void(*)(void*);
-//
-//    SceneHandle() = default;
-//
-//    SceneHandle(
-//        void* instance,
-//        UpdateFn updateFn,
-//        LateUpdateFn lateUpdateFn,
-//        TransitioningFn transitioningFn,
-//        DestroyFn destroyFn
-//    ) :
-//        m_instance(instance),
-//        m_update(updateFn),
-//        m_lateUpdate(lateUpdateFn),
-//        m_transitioning(transitioningFn),
-//        m_destroy(destroyFn) {}
-//
-//    // Dispatcher methods
-//    void update(double dt) const {
-//        if (m_update) m_update(m_instance, dt);
-//    }
-//
-//    void lateUpdate(double dt) const {
-//        if (m_lateUpdate) m_lateUpdate(m_instance, dt);
-//    }
-//
-//    SceneTransitionStatus transitioning() const {
-//        return m_transitioning ? m_transitioning(m_instance)
-//            : SceneTransitionStatus::Done;
-//    }
-//
-//    void destroy() {
-//        if (m_destroy) {
-//            m_destroy(m_instance);
-//            m_instance = nullptr;
-//        }
-//    }
-//
-//    void* raw() const { return m_instance; }
-//
-//private:
-//    void* m_instance = nullptr;
-//    UpdateFn m_update = nullptr;
-//    LateUpdateFn m_lateUpdate = nullptr;
-//    TransitioningFn m_transitioning = nullptr;
-//    DestroyFn m_destroy = nullptr;
-//};
 
 
 #endif

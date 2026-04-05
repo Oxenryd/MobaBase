@@ -13,7 +13,6 @@
 
 class GameScene final : public Scene<GameScene>
 {
-private:
     float m_time = 0;
     uint64_t m_drawHash{ 0 };
     GameObject m_go1, m_go2, m_go3;
@@ -27,7 +26,7 @@ private:
 public:
     GameScene(const size_t arenaSize, const uint16_t sceneIndex)
         : Scene<GameScene>{ arenaSize, sceneIndex} {}
-    static SceneBase* createDefault(const size_t arenaSize, const uint16_t index, void* arg) {
+    static SceneBase* create(const size_t arenaSize, const uint16_t index, void* arg) {
         return new GameScene{ arenaSize, index};
     }
 

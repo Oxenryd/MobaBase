@@ -9,11 +9,11 @@
 class SceneBase;
 
 template<typename T>
-concept SceneConcept = requires(T t, void* arg, double dt, uint16_t index, size_t size) {
+concept SceneConcept = requires(T t, const size_t size, const uint16_t index, void* arg) {
     { std::is_base_of_v<SceneBase, T> };
-    { T::createDefault(size, index, arg) } -> std::convertible_to<SceneBase*>;
+    //{ T::create() } -> std::same_as<SceneBase*>;
+    { T::create(size, index, arg) } -> std::same_as<SceneBase*>;
 };
-
 
 class GameObject;
 template<typename T>
@@ -34,4 +34,22 @@ concept IsGlmVecCompatible = requires
 {
     { std::is_convertible_v<glm::vec<N, float>, T> };
 };
+
+
+
+namespace ConceptChecks
+{
+    template<typename T>
+    static constexpr bool isValidSceneConcept() {
+        if constexpr (
+            requires (const size_t s, const uint16_t i, void* a)
+        {
+            { T::create(s, i, a) } -> std::same_as<SceneBase*>;
+        })
+            return true;
+
+        return false;
+    }
+}
+
 #endif

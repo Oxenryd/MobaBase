@@ -11,9 +11,6 @@
 #include "BoundingSystem.h"
 #include <entt/entt.hpp>
 
-
-
-
 SceneBase::SceneBase(const size_t arenaSize, const uint16_t sceneIndex) :
         m_arena{ new Arena{arenaSize} },
         m_sceneIndex{sceneIndex},
@@ -30,7 +27,6 @@ SceneBase::SceneBase(const size_t arenaSize, const uint16_t sceneIndex) :
     m_reg->storage<BoundingVolumeComponent>().reserve(ECS_BASE_COMPONENTS_RESERVATION_COUNT);
     m_reg->storage<MeshFilterComponent>().reserve(ECS_BASE_COMPONENTS_RESERVATION_COUNT);
     m_reg->group<TransformComponent, BoundingVolumeComponent, EnabledTag>();
-    // m_reg.storage<SubMeshComponent>().reserve(ECS_BASE_COMPONENTS_RESERVATION_COUNT);
 
     cullResults.visibleEntities.reserve(1024);
     broadPhaseResults.collisionPairs.reserve(1024);

@@ -110,8 +110,7 @@ private:
 		return CON_COL_FG[static_cast<uint8_t>(color)];
 	}
 public:
-	virtual ~DefaultTerminalLogger() override {}
-	virtual
+	~DefaultTerminalLogger() override {}
 	void logLineImpl(const LogType& type, const LogMod& module, const std::string_view& msg, const int8_t indent) override {
 		
 		if (indent < 0) {
@@ -174,6 +173,9 @@ public:
 		std::cout << colStr << msg << _col(TermColor::Reset) << std::flush;
 	}
 	void logEmptyImpl() override {
+#ifndef LOGGING
+		return;
+#endif
 		std::cout << '\n' << std::flush;
 	}
 };

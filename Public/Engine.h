@@ -192,10 +192,10 @@ public:
 	Event<Engine*, uint32_t> onReadFPS;
 
 	template <SceneConcept T>	
-	INLINE SceneBase* createNewScene(size_t arenaSize, void* argument) {
+	INLINE SceneBase* createScene(size_t arenaSize, void* argument) {
 		uint16_t index = m_newSceneIndex++;
 		m_scenes.resize(std::max(static_cast<size_t>(index), m_scenes.size() + 1));
-		m_scenes[index] = T::createDefault(arenaSize, index, argument);
+		m_scenes[index] = T::create(arenaSize, index, argument);
 		return m_scenes[index];
 	}
 

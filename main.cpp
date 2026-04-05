@@ -109,7 +109,7 @@ int main(int, char*)
 		});
 
 	// Start Engine
-	engine.createNewScene<GameScene>(512_MB, nullptr);
+	engine.createScene<GameScene>(512_MB, nullptr);
 	engine.setTargetUpdateDeltaTime(0.0);
 	engine.start();
 

@@ -279,7 +279,7 @@ void Engine::start() {
 	// No scenes, create default and run.
 	if (m_scenes.empty()) {
 		LOGLINE(LogType::Remark, LogMod::Engine, "Creating a default scene... ");
-		[[maybe_unused]] auto* scenePtr = this->createNewScene<DefaultScene>(512_MB, nullptr);
+		[[maybe_unused]] auto* scenePtr = this->createScene<DefaultScene>(512_MB, nullptr);
 		m_activeSceneIndices.insert(0);
 		LOGLINE(LogType::Remark, LogMod::Engine, "Scene created.");
 	} else if (m_activeSceneIndices.empty())
