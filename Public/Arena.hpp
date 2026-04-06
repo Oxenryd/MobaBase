@@ -360,7 +360,7 @@ public:
         m_heap = memProvider;
         //m_memory = memProvider ? reinterpret_cast<uint8_t*>(m_heap->allocate(size)) : new uint8_t[size];
         m_memory = memProvider 
-            ? static_cast<uint8_t*>(m_heap->allocate(size))
+            ? static_cast<uint8_t*>(m_heap->allocate(size, 64))
             : static_cast<uint8_t*>(operator new[](size, std::align_val_t{64}));
         m_arenaId = memProvider ? m_heap->registerArena() : UINT32_INVALID;
         LOGLINE(LogType::Success, LogMod::Memory, "Created Arena, Addr: " + std::to_string(reinterpret_cast<size_t>(m_memory)) +

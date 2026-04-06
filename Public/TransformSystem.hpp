@@ -68,7 +68,7 @@ class TransformSystem final : public SystemECS_ModelTransformsProvider
 			glm::vec3 positions[4];
 			glm::quat rotations[4];
 			glm::vec3 scales[4];
-			glm::mat4 local_matrices[4];
+			alignas(32) glm::mat4 local_matrices[4];
 
 			// Gather data for 4 entities
 			for (int j = 0; j < 4; ++j) {
@@ -95,9 +95,15 @@ class TransformSystem final : public SystemECS_ModelTransformsProvider
 				if (p != entt::null) {
 					const auto& pt = this_->m_groupPtr->get<TransformComponent>(p);
 					if (objectState_is_dirty(pt.state.value())) t1.state.setByEnum(ObjectState::ParentMovedThisFrame);
-					auto& mtw = this_->m_modelTransforms[t1.dataIndex].modelToWorld;
-					this_->m_modelTransforms[t1.dataIndex] = MMath::matrix_multiply_avx2(
-						mtw, local_matrices[j]);
+
+					//auto& mtw = this_->m_modelTransforms[t1.dataIndex].modelToWorld;
+					//this_->m_modelTransforms[t1.dataIndex] = MMath::matrix_multiply_avx2(
+					//	mtw, local_matrices[j]);
+
+					this_->m_modelTransforms[t1.dataIndex].modelToWorld = MMath::matrix_multiply_avx2(
+						this_->m_modelTransforms[pt.dataIndex].modelToWorld, local_matrices[j]);
+
+
 				} else {
 					this_->m_modelTransforms[t1.dataIndex] = local_matrices[j];
 				}

@@ -43,7 +43,7 @@ public:
 
         // not complete
         m_go1 = gameObjectSystem().createGameObject<GameObject>("MerryGoRound");
-        size_t numOfObjects = 3;//4096 * 64;
+        size_t numOfObjects = 4096 * 64;
         //m_goList.reserve(numOfObjects);
         auto const step = MMath::fTAU / numOfObjects;
         const std::string pathObject = std::format("{}{}", ASSETS_DIR, "Cube/cube.obj");
@@ -233,8 +233,8 @@ public:
 
         // Merry-go-round stress test update
         auto merryTrans = Transform{ m_reg, m_go1 };
-        merryTrans.rotate(glm::vec3{ 0.0f, 0.5f, 1.0f } * Timing::deltaTimeF());
-        merryTrans.modifyPosition() = glm::vec3(sin * 5.0f, 0.0f, Engine::cosF() * 5.0f);
+        merryTrans.rotate(glm::vec3{ 0.0f, 0.0f, 1.0f } * Timing::deltaTimeF());
+        //merryTrans.modifyPosition() = glm::vec3(sin * 5.0f, 0.0f, Engine::cosF() * 5.0f);
         auto const children = merryTrans.getChildrenEntities();
         auto const view = m_reg->view<TransformComponent>();
         {
@@ -246,13 +246,13 @@ public:
                                 auto& rotation = transformSystem().rotations()[transComp.dataIndex];
                                 Transform::rotateLocal(rotation, glm::vec3{ 0.0f, 1.0f, 0.0f } * Timing::deltaTimeF());
 
-                                //auto cos = std::cos(m_radSpeeds[i] * m_time) * m_startScales[i] * 0.66f;
-                                //auto curScale = m_startScales[i] + cos;
-                                //auto& scale = transformSystem().scales()[transComp.dataIndex];
-                                //scale = glm::vec3{ curScale };
+                                auto cos = std::cos(m_radSpeeds[i] * m_time) * m_startScales[i] * 0.66f;
+                                auto curScale = m_startScales[i] + cos;
+                                auto& scale = transformSystem().scales()[transComp.dataIndex];
+                                scale = glm::vec3{ curScale };
 
                                 transComp.state.setByEnum(ObjectState::DirtyTransform);
-                                //transComp.state.setByEnum(ObjectState::ScaleDirty);
+                                transComp.state.setByEnum(ObjectState::ScaleDirty);
                                 transComp.state.setByEnum(ObjectState::RotationDirty);
                             });
         }
