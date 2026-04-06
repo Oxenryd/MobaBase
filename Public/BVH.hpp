@@ -173,8 +173,8 @@ class DualBVH
         bool anyIntersect = false;
 
         for (int i = 0; i < 6; ++i) {
-            const auto n = xyz(F[i].raw);
-            const float d = F[i].raw.w;
+            const auto n = F[i].normal();//xyz(F[i].raw);
+            const float d = F[i].d();//F[i].raw.w;
             const float s = glm::dot(n, c) + d;
             const float r = glm::dot(glm::abs(n), e);
             if (s + r < 0.0f)
@@ -195,8 +195,8 @@ class DualBVH
         bool anyIntersect = false;
 
         for (int i = 0; i < 6; ++i) {
-            const auto n = xyz(F[i].raw);
-            const float d = F[i].raw.w;
+            const auto n = F[i].normal();//xyz(F[i].raw);
+            const float d = F[i].d();//F[i].raw.w;
             const float s = glm::dot(n, c) + d;
             const float r = glm::dot(glm::abs(n), e);
             if (s + r < 0.0f) return { 0, /*Outside*/0 };
