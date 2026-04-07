@@ -145,11 +145,10 @@ struct BVHPrimitive
 
 struct Frustum;
 
-// Thread-safe BVH with dual-purpose design
-
-
 class DualBVH
 {
+    static constexpr size_t BVH_BUFFERS = 2;
+
     struct TestResult {
         TestResult(const uint8_t mask, const uint8_t state) :
             mask{mask}, state{state} {}
@@ -212,15 +211,15 @@ class DualBVH
     INLINE void _tSafe_insertionSort(uint32_t* primitiveIds, uint32_t primCount, int bestAxis, uint8_t index);
     static constexpr unsigned int NUM_BUILD_THREADS = 6;
     static constexpr unsigned int NUM_RUN_THREADS = 16;
-    std::array<FrameArena*, NUM_RUN_THREADS + 1> cullArenas[2]{ {nullptr}, {nullptr} };
-    std::array<std::binary_semaphore*, NUM_RUN_THREADS> runSems[2]{ {nullptr}, {nullptr}  };
+    std::array<FrameArena*, NUM_RUN_THREADS + 1> cullArenas[BVH_BUFFERS]{ {nullptr}, {nullptr} };
+    std::array<std::binary_semaphore*, NUM_RUN_THREADS> runSems[BVH_BUFFERS]{ {nullptr}, {nullptr}  };
     std::atomic<TransformGroup*> m_groupPtr = nullptr;
     ArenaRegistry& m_reg;
 
 public:
-    std::array<std::vector<BVHNode>, 2> nodes;
-    std::array<std::vector<BVHPrimitive>, 2> primitives;
-    std::array<std::vector<uint32_t>, 2> primitiveIndices;  // Leaf nodes point into this
+    std::array<std::vector<BVHNode>, BVH_BUFFERS> nodes;
+    std::array<std::vector<BVHPrimitive>, BVH_BUFFERS> primitives;
+    std::array<std::vector<uint32_t>, BVH_BUFFERS> primitiveIndices;  // Leaf nodes point into this
 
     // Thread safety
     //mutable std::shared_mutex treeMutex;
@@ -229,12 +228,12 @@ public:
     //std::atomic<uint32_t> dirtyCount{ 0 };
 
     // Entity to primitive mapping for fast lookups
-    std::array<std::unordered_map<entt::entity, uint32_t>, 2> entityToPrimitive;
+    std::array<std::unordered_map<entt::entity, uint32_t>, BVH_BUFFERS> entityToPrimitive;
 
-    std::array<std::atomic<uint32_t>, 2> rootIndex;
+    std::array<std::atomic<uint32_t>, BVH_BUFFERS> rootIndex;
     //std::array<uint32_t, 2> nodeCount;
-    std::atomic<uint32_t> nodeCount[2];
-    std::atomic<uint32_t> indicesCount[2];
+    std::atomic<uint32_t> nodeCount[BVH_BUFFERS];
+    std::atomic<uint32_t> indicesCount[BVH_BUFFERS];
                                      
     struct alignas(64) WorkerPkg
     {
@@ -270,7 +269,10 @@ public:
     std::array<std::atomic<bool>, NUM_BUILD_THREADS> workPkgCondition;
     std::array<std::binary_semaphore*, NUM_BUILD_THREADS> startSemas;
 
-    std::binary_semaphore primitivesLock[2] = { std::binary_semaphore{1}, std::binary_semaphore{1} };
+    //std::binary_semaphore primitivesLock[2] = { std::binary_semaphore{1}, std::binary_semaphore{1} };
+
+    std::atomic<uint8_t> bufferIdx{UINT8_INVALID};
+
     std::binary_semaphore primitivesStartSema{ 0 };
     //std::binary_semaphore primitivesLock{ 1 };
     std::thread* rebuildThreads = nullptr;
@@ -286,7 +288,7 @@ public:
     }
 
 
-    std::vector<entt::entity> alwaysVisible[2];
+    std::vector<entt::entity> alwaysVisible[BVH_BUFFERS];
 
     // Occlusion data
     struct OccluderData
@@ -324,33 +326,37 @@ public:
         float maxDepth;
     };
 
-    void setPendingUpdate(uint8_t& outIndex) {
+    void setPendingUpdate() {
         if (_threadDone.try_acquire()) {
             _frameArena->reset();
             nextThId.store(0, std::memory_order_release);
-            outIndex = _getIndexToUseThisFrame();
             _threadStart.release();
         }
     }
     bool hasValidHierarchy() const {
-        return _threadIndexToUse.load() != UINT8_INVALID && curFrameIndex != UINT8_INVALID;
+        return bufferIdx.load() != UINT8_INVALID && curFrameIndex != UINT8_INVALID;
     }
 
     BuildSettings settings{};
     using OccIndexCornerIndexDepthTuple = std::tuple<uint32_t, uint32_t, float>;
-    std::array<std::vector<OccIndexCornerIndexDepthTuple>, 2> occluderIndices;
-    std::array<std::vector<glm::vec3>, 2> occluderCorners;
+    std::array<std::vector<OccIndexCornerIndexDepthTuple>, BVH_BUFFERS> occluderIndices;
+    std::array<std::vector<glm::vec3>, BVH_BUFFERS> occluderCorners;
 
     //bool threadRunning() const { return _threadRunning; }
 
+    void waitForBVH_AnyReady() const {
+        while (bufferIdx.load() == UINT8_INVALID) {}
+    }
+
+    bool isAnyBVH_ready() const {
+        return bufferIdx.load() != UINT8_INVALID;
+    }
+
     uint8_t curFrameIndex = UINT8_INVALID;
-    //std::array<std::vector<TraversalNode>, 2> nodeStack;
     std::thread* rebuildThread;
-    std::atomic<uint8_t> _threadIndexToUse = UINT8_INVALID;
     std::binary_semaphore _threadStart{ 0 };
     std::binary_semaphore _threadDone{ 1 };
     Arena* _frameArena = nullptr;
-    //bool _threadRunning = true;
 
     // Building methods
     uint8_t _getIndexToUseThisFrame() const;
@@ -596,8 +602,8 @@ public:
         //, primitivesStartSema{ std::binary_semaphore{0}, std::binary_semaphore{0} },
         //primitivesLock{ std::binary_semaphore{1}, std::binary_semaphore{1} }
     {
-        for (size_t i = 0; i < 2; ++i) {
-            nodes[i].reserve(1024);  // Pre-allocate for better performance
+        for (size_t i = 0; i < BVH_BUFFERS; ++i) {
+            nodes[i].reserve(1024);
             primitives[i].reserve(512);
             occluderIndices[i].reserve(256);
             occluderCorners[i].reserve(1024);
@@ -633,11 +639,11 @@ public:
         cullArenas[0][NUM_RUN_THREADS] = new FrameArena{ 768_KB };  // what??
         cullArenas[1][NUM_RUN_THREADS] = new FrameArena{ 768_KB };
 
-        rebuildThreads = new std::thread{DualBVH::_updatePrimitives, this};
+        rebuildThreads = new std::thread{_updatePrimitives, this};
         //rebuildThreads[1] = new std::thread{ DualBVH::_updatePrimitives, this, 1u };
     }
 
-    void startRebuild(ArenaRegistry&) {
+    void startRebuild() {
 
         primitivesStartSema.release();
     }
@@ -659,7 +665,7 @@ public:
                                              const glm::vec3& camWorldForward,
                                              const float& camForwardPosDot,
                                              ArenaRegistry* registry,
-                                             OcclusionMethod method, uint8_t index);
+                                             OcclusionMethod method);
 
     TraversalResult broadPhaseCollision(uint8_t index) const;
 
@@ -753,8 +759,8 @@ public:
     //}
 
     // Thread-safe accessors
-    std::vector<BVHNode>& getCurrentNodes() { return nodes[_threadIndexToUse.load()]; }
-    uint32_t getNodeCount() const { return nodeCount[_threadIndexToUse.load()]; }
+    std::vector<BVHNode>& getCurrentNodes() { return nodes[bufferIdx.load()]; }
+    uint32_t getNodeCount() const { return nodeCount[bufferIdx.load()]; }
     uint32_t getPrimitiveCount(const uint8_t index) const { return static_cast<uint32_t>(primitives[index].size()); }
     bool isEmpty(const uint8_t index) const { return primitives[index].empty(); }
 
@@ -841,7 +847,7 @@ class BVHSystem
     DualBVH m_bvh;
     //uint32_t lastUpdateFrame = UINT32_INVALID;
     //const float counter = 4333424.0f;
-    uint8_t currentIndex = UINT8_INVALID;
+    //uint8_t currentIndex = UINT8_INVALID;
 
 public:
     explicit BVHSystem(ArenaRegistry* registry) :
@@ -850,8 +856,7 @@ public:
     void updateBVH(ArenaRegistry& registry, const double dt, const double time) {
             //bvh.incrementalUpdate(registry);
             
-        m_bvh.setPendingUpdate(currentIndex);
-
+        m_bvh.setPendingUpdate();
         //counter += static_cast<float>(dt);
         //if (counter >= static_cast<float>(time)) {
         //    counter = 0;
@@ -879,7 +884,7 @@ public:
 
         const auto zRow = cam->getZRow();
         return m_bvh.frustumCullWithOcclusion(
-            result, cam->getFrustum(), cam->getPosition(), zRow.getN(), zRow.w, registry, method, currentIndex);
+            result, cam->getFrustum(), cam->getPosition(), zRow.getN(), zRow.w, registry, method);
     }
 
     // Called from physics thread (can be concurrent with frustum culling)

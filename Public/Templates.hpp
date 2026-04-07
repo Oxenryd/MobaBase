@@ -43,7 +43,7 @@ public:
 
         // not complete
         m_go1 = gameObjectSystem().createGameObject<GameObject>("MerryGoRound");
-        size_t numOfObjects = 12;//4096 * 64;
+        size_t numOfObjects = 4096 * 64;
         //m_goList.reserve(numOfObjects);
         auto const step = MMath::fTAU / numOfObjects;
         const std::string pathObject = std::format("{}{}", ASSETS_DIR, "Cube/cube.obj");
