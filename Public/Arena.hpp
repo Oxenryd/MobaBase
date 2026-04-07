@@ -10,7 +10,7 @@
 #include <vector>
 #include <semaphore>
 #include <format>
-#
+#include <atomic>
 #include "API.h"
 
 #ifndef GLOBAL_MACROS_H
@@ -409,6 +409,7 @@ public:
     }
 
     void* allocate(const size_t size, const size_t alignment = alignof(std::max_align_t)) {
+
         m_sem.acquire();
         const size_t current = reinterpret_cast<size_t>(m_memory) + m_offset;
         const size_t aligned = alignUp(current, alignment);

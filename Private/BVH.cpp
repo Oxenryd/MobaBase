@@ -440,21 +440,8 @@ uint32_t DualBVH::buildRecursive(
 
     
 
-    thread_local std::vector<uint32_t>leftPrims;
-    leftPrims.reserve(primCount);
-    leftPrims.clear();
-    leftPrims.assign(primitiveIds, partition);
-
-    thread_local std::vector<uint32_t>rightPrims;
-    rightPrims.reserve(primCount);
-    rightPrims.clear();
-    rightPrims.assign(partition, partition + primCount);
-
-
-
-
-    //ArenaVector<uint32_t> leftPrims(primitiveIds, partition, ArenaAllocator<uint32_t>(_frameArena));
-    //ArenaVector<uint32_t> rightPrims(partition, primitiveIds + primCount, ArenaAllocator<uint32_t>(_frameArena));
+    ArenaVector<uint32_t> leftPrims(primitiveIds, partition, ArenaAllocator<uint32_t>(_frameArena));
+    ArenaVector<uint32_t> rightPrims(partition, primitiveIds + primCount, ArenaAllocator<uint32_t>(_frameArena));
 
 
      // Ensure both sides have primitives
@@ -971,14 +958,13 @@ void DualBVH::frustumCullWithOcclusion(
         stack[dbuffIdx][sp++] = { node.rightChild, res.mask(), /*Intersect*/1};
     }
 
-    static constexpr size_t T = NUM_RUN_THREADS;
-    static std::vector<TraversalResult> tlsResults[] = { std::vector<TraversalResult>(T), std::vector<TraversalResult>(T) };
+    static std::vector<TraversalResult> tlsResults[] = { std::vector<TraversalResult>(NUM_RUN_THREADS), std::vector<TraversalResult>(NUM_RUN_THREADS) };
     for (auto& thisResult : tlsResults[dbuffIdx])
         thisResult.clear();
 
-    static std::atomic<uint32_t> tIndex[2];
+    static std::atomic<uint32_t> tIndex[BVH_BUFFERS];
     tIndex[dbuffIdx].store(0, std::memory_order_release);
-    const auto threadsToStart = std::min(frontier[dbuffIdx].size(), T);//std::clamp( std::min(T, std::min(frontier[frameIndex].size() / T, 1ull)), 1ull, T);
+    const auto threadsToStart = std::min(frontier[dbuffIdx].size(), static_cast<size_t>(NUM_RUN_THREADS));//std::clamp( std::min(T, std::min(frontier[frameIndex].size() / T, 1ull)), 1ull, T);
     MJob::for_loop(0, frontier[dbuffIdx].size(), threadsToStart,
                     [&](const size_t i) {
 
@@ -987,7 +973,7 @@ void DualBVH::frustumCullWithOcclusion(
                         //runSems[frameIndex][thisTIndex]->acquire();
 
                         cullArenas[dbuffIdx][thisTIndex]->reset();
-                        auto& out = tlsResults[dbuffIdx][thisTIndex];
+                        TraversalResult& out = tlsResults[dbuffIdx][thisTIndex];
                         out.activeOccluders.reserve(1024);
                         out.nodesCulledByFrustum = 0;
                         out.nodesCulledByOcclusion = 0;
@@ -1158,7 +1144,7 @@ void DualBVH::frustumCullWithOcclusion(
     }
     result.visibleEntities.reserve(totalVis);
     result.activeOccluders.reserve(totalActiveOcc);
-    for (size_t i = 0; i < T; ++i) {
+    for (size_t i = 0; i < NUM_RUN_THREADS; ++i) {
         auto& v = tlsResults[dbuffIdx][i];
         result.visibleEntities.insert(result.visibleEntities.end(), v.visibleEntities.begin(), v.visibleEntities.end());
         result.activeOccluders.insert(result.activeOccluders.end(), v.activeOccluders.begin(), v.activeOccluders.end());

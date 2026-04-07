@@ -849,6 +849,10 @@ class BVHSystem
     //const float counter = 4333424.0f;
     //uint8_t currentIndex = UINT8_INVALID;
 
+    static constexpr size_t CULL_BUFFERS = 2;
+
+    TraversalResult m_cullResults[CULL_BUFFERS];
+
 public:
     explicit BVHSystem(ArenaRegistry* registry) :
         m_bvh{registry} {}
