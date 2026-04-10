@@ -41,17 +41,13 @@ public:
         auto mainCam = Engine::getInstance()->mainCamera();
         auto l = lightSystem().createNewLight(static_cast<GameObject*>(nullptr));
 
-        // not complete
+
         m_go1 = gameObjectSystem().createGameObject<GameObject>("MerryGoRound");
         size_t numOfObjects = 4096 * 64;
         //m_goList.reserve(numOfObjects);
         auto const step = MMath::fTAU / numOfObjects;
         const std::string pathObject = std::format("{}{}", ASSETS_DIR, "Cube/cube.obj");
         for (size_t i = 0; i < numOfObjects; ++i) {
-            // m_goList.emplace_back(gameObjectSystem().createGameObject<GameObject>(
-            //     std::format("Cube_{}", i),
-            //     &m_go1));
-            // Mesh objectMesh{};
             std::vector<Mesh> meshes;
             sceneRender().createMeshFromModel(pathObject, &meshes, &m_go1);
             auto trans = meshes[0].getTransform();
