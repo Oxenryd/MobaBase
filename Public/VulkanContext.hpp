@@ -2462,6 +2462,7 @@ public:
 	VkResult createImageViews() {
 		LOGLINE(LogType::Info, LogMod::Vulkan, "Creating ImageViews... ");
 		VkResult vkResult;
+
 		// Get swapchain images
 		uint32_t imageCount = 0;
 		Vk_CHECK(vkResult, vkGetSwapchainImagesKHR(m_vkDevice, swapchain, &imageCount, nullptr));
@@ -2501,7 +2502,7 @@ public:
 			imageInfo.arrayLayers = 1;
 			imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
 			imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-			imageInfo.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+			imageInfo.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
 			imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
 			Vk_CHECK(vkResult, vkCreateImage(m_vkDevice, &imageInfo, nullptr, &depthStencilImages[i]));

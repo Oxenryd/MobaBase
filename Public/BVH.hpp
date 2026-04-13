@@ -21,138 +21,164 @@ using TransformGroup =
 decltype(std::declval<ArenaRegistry&>()
          .group<TransformComponent, BoundingVolumeComponent, EnabledTag>());
 
+struct Frustum;
+
+class DualBVH
+{
+public:
 
 #ifdef MSVC
 #pragma warning(push)
 #pragma warning(disable : 26495)
 #endif
 
-struct BVHNode //alignas(64)
-{
-    AABB bounds{};
-
-    // glm::vec3 center{};
-    //glm::vec3 extent{};
-
-    // Using bit packing for efficiency
-    union
+    struct BVHNode //alignas(64)
     {
-        struct
+        AABB bounds{};
+
+        // glm::vec3 center{};
+        //glm::vec3 extent{};
+
+        // Using bit packing for efficiency
+        union
         {
-            uint32_t leftChild;   // Index to left child (0 = no child)
-            uint32_t rightChild;  // Index to right child (0 = no child)
+            struct
+            {
+                uint32_t leftChild;   // Index to left child (0 = no child)
+                uint32_t rightChild;  // Index to right child (0 = no child)
+            };
+            struct
+            {
+                uint32_t firstPrimitive; // For leaf nodes
+                uint32_t _pad0; // For leaf nodes
+            };
         };
-        struct
-        {
-            uint32_t firstPrimitive; // For leaf nodes
-            uint32_t _pad0; // For leaf nodes
-        };
+
+        uint32_t parentIndex{ UINT32_INVALID };     // For bottom-up updates
+        uint8_t flags{ UINT8_INVALID };            // Dirty bit, leaf bit, etc.
+        uint8_t splitAxis{ UINT8_INVALID };        // X=0, Y=1, Z=2
+        uint8_t primCount{ UINT8_INVALID };
+        uint8_t depth{ 0 };
+        std::array<uint32_t, 6> primIndices;
+
+        [[nodiscard]] bool isLeaf() const { return flags & 0x01; }
+        [[nodiscard]] bool isDirty() const { return flags & 0x02; }
+        void setLeaf(const bool leaf) { flags = leaf ? flags | 0x01 : flags & ~0x01; }
+        void setDirty(const bool dirty) { flags = dirty ? flags | 0x02 : flags & ~0x02; }
+
+        //INLINE glm::vec3 min() const {
+        //    return center - 0.5f * extent;
+        //}
+        //INLINE glm::vec3 max() const {
+        //    return center + 0.5f * extent;
+        //}
+        //INLINE AABB bounds() const {
+        //    return AABB{ min(), max() };
+        //}
+        [[nodiscard]] INLINE glm::vec3 min() const {
+            return bounds.min;
+        }
+        [[nodiscard]] INLINE glm::vec3 max() const {
+            return bounds.max;
+        }
+        //INLINE AABB& bounds()  {
+        //    return bounds;;
+        //}
+
     };
-
-    uint32_t parentIndex{ UINT32_INVALID };     // For bottom-up updates
-    uint8_t flags{ UINT8_INVALID };            // Dirty bit, leaf bit, etc.
-    uint8_t splitAxis{ UINT8_INVALID };        // X=0, Y=1, Z=2
-    uint8_t primCount{ UINT8_INVALID };
-    uint8_t depth{ 0 };
-    std::array<uint32_t, 6> primIndices;
-
-    [[nodiscard]] bool isLeaf() const { return flags & 0x01; }
-    [[nodiscard]] bool isDirty() const { return flags & 0x02; }
-    void setLeaf(const bool leaf) { flags = leaf ? flags | 0x01 : flags & ~0x01; }
-    void setDirty(const bool dirty) { flags = dirty ? flags | 0x02 : flags & ~0x02; }
-
-    //INLINE glm::vec3 min() const {
-    //    return center - 0.5f * extent;
-    //}
-    //INLINE glm::vec3 max() const {
-    //    return center + 0.5f * extent;
-    //}
-    //INLINE AABB bounds() const {
-    //    return AABB{ min(), max() };
-    //}
-    [[nodiscard]] INLINE glm::vec3 min() const {
-        return bounds.min;
-    }
-    [[nodiscard]] INLINE glm::vec3 max() const {
-        return bounds.max;
-    }
-    //INLINE AABB& bounds()  {
-    //    return bounds;;
-    //}
-
-};
 
 #ifdef MSVC
 #pragma warning(pop)
 #endif
 
-// Primitive reference for BVH
-struct BVHPrimitive
-{
-    entt::entity entity;
-    glm::vec3 center{};
-    AABB bounds;
-    //uint32_t aabbIndex;
-    //uint16_t sceneIndex;
-    //AABB bounds;
-    //uint32_t frameUpdated;  // Last frame this was updated
-    //BoundingVolume bounds;
-    //uint32_t local_BIndex;
-    //uint32_t world_BIndex;
-    //AABB localBounds;
-    //AABB worldBounds;       // Cached transformed bounds
-    
-    BVHPrimitive() : 
-        entity{ entt::null }//aabbIndex{UINT32_INVALID}, sceneIndex{UINT16_INVALID}
-    {}
-    BVHPrimitive(const BVHPrimitive& other) :
-        entity{ other.entity }, bounds{ other.bounds }//sceneIndex{other.sceneIndex}, aabbIndex{other.aabbIndex}
-    {}
-    BVHPrimitive& operator=(const BVHPrimitive& rhs) {
-        if (this == &rhs) return *this;
+    // Primitive reference for BVH
+    struct BVHPrimitive
+    {
+        entt::entity entity;
+        glm::vec3 center{};
+        AABB bounds;
+        //uint32_t aabbIndex;
+        //uint16_t sceneIndex;
+        //AABB bounds;
+        //uint32_t frameUpdated;  // Last frame this was updated
+        //BoundingVolume bounds;
+        //uint32_t local_BIndex;
+        //uint32_t world_BIndex;
+        //AABB localBounds;
+        //AABB worldBounds;       // Cached transformed bounds
 
-        entity = rhs.entity;
-        bounds = rhs.bounds;
-        //sceneIndex = rhs.sceneIndex;
-        //aabbIndex = rhs.aabbIndex;
+        BVHPrimitive() :
+            entity{ entt::null }//aabbIndex{UINT32_INVALID}, sceneIndex{UINT16_INVALID}
+        {}
+        BVHPrimitive(const BVHPrimitive& other) :
+            entity{ other.entity }, bounds{ other.bounds }//sceneIndex{other.sceneIndex}, aabbIndex{other.aabbIndex}
+        {}
+        BVHPrimitive& operator=(const BVHPrimitive& rhs) {
+            if (this == &rhs) return *this;
 
-        return *this;
-    }
+            entity = rhs.entity;
+            bounds = rhs.bounds;
+            //sceneIndex = rhs.sceneIndex;
+            //aabbIndex = rhs.aabbIndex;
 
-    BVHPrimitive& operator=(BVHPrimitive&& rhs) noexcept {
-        if (this == &rhs) return *this;
+            return *this;
+        }
 
-        rhs.entity = entt::null;
+        BVHPrimitive& operator=(BVHPrimitive&& rhs) noexcept {
+            if (this == &rhs) return *this;
 
-        entity = rhs.entity;
-        bounds = rhs.bounds;
-        //sceneIndex = rhs.sceneIndex;
-        //aabbIndex = rhs.aabbIndex;
+            rhs.entity = entt::null;
 
-        return *this;
-    }
+            entity = rhs.entity;
+            bounds = rhs.bounds;
+            //sceneIndex = rhs.sceneIndex;
+            //aabbIndex = rhs.aabbIndex;
 
-    //BVHPrimitive(entt::entity e, uint32_t dataIndex, uint16_t scene) :
-    //    entity{ e }, sceneIndex{ scene }, aabbIndex{ dataIndex } //frameUpdated{ UINT32_INVALID } 
-    //{}
-    BVHPrimitive(const entt::entity e, const AABB& aabb) :
-        entity{e}, bounds{aabb}
-    {}
+            return *this;
+        }
 
-    //BVHPrimitive(entt::entity e, const AABB& bounds)
-    //    : entity(e), localBounds(bounds), worldBounds(bounds), frameUpdated(0) {}
-};
+        //BVHPrimitive(entt::entity e, uint32_t dataIndex, uint16_t scene) :
+        //    entity{ e }, sceneIndex{ scene }, aabbIndex{ dataIndex } //frameUpdated{ UINT32_INVALID }
+        //{}
+        BVHPrimitive(const entt::entity e, const AABB& aabb) :
+            entity{e}, bounds{aabb}
+        {}
 
-struct Frustum;
+        //BVHPrimitive(entt::entity e, const AABB& bounds)
+        //    : entity(e), localBounds(bounds), worldBounds(bounds), frameUpdated(0) {}
+    };
 
-class DualBVH
-{
-    static constexpr size_t BVH_BUFFERS = 2;
+    struct alignas(64) WorkerPkg
+    {
+        ~WorkerPkg() = default;
+        WorkerPkg() = default;
+        explicit WorkerPkg(Arena* arena) :
+            primitiveIds{ArenaAllocator<uint32_t>{arena}} {}
+        WorkerPkg(const WorkerPkg& other) = default;
+        WorkerPkg& operator=(WorkerPkg& rhs) {
+            depth = rhs.depth;
+            parent = rhs.parent;
+            index = rhs.index;
+            primCount = rhs.primCount;
+            primitiveIds = std::move(rhs.primitiveIds);
+
+            return *this;
+        }
+        WorkerPkg(WorkerPkg&& other) = default;
+        WorkerPkg& operator=(WorkerPkg&& rhs) = default;
+
+        ArenaVector<uint32_t> primitiveIds;
+        uint32_t primCount{ UINT32_INVALID };
+        uint8_t depth{ UINT8_INVALID };
+        uint32_t parent{ UINT32_INVALID };
+        uint8_t index{ UINT8_INVALID };
+
+    };
 
     struct TestResult {
         TestResult(const uint8_t mask, const uint8_t state) :
             mask{mask}, state{state} {}
-       
+
         union
         {
             uint8_t __raw;
@@ -163,6 +189,205 @@ class DualBVH
             };
         };
     };
+
+    // Occlusion data
+    struct OccluderData
+    {
+        entt::entity entity;
+        uint32_t primIndex;
+        float depth;  // Distance from camera
+        uint32_t cornersOffset;
+        OccluderData() = default;
+        OccluderData(const OccluderData& other) = default;
+        OccluderData& operator=(const OccluderData& rhs) = default;
+        OccluderData(const entt::entity e, const float d, const uint32_t cornerOffset, const uint32_t primitiveIndex)
+            : entity(e), primIndex(primitiveIndex), depth(d), cornersOffset(cornerOffset) {} //isOccluder(occluder) {}
+    };
+
+    enum class OcclusionMethod
+    {
+        NONE,
+        SIMPLE_DEPTH,     // Simple front-to-back + depth test
+        HIERARCHICAL_Z,   // Hierarchical Z-buffer (more advanced)
+        PORTAL_ZONES      // For indoor scenes with portals
+    };
+
+    struct TraversalNode
+    {
+        uint32_t nodeIndex;
+        float minDepth;
+        float maxDepth;
+    };
+
+    struct SlotState {
+    private:
+        alignas (64) std::atomic<long> m_state;
+    public:
+        void read() {
+            while (m_state.load(std::memory_order_relaxed) < 0) {}
+            m_state.fetch_add(1, std::memory_order_relaxed);
+        }
+        void done_reading() {
+            m_state.fetch_sub(1, std::memory_order_relaxed);
+        }
+
+        bool try_write() {
+            if (!is_free())
+                return false;
+
+            m_state.store(-1, std::memory_order_release);
+
+        }
+
+        bool is_free() const {
+            return m_state.load(std::memory_order_acquire) == 0;
+        }
+    };
+
+private:
+    static constexpr size_t BVH_BUFFERS = 3;
+    static constexpr unsigned int NUM_BUILD_THREADS = 6;
+    static constexpr unsigned int NUM_RUN_THREADS = 16;
+
+    std::array<FrameArena*, NUM_RUN_THREADS + 1> cullArenas[BVH_BUFFERS]{ {nullptr}, {nullptr} };
+    std::array<std::binary_semaphore*, NUM_RUN_THREADS> runSems[BVH_BUFFERS]{ {nullptr}, {nullptr}  };
+    std::atomic<TransformGroup*> m_groupPtr = nullptr;
+    ArenaRegistry& m_reg;
+    uint8_t _curFrameIndex = UINT8_INVALID;
+    std::thread* _rebuildThread;
+    std::binary_semaphore _threadStart{ 0 };
+    std::binary_semaphore _threadDone{ 1 };
+    Arena* _frameArena = nullptr;
+    SlotState _slotStates[BVH_BUFFERS];
+    std::atomic<uint8_t> _latestValidFrame{ UINT8_INVALID };
+
+    std::atomic<bool> workersRunning = true;
+    std::atomic<uint8_t> nextThId;
+    std::array<std::thread*, NUM_BUILD_THREADS> workers;
+    std::array<WorkerPkg*, NUM_BUILD_THREADS> workerPkgs;
+    std::array<std::atomic<bool>, NUM_BUILD_THREADS> workPkgCondition;
+    std::array<std::binary_semaphore*, NUM_BUILD_THREADS> startSemas;
+
+
+public:
+    std::array<std::vector<BVHNode>, BVH_BUFFERS> nodes;
+    std::array<std::vector<BVHPrimitive>, BVH_BUFFERS> primitives;
+    std::array<std::vector<uint32_t>, BVH_BUFFERS> primitiveIndices;
+    std::array<std::unordered_map<entt::entity, uint32_t>, BVH_BUFFERS> entityToPrimitive;
+    std::array<std::atomic<uint32_t>, BVH_BUFFERS> rootIndex;
+    std::atomic<uint32_t> nodeCount[BVH_BUFFERS];
+    std::atomic<uint32_t> indicesCount[BVH_BUFFERS];
+    std::atomic<uint8_t> bufferIdx{UINT8_INVALID};
+
+    std::binary_semaphore primitivesStartSema{ 0 };
+    std::thread* rebuildThreads = nullptr;
+    std::array<std::binary_semaphore*, NUM_BUILD_THREADS> doneSemas;
+    std::array<std::atomic<uint32_t>, NUM_BUILD_THREADS> workerResults;
+
+    std::vector<entt::entity> alwaysVisible[BVH_BUFFERS];
+
+    BuildSettings settings{};
+    using OccIndexCornerIndexDepthTuple = std::tuple<uint32_t, uint32_t, float>;
+    std::array<std::vector<OccIndexCornerIndexDepthTuple>, BVH_BUFFERS> occluderIndices;
+    std::array<std::vector<glm::vec3>, BVH_BUFFERS> occluderCorners;
+
+
+    ~DualBVH() {
+        workersRunning.store(false, std::memory_order_release);
+        _threadStart.release();
+        _rebuildThread->join();
+        delete _rebuildThread;
+
+        primitivesStartSema.release();
+
+        delete _frameArena;
+        _frameArena = nullptr;
+
+        workersRunning = false;
+        for (size_t i = 0; i < NUM_BUILD_THREADS; ++i) {
+            startSemas[i]->release();
+            workers[i]->join();
+            delete workers[i];
+            workers[i] = nullptr;
+
+            delete startSemas[i];
+            startSemas[i] = nullptr;
+            delete doneSemas[i];
+            doneSemas[i] = nullptr;
+
+            //if (workerPkgs[i])
+            //    delete workerPkgs[i];
+            //workerPkgs[i] = nullptr;
+        }
+
+        for (size_t i = 0; i < NUM_RUN_THREADS; ++i) {
+            delete cullArenas[0][i];
+            cullArenas[0][i] = nullptr;
+            delete cullArenas[1][i];
+            cullArenas[1][i] = nullptr;
+
+            delete runSems[0][i];
+            runSems[0][i] = nullptr;
+            delete runSems[1][i];
+            runSems[1][i] = nullptr;
+        }
+        delete cullArenas[0][NUM_RUN_THREADS];
+        delete cullArenas[1][NUM_RUN_THREADS];
+        cullArenas[0][NUM_RUN_THREADS] = nullptr;
+        cullArenas[1][NUM_RUN_THREADS] = nullptr;
+
+        rebuildThreads->join();
+        //rebuildThreads[1]->join();
+        delete rebuildThreads;
+        //delete rebuildThreads[1];
+        rebuildThreads = nullptr;
+        //rebuildThreads[1] = nullptr;
+    }
+    explicit DualBVH(ArenaRegistry* registry, const BuildSettings& settings = BuildSettings{}) :
+        m_reg{*registry}, settings(settings)
+        //, primitivesStartSema{ std::binary_semaphore{0}, std::binary_semaphore{0} },
+        //primitivesLock{ std::binary_semaphore{1}, std::binary_semaphore{1} }
+    {
+        for (size_t i = 0; i < BVH_BUFFERS; ++i) {
+            nodes[i].reserve(1024);
+            primitives[i].reserve(512);
+            occluderIndices[i].reserve(256);
+            occluderCorners[i].reserve(1024);
+            rootIndex[i].store(0);
+            nodeCount[i].store(0);
+        }
+
+        _frameArena = new Arena(48_MB);
+
+        //_threadRunning = true;
+        _rebuildThread = new std::thread{
+            _buildThreadMethod,
+            this,
+            std::ref(*registry) };
+
+        workersRunning = true;
+        for (size_t i = 0; i < NUM_BUILD_THREADS; ++i) {
+            startSemas[i] = new std::binary_semaphore{ 0 };
+            doneSemas[i] = new std::binary_semaphore{ 0 };
+            workers[i] = new std::thread{ DualBVH::_recursiveWorker, this, static_cast<uint8_t>(i) };
+            workerResults[i] = 0;
+            workerPkgs[i] = nullptr;
+
+            workPkgCondition[i] = false;
+        }
+
+        for (size_t i = 0; i < NUM_RUN_THREADS; ++i) {
+            cullArenas[0][i] = new FrameArena{ 768_KB };
+            cullArenas[1][i] = new FrameArena{ 768_KB };
+            runSems[0][i] = new std::binary_semaphore{ 1 };
+            runSems[1][i] = new std::binary_semaphore{ 1 };
+        }
+        cullArenas[0][NUM_RUN_THREADS] = new FrameArena{ 768_KB };  // what??
+        cullArenas[1][NUM_RUN_THREADS] = new FrameArena{ 768_KB };
+
+        rebuildThreads = new std::thread{_updatePrimitives, this};
+        //rebuildThreads[1] = new std::thread{ DualBVH::_updatePrimitives, this, 1u };
+    }
 
     static TestResult frustumTest_centerExtent(const glm::vec3& c, const glm::vec3& e,
                                                const FrustumPlane* F) {
@@ -209,76 +434,6 @@ class DualBVH
 
 
     INLINE void _tSafe_insertionSort(uint32_t* primitiveIds, uint32_t primCount, int bestAxis, uint8_t index);
-    static constexpr unsigned int NUM_BUILD_THREADS = 6;
-    static constexpr unsigned int NUM_RUN_THREADS = 16;
-    std::array<FrameArena*, NUM_RUN_THREADS + 1> cullArenas[BVH_BUFFERS]{ {nullptr}, {nullptr} };
-    std::array<std::binary_semaphore*, NUM_RUN_THREADS> runSems[BVH_BUFFERS]{ {nullptr}, {nullptr}  };
-    std::atomic<TransformGroup*> m_groupPtr = nullptr;
-    ArenaRegistry& m_reg;
-
-public:
-    std::array<std::vector<BVHNode>, BVH_BUFFERS> nodes;
-    std::array<std::vector<BVHPrimitive>, BVH_BUFFERS> primitives;
-    std::array<std::vector<uint32_t>, BVH_BUFFERS> primitiveIndices;  // Leaf nodes point into this
-
-    // Thread safety
-    //mutable std::shared_mutex treeMutex;
-    //std::atomic<uint32_t> currentFrame{ 0 };
-    //std::atomic<uint32_t> rebuildCounter{ 0 };
-    //std::atomic<uint32_t> dirtyCount{ 0 };
-
-    // Entity to primitive mapping for fast lookups
-    std::array<std::unordered_map<entt::entity, uint32_t>, BVH_BUFFERS> entityToPrimitive;
-
-    std::array<std::atomic<uint32_t>, BVH_BUFFERS> rootIndex;
-    //std::array<uint32_t, 2> nodeCount;
-    std::atomic<uint32_t> nodeCount[BVH_BUFFERS];
-    std::atomic<uint32_t> indicesCount[BVH_BUFFERS];
-                                     
-    struct alignas(64) WorkerPkg
-    {
-        ~WorkerPkg() = default;
-        WorkerPkg() = default;
-        explicit WorkerPkg(Arena* arena) :
-            primitiveIds{ArenaAllocator<uint32_t>{arena}} {}
-        WorkerPkg(const WorkerPkg& other) = default;
-        WorkerPkg& operator=(WorkerPkg& rhs) {
-            depth = rhs.depth;
-            parent = rhs.parent;
-            index = rhs.index;
-            primCount = rhs.primCount;
-            primitiveIds = std::move(rhs.primitiveIds);
-
-            return *this;
-        }
-        WorkerPkg(WorkerPkg&& other) = default;
-        WorkerPkg& operator=(WorkerPkg&& rhs) = default;
-
-        ArenaVector<uint32_t> primitiveIds;
-        uint32_t primCount{ UINT32_INVALID };
-        uint8_t depth{ UINT8_INVALID };
-        uint32_t parent{ UINT32_INVALID };
-        uint8_t index{ UINT8_INVALID };
-
-    };
-    std::atomic<bool> workersRunning = true;
-    //std::atomic<bool> hasBuiltPrimitivesOnce[2] = {false, false};
-    std::atomic<uint8_t> nextThId;
-    std::array<std::thread*, NUM_BUILD_THREADS> workers;
-    std::array<WorkerPkg*, NUM_BUILD_THREADS> workerPkgs;
-    std::array<std::atomic<bool>, NUM_BUILD_THREADS> workPkgCondition;
-    std::array<std::binary_semaphore*, NUM_BUILD_THREADS> startSemas;
-
-    //std::binary_semaphore primitivesLock[2] = { std::binary_semaphore{1}, std::binary_semaphore{1} };
-
-    std::atomic<uint8_t> bufferIdx{UINT8_INVALID};
-
-    std::binary_semaphore primitivesStartSema{ 0 };
-    //std::binary_semaphore primitivesLock{ 1 };
-    std::thread* rebuildThreads = nullptr;
-    std::array<std::binary_semaphore*, NUM_BUILD_THREADS> doneSemas;
-    //std::array<std::vector<uint32_t>, NUM_BUILD_THREADS> workerPrimsTemp;
-    std::array<std::atomic<uint32_t>, NUM_BUILD_THREADS> workerResults;
 
     static void _updatePrimitives(DualBVH* _this);
     static void _recursiveWorker(DualBVH* _this, uint8_t threadId);
@@ -288,43 +443,9 @@ public:
     }
 
 
-    std::vector<entt::entity> alwaysVisible[BVH_BUFFERS];
 
-    // Occlusion data
-    struct OccluderData
-    {
-        entt::entity entity;
-        //AABB bounds;
-        uint32_t primIndex;
-        //float volume;
-        float depth;  // Distance from camera
-        uint32_t cornersOffset;
-        //bool isOccluder;  // Can this entity occlude others?
-        OccluderData() = default;
-        OccluderData(const OccluderData& other) = default;
-        OccluderData& operator=(const OccluderData& rhs) = default;
-        //OccluderData(entt::entity e, const AABB& b, float v, float d, bool occluder = false)
-        //    : entity(e), bounds(b), depth(d), isOccluder(occluder), volume( v ) {}
-        //OccluderData(entt::entity e, const AABB& b, float d, uint32_t cornerOffset, uint32_t primitiveIndex)
-        //    : entity(e), bounds(b), depth(d), cornersOffset(cornerOffset), primIndex(primitiveIndex) {} //isOccluder(occluder) {}
-        OccluderData(const entt::entity e, const float d, const uint32_t cornerOffset, const uint32_t primitiveIndex)
-            : entity(e), primIndex(primitiveIndex), depth(d), cornersOffset(cornerOffset) {} //isOccluder(occluder) {}
-    };
 
-    enum class OcclusionMethod
-    {
-        NONE,
-        SIMPLE_DEPTH,     // Simple front-to-back + depth test
-        HIERARCHICAL_Z,   // Hierarchical Z-buffer (more advanced)
-        PORTAL_ZONES      // For indoor scenes with portals
-    };
 
-    struct TraversalNode
-    {
-        uint32_t nodeIndex;
-        float minDepth;
-        float maxDepth;
-    };
 
     void setPendingUpdate() {
         if (_threadDone.try_acquire()) {
@@ -334,13 +455,10 @@ public:
         }
     }
     bool hasValidHierarchy() const {
-        return bufferIdx.load() != UINT8_INVALID && curFrameIndex != UINT8_INVALID;
+        return bufferIdx.load() != UINT8_INVALID && _curFrameIndex != UINT8_INVALID;
     }
 
-    BuildSettings settings{};
-    using OccIndexCornerIndexDepthTuple = std::tuple<uint32_t, uint32_t, float>;
-    std::array<std::vector<OccIndexCornerIndexDepthTuple>, BVH_BUFFERS> occluderIndices;
-    std::array<std::vector<glm::vec3>, BVH_BUFFERS> occluderCorners;
+
 
     //bool threadRunning() const { return _threadRunning; }
 
@@ -352,11 +470,10 @@ public:
         return bufferIdx.load() != UINT8_INVALID;
     }
 
-    uint8_t curFrameIndex = UINT8_INVALID;
-    std::thread* rebuildThread;
-    std::binary_semaphore _threadStart{ 0 };
-    std::binary_semaphore _threadDone{ 1 };
-    Arena* _frameArena = nullptr;
+    size_t getLatestValidFrame() const {
+        return _latestValidFrame.load(std::memory_order_relaxed);
+    }
+
 
     // Building methods
     uint8_t _getIndexToUseThisFrame() const;
@@ -545,103 +662,6 @@ public:
     //    }
     //}
 
-
-    ~DualBVH() {
-        workersRunning.store(false, std::memory_order_release);
-        _threadStart.release();
-        rebuildThread->join();
-        delete rebuildThread;
-
-        primitivesStartSema.release();
-
-        delete _frameArena;
-        _frameArena = nullptr;
-
-        workersRunning = false;
-        for (size_t i = 0; i < NUM_BUILD_THREADS; ++i) {
-            startSemas[i]->release();
-            workers[i]->join();
-            delete workers[i];
-            workers[i] = nullptr;
-
-            delete startSemas[i];
-            startSemas[i] = nullptr;
-            delete doneSemas[i];
-            doneSemas[i] = nullptr;
-
-            //if (workerPkgs[i])
-            //    delete workerPkgs[i];
-            //workerPkgs[i] = nullptr;
-        }
-
-        for (size_t i = 0; i < NUM_RUN_THREADS; ++i) {
-            delete cullArenas[0][i];
-            cullArenas[0][i] = nullptr;
-            delete cullArenas[1][i];
-            cullArenas[1][i] = nullptr;
-            
-            delete runSems[0][i];
-            runSems[0][i] = nullptr;
-            delete runSems[1][i];
-            runSems[1][i] = nullptr;
-        }
-        delete cullArenas[0][NUM_RUN_THREADS];
-        delete cullArenas[1][NUM_RUN_THREADS];
-        cullArenas[0][NUM_RUN_THREADS] = nullptr;
-        cullArenas[1][NUM_RUN_THREADS] = nullptr;
-
-        rebuildThreads->join();
-        //rebuildThreads[1]->join();
-        delete rebuildThreads;
-        //delete rebuildThreads[1];
-        rebuildThreads = nullptr;
-        //rebuildThreads[1] = nullptr;
-    }
-    explicit DualBVH(ArenaRegistry* registry, const BuildSettings& settings = BuildSettings{}) :
-        m_reg{*registry}, settings(settings)
-        //, primitivesStartSema{ std::binary_semaphore{0}, std::binary_semaphore{0} },
-        //primitivesLock{ std::binary_semaphore{1}, std::binary_semaphore{1} }
-    {
-        for (size_t i = 0; i < BVH_BUFFERS; ++i) {
-            nodes[i].reserve(1024);
-            primitives[i].reserve(512);
-            occluderIndices[i].reserve(256);
-            occluderCorners[i].reserve(1024);
-            rootIndex[i].store(0);
-            nodeCount[i].store(0);
-        }
-
-        _frameArena = new Arena(48_MB);
-
-        //_threadRunning = true;
-        rebuildThread = new std::thread{
-            _buildThreadMethod,
-            this,
-            std::ref(*registry) };
-
-        workersRunning = true;
-        for (size_t i = 0; i < NUM_BUILD_THREADS; ++i) {
-            startSemas[i] = new std::binary_semaphore{ 0 };
-            doneSemas[i] = new std::binary_semaphore{ 0 };
-            workers[i] = new std::thread{ DualBVH::_recursiveWorker, this, static_cast<uint8_t>(i) };
-            workerResults[i] = 0;
-            workerPkgs[i] = nullptr;
-
-            workPkgCondition[i] = false;
-        }
-
-        for (size_t i = 0; i < NUM_RUN_THREADS; ++i) {
-            cullArenas[0][i] = new FrameArena{ 768_KB };
-            cullArenas[1][i] = new FrameArena{ 768_KB };
-            runSems[0][i] = new std::binary_semaphore{ 1 };
-            runSems[1][i] = new std::binary_semaphore{ 1 };
-        }
-        cullArenas[0][NUM_RUN_THREADS] = new FrameArena{ 768_KB };  // what??
-        cullArenas[1][NUM_RUN_THREADS] = new FrameArena{ 768_KB };
-
-        rebuildThreads = new std::thread{_updatePrimitives, this};
-        //rebuildThreads[1] = new std::thread{ DualBVH::_updatePrimitives, this, 1u };
-    }
 
     void startRebuild() {
 
