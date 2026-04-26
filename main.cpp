@@ -83,7 +83,7 @@ auto WINDOW_TITLE = "VulkanTest";
 constexpr unsigned short WND_WIDTH = 1280;
 constexpr unsigned short WND_HEIGHT = 800;
 
-int main(int, char*)
+int main(int, char**)
 {
 	// Setup logger
 	Log::init<DefaultTerminalLogger>();

@@ -2,17 +2,13 @@
 #define BVH_hpp
 
 #include <atomic>
-#include <shared_mutex>
-#include <numeric>
 #include <glm/glm.hpp>
 #include <entt/entt.hpp>
 #include <semaphore>
-#include <barrier>
+#include <thread>
 
-#include "EnabledTag.hpp"
 #include "BasicTypes.hpp"
 #include "ArenaAllocator.hpp"
-#include "BoundingVolume.hpp"
 #include "Camera.hpp"
 
 #define GET_AABB(prim) Engine::getInstance()->getScene(static_cast<size_t>((prim).sceneIndex))->boundingSystem().aabbs()[(prim).aabbIndex];

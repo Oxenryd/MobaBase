@@ -125,6 +125,12 @@ struct BoundedInstanceData
 	//AABB bounds;
 };
 
+struct FullscreenImage {
+	VkImage         image;
+	VkDeviceMemory  memory;
+	VkImageView     view;
+};
+
 struct SceneInstancePair
 {
 	uint16_t sceneIndex;
@@ -1041,6 +1047,11 @@ public:
 	std::vector<VkImageView> depthStencilViews;
 	std::vector<VkImageView> swapchainImageViews;
 	std::vector<VkDeviceMemory> depthStencilMemories;
+
+	std::vector<std::array<FullscreenImage, VULKAN_FRAMES_IN_FLIGHT>> postFxImages;
+	boost::unordered_flat_map<std::string, size_t> postFxIndexMap;
+	std::vector<size_t> enabledPostFxs;
+
 	//VkSurfaceFormatKHR surfaceFormat;
 	VkFormat swapchainFormat;
 	VkExtent2D swapchainExtent;
@@ -2462,6 +2473,7 @@ public:
 	VkResult createImageViews() {
 		LOGLINE(LogType::Info, LogMod::Vulkan, "Creating ImageViews... ");
 		VkResult vkResult;
+
 		// Get swapchain images
 		uint32_t imageCount = 0;
 		Vk_CHECK(vkResult, vkGetSwapchainImagesKHR(m_vkDevice, swapchain, &imageCount, nullptr));
@@ -2501,7 +2513,7 @@ public:
 			imageInfo.arrayLayers = 1;
 			imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
 			imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-			imageInfo.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+			imageInfo.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
 			imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
 			Vk_CHECK(vkResult, vkCreateImage(m_vkDevice, &imageInfo, nullptr, &depthStencilImages[i]));
@@ -2543,6 +2555,19 @@ public:
 
 
 		}
+
+
+		// Create Basic PostFXs
+
+		// Ambient Occlusion
+		auto bloomIdx = enabledPostFxs.size();
+		for (size_t i = 0; i < VULKAN_FRAMES_IN_FLIGHT; ++i) {
+			VkImageCreateInfo bloomInfo{};
+			bloomInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+			bloomInfo.imageType = VK_IMAGE_TYPE_2D;
+			bloomInfo.format = VK_FORMAT_B10G11R11_UFLOAT_PACK32;
+		}
+
 
 		LOG(LogType::Success, "Done.");
 		return VK_SUCCESS;

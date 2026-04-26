@@ -1,0 +1,45 @@
+{
+    "flipViewport": false,
+    "id": 1,
+    "items": [
+        {
+            "executeOn": "EveryEvaluation",
+            "fileName": "BasePS.hlsl",
+            "id": 2,
+            "type": "Script"
+        },
+        {
+            "executeOn": "EveryEvaluation",
+            "fileName": "ShaderUtils.hlsl",
+            "id": 3,
+            "type": "Script"
+        },
+        {
+            "executeOn": "EveryEvaluation",
+            "fileName": "BaseTypes.hlsl",
+            "id": 4,
+            "type": "Script"
+        },
+        {
+            "executeOn": "EveryEvaluation",
+            "fileName": "BaseVS.hlsl",
+            "id": 5,
+            "type": "Script"
+        }
+    ],
+    "name": "MobaBase",
+    "renderer": "Vulkan",
+    "reverseCulling": true,
+    "shaderCompiler": "DXC",
+    "shaderCompilerSettings": {
+        "autoMapBindings": "true",
+        "autoMapLocations": "true",
+        "autoSampledTextures": "true",
+        "spirvVersion": "13",
+        "vulkanRulesRelaxed": "true"
+    },
+    "shaderIncludePaths": "/home/oxenryd/GitHub/MobaBase/Shaders/",
+    "shaderLanguage": "HLSL",
+    "shaderPreamble": "",
+    "type": "Session"
+}
