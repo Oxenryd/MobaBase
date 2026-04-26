@@ -38,7 +38,7 @@ namespace MMath
     }
 
 
-    static const glm::mat4x4& identityMat4() { 
+    static const glm::mat4x4& identityMat4() {
         return IDENTITY_MAT;
     }
 
@@ -159,7 +159,7 @@ namespace MMath
         _mm256_store_ps(result + 8, r1);
     }
 
-    
+
     INLINE glm::mat4 fast_matrix_multiply(const glm::mat4& parent, const glm::mat4& local) {
         alignas(32) glm::mat4 result;
         matrix_multiply_avx2(&parent[0][0], &local[0][0], &result[0][0]);
@@ -229,7 +229,8 @@ namespace MMath
     INLINE static bool sphereVisible(const glm::vec3& center, const float radius, const Frustum& frustum) {
         for (int i = 0; i < 6; ++i) {
             const auto& plane = frustum.planes[i];
-            const float dist = glm::dot(glm::make_vec3(xyz(plane.raw)), center) + plane.raw.w;
+            const float dist = glm::dot(plane.normal(), center) + plane.d();
+                //glm::dot(glm::make_vec3(xyz(plane.raw)), center) + plane.raw.w;
             if (dist < -radius)
                 return false; // outside
         }
@@ -239,7 +240,7 @@ namespace MMath
     INLINE static bool sphereVisibleSIMD(const glm::vec3& center, const float radius, const Frustum& frustum) {
 
         for (size_t i = 0; i < 6; ++i) {
-            auto plane = &frustum.planes[i].raw.x;
+            auto plane = frustum.planes[i].data(); //raw.x;
             __m128 vplane = _mm_loadu_ps(plane);           // [nx, ny, nz, d]
             __m128 vcenter = _mm_set_ps(1.0f, center.z, center.y, center.x); // [x, y, z, 1]
             // Dot product for first 3 components, then add d (plane[3])
@@ -316,7 +317,7 @@ namespace MMath
             __m128 dot_result = _mm_add_ss(sum, shuf);
             float s = _mm_cvtss_f32(dot_result) + plane[3];
 
-            // r = dot(|n|, extent)  
+            // r = dot(|n|, extent)
             const __m128 abs_n = _mm_andnot_ps(_mm_set1_ps(-0.0f), n_d);
             __m128 mul_extent = _mm_mul_ps(abs_n, extent_vec);
             shuf = _mm_shuffle_ps(mul_extent, mul_extent, _MM_SHUFFLE(2, 1, 0, 3));
@@ -362,7 +363,7 @@ namespace MMath
     // Build 4 TRS matrices simultaneously using AVX2
     INLINE void build_trs_matrices_avx2(
         const glm::vec3* positions,    // [4] positions
-        const glm::quat* rotations,    // [4] quaternions  
+        const glm::quat* rotations,    // [4] quaternions
         const glm::vec3* scales,       // [4] scales
         glm::mat4* output_matrices     // [4] output matrices
     ) {
@@ -522,7 +523,7 @@ namespace MMath
 //
 //        // Quaternion multiplication formula:
 //        // result.w = w1*w2 - x1*x2 - y1*y2 - z1*z2
-//        // result.x = w1*x2 + x1*w2 + y1*z2 - z1*y2  
+//        // result.x = w1*x2 + x1*w2 + y1*z2 - z1*y2
 //        // result.y = w1*y2 - x1*z2 + y1*w2 + z1*x2
 //        // result.z = w1*z2 + x1*y2 - y1*x2 + z1*w2
 //
@@ -615,11 +616,11 @@ namespace MMath
     inline __m128 quaternion_multiply_simd_simple(__m128 a, __m128 b) {
         // a = [ax, ay, az, aw] (GLM layout)
         // b = [bx, by, bz, bw] (GLM layout)
-        // 
+        //
         // GLM quaternion multiplication: result = a * b
         // result.x = a.w*b.x + a.x*b.w + a.y*b.z - a.z*b.y
         // result.y = a.w*b.y - a.x*b.z + a.y*b.w + a.z*b.x
-        // result.z = a.w*b.z + a.x*b.y - a.y*b.x + a.z*b.w  
+        // result.z = a.w*b.z + a.x*b.y - a.y*b.x + a.z*b.w
         // result.w = a.w*b.w - a.x*b.x - a.y*b.y - a.z*b.z
 
         // Broadcast a components
@@ -638,7 +639,7 @@ namespace MMath
         axb = _mm_mul_ps(axb, sign_x);
         result = _mm_add_ps(result, axb);
 
-        // Third term: a.y * [b.z, b.w, -b.x, -b.y]  
+        // Third term: a.y * [b.z, b.w, -b.x, -b.y]
         __m128 b_zwxy = _mm_shuffle_ps(b, b, _MM_SHUFFLE(1, 0, 3, 2));   // [b.z, b.w, b.x, b.y]
         __m128 ayb = _mm_mul_ps(a_yyyy, b_zwxy);
         __m128 sign_y = _mm_set_ps(-1.0f, -1.0f, 1.0f, 1.0f);          // [+, +, -, -] for [x,y,z,w]
@@ -646,7 +647,7 @@ namespace MMath
         result = _mm_add_ps(result, ayb);
 
         // Fourth term: a.z * [-b.y, b.x, b.w, -b.z]
-        __m128 b_yxwz = _mm_shuffle_ps(b, b, _MM_SHUFFLE(2, 3, 0, 1));   // [b.y, b.x, b.w, b.z]  
+        __m128 b_yxwz = _mm_shuffle_ps(b, b, _MM_SHUFFLE(2, 3, 0, 1));   // [b.y, b.x, b.w, b.z]
         __m128 azb = _mm_mul_ps(a_zzzz, b_yxwz);
         __m128 sign_z = _mm_set_ps(-1.0f, 1.0f, 1.0f, -1.0f);          // [-, +, +, -] for [x,y,z,w]
         azb = _mm_mul_ps(azb, sign_z);
@@ -658,12 +659,12 @@ namespace MMath
     // SIMD quaternion multiplication
     // Quaternions stored as [x, y, z, w] in memory
     inline __m128 quaternion_multiply_simd(__m128 q1, __m128 q2) {
-        // q1 = [x1, y1, z1, w1] 
+        // q1 = [x1, y1, z1, w1]
         // q2 = [x2, y2, z2, w2]
 
         // Standard quaternion multiplication:
         // result.x = w1*x2 + x1*w2 + y1*z2 - z1*y2
-        // result.y = w1*y2 - x1*z2 + y1*w2 + z1*x2  
+        // result.y = w1*y2 - x1*z2 + y1*w2 + z1*x2
         // result.z = w1*z2 + x1*y2 - y1*x2 + z1*w2
         // result.w = w1*w2 - x1*x2 - y1*y2 - z1*z2
 
@@ -675,7 +676,7 @@ namespace MMath
 
         // For result.x = w1*x2 + x1*w2 + y1*z2 - z1*y2
         __m128 q2_x = _mm_shuffle_ps(q2, q2, _MM_SHUFFLE(0, 0, 0, 0)); // [x2, x2, x2, x2]
-        __m128 q2_w = _mm_shuffle_ps(q2, q2, _MM_SHUFFLE(3, 3, 3, 3)); // [w2, w2, w2, w2] 
+        __m128 q2_w = _mm_shuffle_ps(q2, q2, _MM_SHUFFLE(3, 3, 3, 3)); // [w2, w2, w2, w2]
         __m128 q2_z = _mm_shuffle_ps(q2, q2, _MM_SHUFFLE(2, 2, 2, 2)); // [z2, z2, z2, z2]
         __m128 q2_y = _mm_shuffle_ps(q2, q2, _MM_SHUFFLE(1, 1, 1, 1)); // [y2, y2, y2, y2]
 
@@ -688,7 +689,7 @@ namespace MMath
         __m128 sign_x1 = _mm_set_ps(-1.0f, 1.0f, -1.0f, 1.0f);
         term_x1 = _mm_mul_ps(term_x1, sign_x1);
 
-        // Calculate: [y1*z2, y1*w2, -y1*x2, -y1*y2]  
+        // Calculate: [y1*z2, y1*w2, -y1*x2, -y1*y2]
         __m128 q2_zw_xy = _mm_shuffle_ps(q2, q2, _MM_SHUFFLE(1, 0, 3, 2));
         __m128 term_y1 = _mm_mul_ps(q1_yyyy, q2_zw_xy);
         __m128 sign_y1 = _mm_set_ps(-1.0f, -1.0f, 1.0f, 1.0f);
@@ -720,13 +721,13 @@ namespace MMath
 
         // Rearrange q2 for each output component
         __m128 q2_xyzw = q2;                                                    // [x2, y2, z2, w2]
-        __m128 q2_yxwz = _mm_shuffle_ps(q2, q2, _MM_SHUFFLE(2, 3, 0, 1));     // [y2, x2, w2, z2]  
+        __m128 q2_yxwz = _mm_shuffle_ps(q2, q2, _MM_SHUFFLE(2, 3, 0, 1));     // [y2, x2, w2, z2]
         __m128 q2_zwy_x = _mm_shuffle_ps(q2, q2, _MM_SHUFFLE(0, 1, 3, 2));     // [z2, w2, y2, x2]
         __m128 q2_wzyx = _mm_shuffle_ps(q2, q2, _MM_SHUFFLE(0, 1, 2, 3));      // [w2, z2, y2, x2]
 
         __m128 result = _mm_mul_ps(q1_w, q2_xyzw);              // w1 * [x2, y2, z2, w2]
         result = _mm_add_ps(result, _mm_mul_ps(q1_x, q2_wzyx)); // + x1 * [w2, z2, y2, x2]
-        result = _mm_add_ps(result, _mm_mul_ps(q1_y, q2_zwy_x));// + y1 * [z2, w2, y2, x2] 
+        result = _mm_add_ps(result, _mm_mul_ps(q1_y, q2_zwy_x));// + y1 * [z2, w2, y2, x2]
         result = _mm_add_ps(result, _mm_mul_ps(q1_z, q2_yxwz)); // + z1 * [y2, x2, w2, z2]
 
         // Apply the correct signs for quaternion multiplication
@@ -739,7 +740,7 @@ namespace MMath
         return quaternion_multiply_simd_simple(q1, q2);
     }
 
-    
+
 
     // Alternative implementation using a different approach
     inline __m128 quaternion_multiply_simd_v3(__m128 q1, __m128 q2) {
@@ -748,7 +749,7 @@ namespace MMath
 
         // GLM: return qua<T, Q>(
         //   w * q.w - x * q.x - y * q.y - z * q.z,  // w component
-        //   w * q.x + x * q.w + y * q.z - z * q.y,  // x component  
+        //   w * q.x + x * q.w + y * q.z - z * q.y,  // x component
         //   w * q.y + y * q.w + z * q.x - x * q.z,  // y component
         //   w * q.z + z * q.w + x * q.y - y * q.x); // z component
 
@@ -761,13 +762,13 @@ namespace MMath
         __m128 wq2 = _mm_mul_ps(q1_wwww, q2);
 
         // For each output component, we need different arrangements of q2:
-        // x: w*x + x*w + y*z - z*y  ->  q2: [x,w,z,y], signs: [+,+,+,-]  
+        // x: w*x + x*w + y*z - z*y  ->  q2: [x,w,z,y], signs: [+,+,+,-]
         // y: w*y + y*w + z*x - x*z  ->  q2: [y,w,x,z], signs: [+,+,+,-]
-        // z: w*z + z*w + x*y - y*x  ->  q2: [z,w,y,x], signs: [+,+,+,-] 
+        // z: w*z + z*w + x*y - y*x  ->  q2: [z,w,y,x], signs: [+,+,+,-]
         // w: w*w - x*x - y*y - z*z  ->  q2: [w,x,y,z], signs: [+,-,-,-]
 
         __m128 q2_xwzy = _mm_shuffle_ps(q2, q2, _MM_SHUFFLE(1, 2, 3, 0)); // [x,w,z,y]
-        __m128 q2_ywxz = _mm_shuffle_ps(q2, q2, _MM_SHUFFLE(2, 0, 3, 1)); // [y,w,x,z] 
+        __m128 q2_ywxz = _mm_shuffle_ps(q2, q2, _MM_SHUFFLE(2, 0, 3, 1)); // [y,w,x,z]
         __m128 q2_zwyx = _mm_shuffle_ps(q2, q2, _MM_SHUFFLE(0, 1, 3, 2)); // [z,w,y,x]
         __m128 q2_wxyz = _mm_shuffle_ps(q2, q2, _MM_SHUFFLE(2, 1, 0, 3)); // [w,x,y,z]
 

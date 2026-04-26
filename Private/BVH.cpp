@@ -50,55 +50,83 @@ void DualBVH::_updatePrimitives(DualBVH* _this) {
 
     while (true) {
 
-
         _this->primitivesStartSema.acquire();
         if (!_this->workersRunning.load(std::memory_order_acquire))
             return;
         {
             PROFILE_SCOPE("BVH_RebuildPrimitiveAABBs");
-            if (_this->primitivesLock[0].try_acquire()) {
-                auto group = _this->m_reg.group<TransformComponent, BoundingVolumeComponent, EnabledTag>();
-                auto& prims0 = _this->primitives[0];
-                MJob::for_loop(0, prims0.size(), 6,
-                                [&](size_t i) {
-                                    auto& prim = prims0[i];
-                                    const auto& trans = group.get<TransformComponent>(prim.entity);
+            const auto idx = _this->bufferIdx.load(std::memory_order_acquire);
+            if (idx == UINT8_INVALID)
+                continue;
 
-                                    if (trans.state.hasFlag(ObjectState::ParentMovedThisFrame) ||
-                                        trans.state.hasFlag(ObjectState::MovedThisFrame)) {
+            auto group = _this->m_reg.group<TransformComponent, BoundingVolumeComponent, EnabledTag>();
+            auto& prims = _this->primitives[idx];
+            MJob::for_loop(0, prims.size(), 6,
+                            [&](size_t i) {
+                                auto& prim = prims[i];
+                                const auto& trans = group.get<TransformComponent>(prim.entity);
 
-                                        const auto& bounds = group.get<BoundingVolumeComponent>(prim.entity);
-                                        prim.bounds = Engine::getInstance()->getScene(trans.sceneIndex)->
-                                            boundingSystem().aabbs()[bounds.coarseIndexWorld];
-                                        prim.center = prim.bounds.center();
-                                    }
+                                if (trans.state.hasFlag(ObjectState::ParentMovedThisFrame) ||
+                                    trans.state.hasFlag(ObjectState::MovedThisFrame)) {
 
-                                });
-                _this->primitivesLock[0].release();
-                return;
-            }
+                                    const auto& bounds = group.get<BoundingVolumeComponent>(prim.entity);
+                                    prim.bounds = Engine::getInstance()->getScene(trans.sceneIndex)->
+                                        boundingSystem().aabbs()[bounds.coarseIndexWorld];
+                                    prim.center = prim.bounds.center();
+                                }
 
-            if (_this->primitivesLock[1].try_acquire()) {
-                auto group = _this->m_reg.group<TransformComponent, BoundingVolumeComponent, EnabledTag>();
-                auto& prims1 = _this->primitives[1];
-                MJob::for_loop(0, prims1.size(), 6,
-                                [&](size_t i) {
-                                    auto& prim = prims1[i];
-                                    const auto& trans = group.get<TransformComponent>(prim.entity);
+                            });
+            //_this->primitivesLock[0].release();
 
-                                    if (trans.state.hasFlag(ObjectState::ParentMovedThisFrame) ||
-                                        trans.state.hasFlag(ObjectState::MovedThisFrame)) {
 
-                                        const auto& bounds = group.get<BoundingVolumeComponent>(prim.entity);
-                                        prim.bounds = Engine::getInstance()->getScene(trans.sceneIndex)->
-                                            boundingSystem().aabbs()[bounds.coarseIndexWorld];
-                                        prim.center = prim.bounds.center();
-                                    }
 
-                                });
-                _this->primitivesLock[1].release();
-                return;
-            }
+
+
+
+
+            // if (_this->primitivesLock[0].try_acquire()) {
+            //     auto group = _this->m_reg.group<TransformComponent, BoundingVolumeComponent, EnabledTag>();
+            //     auto& prims0 = _this->primitives[0];
+            //     MJob::for_loop(0, prims0.size(), 6,
+            //                     [&](size_t i) {
+            //                         auto& prim = prims0[i];
+            //                         const auto& trans = group.get<TransformComponent>(prim.entity);
+            //
+            //                         if (trans.state.hasFlag(ObjectState::ParentMovedThisFrame) ||
+            //                             trans.state.hasFlag(ObjectState::MovedThisFrame)) {
+            //
+            //                             const auto& bounds = group.get<BoundingVolumeComponent>(prim.entity);
+            //                             prim.bounds = Engine::getInstance()->getScene(trans.sceneIndex)->
+            //                                 boundingSystem().aabbs()[bounds.coarseIndexWorld];
+            //                             prim.center = prim.bounds.center();
+            //                         }
+            //
+            //                     });
+            //     _this->primitivesLock[0].release();
+            //     continue;
+            // }
+            //
+            // if (_this->primitivesLock[1].try_acquire()) {
+            //     auto group = _this->m_reg.group<TransformComponent, BoundingVolumeComponent, EnabledTag>();
+            //     auto& prims1 = _this->primitives[1];
+            //     MJob::for_loop(0, prims1.size(), 6,
+            //                     [&](size_t i) {
+            //                         auto& prim = prims1[i];
+            //                         const auto& trans = group.get<TransformComponent>(prim.entity);
+            //
+            //                         if (trans.state.hasFlag(ObjectState::ParentMovedThisFrame) ||
+            //                             trans.state.hasFlag(ObjectState::MovedThisFrame)) {
+            //
+            //                             const auto& bounds = group.get<BoundingVolumeComponent>(prim.entity);
+            //                             prim.bounds = Engine::getInstance()->getScene(trans.sceneIndex)->
+            //                                 boundingSystem().aabbs()[bounds.coarseIndexWorld];
+            //                             prim.center = prim.bounds.center();
+            //                         }
+            //
+            //                     });
+            //     _this->primitivesLock[1].release();
+            //     continue;
+            // }
 
         }
     }
@@ -127,20 +155,6 @@ void DualBVH::_recursiveWorker(DualBVH* _this, uint8_t threadId) {
     }
 }
 
-uint8_t DualBVH::_getIndexToUseThisFrame() const {
-
-    //uint8_t result;
-    //while (result = _threadIndexToUse.load(std::memory_order_acquire) == UINT8_INVALID) {}
-    //
-    //return result;
-
-    //if (_threadLastSuccesful.load())
-    //    return lastFrameIndex;
-    //while (_threadIndexToUse == UINT8_INVALID) {}
-
-    return _threadIndexToUse.load(std::memory_order_acquire);
-}
-
 void DualBVH::_buildThreadMethod(DualBVH* _this, ArenaRegistry& registry) {
 
 
@@ -155,32 +169,33 @@ void DualBVH::_buildThreadMethod(DualBVH* _this, ArenaRegistry& registry) {
                 return;
             }
 
-            uint8_t index;
-            const uint8_t readIndex = _this->_threadIndexToUse.load(std::memory_order_acquire);
-            if (readIndex == UINT8_INVALID)
-                index = 0;
+            uint8_t idx;
+            const uint8_t readBufIdx = _this->bufferIdx.load(std::memory_order_acquire);
+            if (readBufIdx == UINT8_INVALID)
+                idx = 0;
             else {
-                index = (readIndex + 1) % 2;
+                idx = (readBufIdx + 1) % BVH_BUFFERS;
             }
-            
+
 
             auto group = registry.group<TransformComponent, BoundingVolumeComponent, EnabledTag>();
             _this->m_groupPtr.store(&group, std::memory_order_release);
             for (auto entity : group) {
 
-                auto it = _this->entityToPrimitive[index].find(entity);
-                if (it == _this->entityToPrimitive[index].end()) {
+                auto it = _this->entityToPrimitive[idx].find(entity);
+                if (it == _this->entityToPrimitive[idx].end()) {
                     //_this->primitivesLock[index].acquire();
-                    _this->rebuildPrimitives(registry, index);
+                    _this->rebuildPrimitives(registry, idx);
                     //this->primitivesLock[index].release();
                     break;
                 }
             }
             
-            _this->buildNodes(registry, index);
+            _this->buildNodes(registry, idx);
 
 
-            _this->_threadIndexToUse.store(index, std::memory_order_release);
+            const auto newIdx = (idx) % BVH_BUFFERS;
+            _this->bufferIdx.store(newIdx, std::memory_order_release);
         }
         _this->_threadDone.release();
     }
@@ -445,7 +460,7 @@ uint32_t DualBVH::buildRecursive(
          //                  B.center()[bestAxis];
          //          });
 
-         size_t mid = primCount / 2;
+         const size_t mid = primCount / 2;
          leftPrims.assign(primitiveIds, primitiveIds + mid);
          rightPrims.assign(primitiveIds + mid, primitiveIds + primCount);
      }
@@ -835,40 +850,42 @@ void DualBVH::frustumCullWithOcclusion(
     const glm::vec3& camWorldForward,
     const float& camForwardPosDot,
     ArenaRegistry* const registry,
-    const OcclusionMethod method, const uint8_t index) {
+    const OcclusionMethod method) {
 
-    if (index == UINT8_INVALID)
+    const auto dbuffIdx = bufferIdx.load();
+
+    if (dbuffIdx == UINT8_INVALID)
         return;
 
-    const auto frameIndex = index;
 
-    for (auto& entity : alwaysVisible[frameIndex])
+
+    for (auto& entity : alwaysVisible[dbuffIdx])
         result.visibleEntities.push_back(entity);
 
-    if (isEmpty(frameIndex))
+    if (isEmpty(dbuffIdx))
         return;
     
-    cullArenas[frameIndex][NUM_RUN_THREADS]->reset();
+    cullArenas[dbuffIdx][NUM_RUN_THREADS]->reset();
 
     // Find occluders
-    FrameArenaVector<OccluderData> potentialOccluders{ FrameArenaAllocator<OccluderData>{cullArenas[frameIndex][NUM_RUN_THREADS]} };
+    FrameArenaVector<OccluderData> potentialOccluders{ FrameArenaAllocator<OccluderData>{cullArenas[dbuffIdx][NUM_RUN_THREADS]} };
 
-    for (const auto& [thisIndex, offset, depth] : occluderIndices[frameIndex]) {
+    for (const auto& [thisIndex, offset, depth] : occluderIndices[dbuffIdx]) {
 
-        auto& prim = primitives[frameIndex][index];
+        auto& prim = primitives[dbuffIdx][thisIndex];
         AABB& worldBounds = prim.bounds;//GET_AABB(prim);
         if (!MMath::aabbVisible(worldBounds.min, worldBounds.max, f)) {
             continue;
         }
         const float d[8] = {
-             glm::length2(occluderCorners[frameIndex][offset + 0] - cameraPos),
-             glm::length2(occluderCorners[frameIndex][offset + 1] - cameraPos),
-             glm::length2(occluderCorners[frameIndex][offset + 2] - cameraPos),
-             glm::length2(occluderCorners[frameIndex][offset + 3] - cameraPos),
-             glm::length2(occluderCorners[frameIndex][offset + 4] - cameraPos),
-             glm::length2(occluderCorners[frameIndex][offset + 5] - cameraPos),
-             glm::length2(occluderCorners[frameIndex][offset + 6] - cameraPos),
-             glm::length2(occluderCorners[frameIndex][offset + 7] - cameraPos),
+             glm::length2(occluderCorners[dbuffIdx][offset + 0] - cameraPos),
+             glm::length2(occluderCorners[dbuffIdx][offset + 1] - cameraPos),
+             glm::length2(occluderCorners[dbuffIdx][offset + 2] - cameraPos),
+             glm::length2(occluderCorners[dbuffIdx][offset + 3] - cameraPos),
+             glm::length2(occluderCorners[dbuffIdx][offset + 4] - cameraPos),
+             glm::length2(occluderCorners[dbuffIdx][offset + 5] - cameraPos),
+             glm::length2(occluderCorners[dbuffIdx][offset + 6] - cameraPos),
+             glm::length2(occluderCorners[dbuffIdx][offset + 7] - cameraPos),
         };
         const __m256 v = _mm256_load_ps(d);
         float mn;
@@ -901,22 +918,22 @@ void DualBVH::frustumCullWithOcclusion(
     }
 
     // Set up MT
-    static std::vector<Job> frontier[2];
-    frontier[frameIndex].reserve(1024);
-    frontier[frameIndex].clear();
+    static std::vector<Job> frontier[BVH_BUFFERS];
+    frontier[dbuffIdx].reserve(1024);
+    frontier[dbuffIdx].clear();
 
     static constexpr size_t stackSize = 1024;
 
-    static std::array<Job, stackSize> stack[2];
+    static std::array<Job, stackSize> stack[BVH_BUFFERS];
     size_t sp = 0;
-    stack[frameIndex][sp++] = { rootIndex[frameIndex] , 0xf3, 1 };
+    stack[dbuffIdx][sp++] = { rootIndex[dbuffIdx] , 0xf3, 1 };
 
     const size_t targetDepth = std::min(
-        static_cast<unsigned long long>(nodes[frameIndex].size() / NUM_RUN_THREADS), 3ull);
+        static_cast<unsigned long long>(nodes[dbuffIdx].size() / NUM_RUN_THREADS), 3ull);
     while (sp) {
-        const Job j = stack[frameIndex][--sp];
+        const Job j = stack[dbuffIdx][--sp];
 
-        const BVHNode& node = nodes[frameIndex][j.nodeIndex];
+        const BVHNode& node = nodes[dbuffIdx][j.nodeIndex];
 
 
         // classify quickly using mask from parent
@@ -926,38 +943,37 @@ void DualBVH::frustumCullWithOcclusion(
             continue;
 
         if (node.depth >= targetDepth) {
-            frontier[frameIndex].push_back({ j.nodeIndex, res.mask(), res.state()});
+            frontier[dbuffIdx].push_back({ j.nodeIndex, res.mask(), res.state()});
             continue;
         }
 
         if (res.state() == /*Inside*/2) {
             // whole subtree accepted: push once with state=Inside
-            frontier[frameIndex].push_back({ j.nodeIndex, 0, /*Inside*/2 });
+            frontier[dbuffIdx].push_back({ j.nodeIndex, 0, /*Inside*/2 });
             continue;
         }
 
         // Intersect: descend
-        stack[frameIndex][sp++] = { node.leftChild, res.mask(), /*Intersect*/1};
-        stack[frameIndex][sp++] = { node.rightChild, res.mask(), /*Intersect*/1};
+        stack[dbuffIdx][sp++] = { node.leftChild, res.mask(), /*Intersect*/1};
+        stack[dbuffIdx][sp++] = { node.rightChild, res.mask(), /*Intersect*/1};
     }
 
-    static constexpr size_t T = NUM_RUN_THREADS;
-    static std::vector<TraversalResult> tlsResults[] = { std::vector<TraversalResult>(T), std::vector<TraversalResult>(T) };
-    for (auto& thisResult : tlsResults[frameIndex])
+    static std::vector<TraversalResult> tlsResults[] = { std::vector<TraversalResult>(NUM_RUN_THREADS), std::vector<TraversalResult>(NUM_RUN_THREADS) };
+    for (auto& thisResult : tlsResults[dbuffIdx])
         thisResult.clear();
 
-    static std::atomic<uint32_t> tIndex[2];
-    tIndex[frameIndex].store(0, std::memory_order_release);
-    const auto threadsToStart = std::min(frontier[frameIndex].size(), T);//std::clamp( std::min(T, std::min(frontier[frameIndex].size() / T, 1ull)), 1ull, T);
-    MJob::for_loop(0, frontier[frameIndex].size(), threadsToStart,
+    static std::atomic<uint32_t> tIndex[BVH_BUFFERS];
+    tIndex[dbuffIdx].store(0, std::memory_order_release);
+    const auto threadsToStart = std::min(frontier[dbuffIdx].size(), static_cast<size_t>(NUM_RUN_THREADS));//std::clamp( std::min(T, std::min(frontier[frameIndex].size() / T, 1ull)), 1ull, T);
+    MJob::for_loop(0, frontier[dbuffIdx].size(), threadsToStart,
                     [&](const size_t i) {
 
-                        const auto thisTIndex = tIndex[frameIndex].fetch_add(1, std::memory_order_acq_rel);
+                        const auto thisTIndex = tIndex[dbuffIdx].fetch_add(1, std::memory_order_acq_rel);
 
                         //runSems[frameIndex][thisTIndex]->acquire();
 
-                        cullArenas[frameIndex][thisTIndex]->reset();
-                        auto& out = tlsResults[frameIndex][thisTIndex];
+                        cullArenas[dbuffIdx][thisTIndex]->reset();
+                        TraversalResult& out = tlsResults[dbuffIdx][thisTIndex];
                         out.activeOccluders.reserve(1024);
                         out.nodesCulledByFrustum = 0;
                         out.nodesCulledByOcclusion = 0;
@@ -968,20 +984,20 @@ void DualBVH::frustumCullWithOcclusion(
 
 
                         // Traverse with occlusion
-                        FrameArenaVector<TraversalNode> nodeStack{ FrameArenaAllocator<TraversalNode>{cullArenas[frameIndex][thisTIndex]} };
+                        FrameArenaVector<TraversalNode> nodeStack{ FrameArenaAllocator<TraversalNode>{cullArenas[dbuffIdx][thisTIndex]} };
                         nodeStack.reserve(256);
                         nodeStack.clear();
 
                         float rootMinDepth, rootMaxDepth;
 
-                        const uint32_t thisNodeIndex = frontier[frameIndex][i].nodeIndex;
+                        const uint32_t thisNodeIndex = frontier[dbuffIdx][i].nodeIndex;
 
                         //computeNodeDepthRange(rootIndex[frameIndex], cameraPos, rootMinDepth, rootMaxDepth, frameIndex);
                         if (thisNodeIndex == 0) {
                             rootMinDepth = rootMaxDepth = 0.0f;
                         } else {
 
-                            const BVHNode& node = nodes[frameIndex][thisNodeIndex];
+                            const BVHNode& node = nodes[dbuffIdx][thisNodeIndex];
                             const AABB& bounds = node.bounds;
                             aabbViewZRange(bounds, camWorldForward, camForwardPosDot, rootMinDepth, rootMaxDepth);
                         }
@@ -994,7 +1010,7 @@ void DualBVH::frustumCullWithOcclusion(
                             const TraversalNode current = nodeStack.back();
                             nodeStack.pop_back();
 
-                            const BVHNode& node = nodes[frameIndex][current.nodeIndex];
+                            const BVHNode& node = nodes[dbuffIdx][current.nodeIndex];
                             out.nodesVisited++;
 
                             // Frustum test first (cheapest)
@@ -1034,7 +1050,7 @@ void DualBVH::frustumCullWithOcclusion(
                                 // Process leaf primitives
                                 for (uint32_t j = 0; j < node.primCount; ++j) {
                                     const uint32_t primIndex = node.primIndices[j];//primitiveIndices[frameIndex][node.firstPrimitive + i];
-                                    const BVHPrimitive& prim = primitives[frameIndex][primIndex];
+                                    const BVHPrimitive& prim = primitives[dbuffIdx][primIndex];
 
                                     // Fine-grained occlusion test for individual primitives
                                     bool occluded = false;
@@ -1063,7 +1079,7 @@ void DualBVH::frustumCullWithOcclusion(
                                         float mn;
                                         MMath::hmin8(v, mn);
 
-                                        occluded = isOccludedRaycast(primWorldBounds, activeOccluders, cameraPos, mn, frameIndex) &&
+                                        occluded = isOccludedRaycast(primWorldBounds, activeOccluders, cameraPos, mn, dbuffIdx) &&
                                             !primWorldBounds.contains(cameraPos);
                                     }
 
@@ -1118,7 +1134,7 @@ void DualBVH::frustumCullWithOcclusion(
     size_t totalVis = 0;
     size_t totalActiveOcc = 0;
     for (size_t i = 0; i < threadsToStart; ++i) {       
-        auto& v = tlsResults[frameIndex][i];
+        auto& v = tlsResults[dbuffIdx][i];
         totalVis += v.visibleEntities.size();
         totalActiveOcc += v.activeOccluders.size();
         result.nodesCulledByFrustum += v.nodesCulledByFrustum;
@@ -1128,8 +1144,8 @@ void DualBVH::frustumCullWithOcclusion(
     }
     result.visibleEntities.reserve(totalVis);
     result.activeOccluders.reserve(totalActiveOcc);
-    for (size_t i = 0; i < T; ++i) {
-        auto& v = tlsResults[frameIndex][i];
+    for (size_t i = 0; i < NUM_RUN_THREADS; ++i) {
+        auto& v = tlsResults[dbuffIdx][i];
         result.visibleEntities.insert(result.visibleEntities.end(), v.visibleEntities.begin(), v.visibleEntities.end());
         result.activeOccluders.insert(result.activeOccluders.end(), v.activeOccluders.begin(), v.activeOccluders.end());
     }

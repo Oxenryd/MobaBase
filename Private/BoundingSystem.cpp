@@ -10,7 +10,7 @@
 void BoundingSystem::run() {
 	const auto grp = m_reg->group<TransformComponent, BoundingVolumeComponent, EnabledTag>();
 	
-	MJob::for_loop(0, grp.size(), 16,
+	auto job = MJob::for_loop(0, grp.size(), 16,
 					[&](const size_t i)
 					{
 						const entt::entity e = grp[i];

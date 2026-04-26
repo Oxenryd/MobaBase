@@ -12,84 +12,63 @@
 
 #include <chrono>
 
-INLINE MeshDrawCommand VulkanContext::subMeshEntity_to_drawCommand(SceneBase* scene, ArenaRegistry& reg, entt::entity entity) {
-	auto& subMeshComp = reg.get<MeshFilterComponent>(entity);
-	MeshData& subMesh = scene->sceneRender().getSubMeshes()[subMeshComp.meshDataIndex];
-	MeshDrawCommand cmd{};
-	cmd.instanceIndex = subMesh.instanceIndex;
-	cmd.materialIndex = subMesh.materialIndex;
-	cmd.priority = 0xffff; //TODO
-	cmd.sceneIndex = scene->sceneIndex();
-	cmd.submeshOffset = subMeshComp.meshDataIndex;
-	cmd.subMeshEntity = entity;
+void VulkanContext::_drawCommandWorker(VulkanContext* _this) {
 
-	return cmd;
-}
-
-void VulkanContext::draw(const DrawContext& ctx) {
-
-	if (isPendingExit()) {
-		vkDeviceWaitIdle(m_vkDevice);
-		return;
-	}
-
-	auto& frame = frameSync[currentFrame];
-
-	instanceDataArena[currentFrame]->reset();
-	m_mapArenas[currentFrame]->reset();
+	while (true) {
 
 
-	// Find the draw commands
-	using SceneIndex = uint16_t;
+		_this->m_drawCmdStartSema.acquire();
 
-	//static robin_hood::unordered_flat_map<SceneIndex, std::vector<MeshDrawCommand>> drawCmds[VULKAN_FRAMES_IN_FLIGHT];
-	//static robin_hood::unordered_flat_map<SceneInstancePair, BoundedInstanceData, SceneInstancePair::Hash> submeshDrawInstanceData[VULKAN_FRAMES_IN_FLIGHT];
-	//static robin_hood::unordered_flat_map<SceneIndex, robin_hood::unordered_set<uint32_t>> submeshKeysWithMultipleInstances[VULKAN_FRAMES_IN_FLIGHT];
-	//static std::vector<std::vector<MeshDrawCommand>> drawCmds[VULKAN_FRAMES_IN_FLIGHT];
-	//static std::unordered_map<SceneIndex, std::vector<MeshDrawCommand>> drawCmds[VULKAN_FRAMES_IN_FLIGHT];
-	//static std::unordered_map<SceneInstancePair, BoundedInstanceData, SceneInstancePair::Hash> submeshDrawInstanceData[VULKAN_FRAMES_IN_FLIGHT];
-	//static std::unordered_map<SceneIndex, std::set<uint32_t>> submeshKeysWithMultipleInstances[VULKAN_FRAMES_IN_FLIGHT];
+		if (!_this->m_drawRunning.load())
+			return;
 
+		size_t idx = _this->m_drawCommandBufferIndex.load(std::memory_order_acquire);
+		if (idx == UINT8_INVALID)
+			idx = 0;
+		else
+			idx = (idx + 1) % DRAW_COMMAND_BUFFER_SIZE;
 	{
+		// Find the draw commands
 		PROFILE_SCOPE("DrawCommands");
 
 		//submeshKeysWithMultipleInstances[currentFrame].clear();
-		submeshDrawInstanceData[currentFrame].clear();
+		_this->submeshDrawInstanceData[idx].clear();
 		//drawCmds[currentFrame].clear();
 
 		for (auto& scene : Engine::getInstance()->getActiveScenes()) {
 
 			auto sceneIndex = scene->sceneIndex();
 
-			if (sceneIndex >= drawCmds[currentFrame].size()) {
-				for (size_t i = drawCmds[currentFrame].size(); i < sceneIndex + 1; ++i)
-					drawCmds[currentFrame].push_back({});
+			if (sceneIndex >= _this->drawCmds[idx].size()) {
+				for (size_t i = _this->drawCmds[idx].size(); i < sceneIndex + 1; ++i)
+					_this->drawCmds[idx].push_back({});
 			}
-			drawCmds[currentFrame][sceneIndex].clear();
+			_this->drawCmds[idx][sceneIndex].clear();
 
-			if (sceneIndex >= submeshKeysWithMultipleInstances[currentFrame].size()) {
-				for (size_t i = submeshKeysWithMultipleInstances[currentFrame].size(); i < sceneIndex + 1; ++i)
-					submeshKeysWithMultipleInstances[currentFrame].push_back({});
+			if (sceneIndex >= _this->submeshKeysWithMultipleInstances[idx].size()) {
+				for (size_t i = _this->submeshKeysWithMultipleInstances[idx].size(); i < sceneIndex + 1; ++i)
+					_this->submeshKeysWithMultipleInstances[idx].push_back({});
 			}
-			submeshKeysWithMultipleInstances[currentFrame][sceneIndex].clear();
+			_this->submeshKeysWithMultipleInstances[idx][sceneIndex].clear();
 
-			if (sceneIndex >= submeshDrawInstanceData[currentFrame].size()) {
-				for (size_t i = submeshDrawInstanceData[currentFrame].size(); i < sceneIndex + 1; ++i)
-					submeshDrawInstanceData[currentFrame].push_back({});
+			if (sceneIndex >= _this->submeshDrawInstanceData[idx].size()) {
+				for (size_t i = _this->submeshDrawInstanceData[idx].size(); i < sceneIndex + 1; ++i)
+					_this->submeshDrawInstanceData[idx].push_back({});
 			}
-			submeshDrawInstanceData[currentFrame][sceneIndex].clear();
+			_this->submeshDrawInstanceData[idx][sceneIndex].clear();
 
 			auto& reg = scene->registry();
 			auto grp = reg.group<TransformComponent, BoundingVolumeComponent, EnabledTag>();
 			for (auto& entity : scene->cullResults.visibleEntities) {
 
-				auto newDrawCmd = subMeshEntity_to_drawCommand(scene, reg, entity);
+				auto newDrawCmd = _this->subMeshEntity_to_drawCommand(scene, reg, entity);
 				//const SceneInstancePair mapIndex{ sceneIndex, newDrawCmd.submeshOffset };
 
-				auto it = submeshDrawInstanceData[currentFrame][sceneIndex].find(newDrawCmd.submeshOffset);
-				if (it == submeshDrawInstanceData[currentFrame][sceneIndex].end()) {
-					drawCmds[currentFrame][sceneIndex].push_back(newDrawCmd);
-					auto keyPair = submeshDrawInstanceData[currentFrame][sceneIndex].insert({ newDrawCmd.submeshOffset, BoundedInstanceData(instanceDataArena[currentFrame]) });
+				auto it = _this->submeshDrawInstanceData[idx][sceneIndex].find(newDrawCmd.submeshOffset);
+				if (it == _this->submeshDrawInstanceData[idx][sceneIndex].end()) {
+					_this->drawCmds[idx][sceneIndex].push_back(newDrawCmd);
+					auto keyPair = _this->submeshDrawInstanceData[idx][sceneIndex]
+						.insert({ newDrawCmd.submeshOffset, BoundedInstanceData(_this->instanceDataArena[idx]) });
 
 					BoundedInstanceData& instanceData = keyPair.first->second;//submeshDrawInstanceData[currentFrame][sceneIndex][keyPair.second];
 					instanceData.instances.reserve(8192);
@@ -114,19 +93,133 @@ void VulkanContext::draw(const DrawContext& ctx) {
 					//instanceData.bounds.merge(Engine::getInstance()->
 					//						  getScene(transComp.sceneIndex)->boundingSystem().cachedLocals()[bVol.coarseIndexLocal]);
 
-					submeshKeysWithMultipleInstances[currentFrame][sceneIndex].insert(newDrawCmd.submeshOffset);
+					_this->submeshKeysWithMultipleInstances[idx][sceneIndex].insert(newDrawCmd.submeshOffset);
 				}
 			}
 
 
 
-			std::sort(drawCmds[currentFrame][sceneIndex].begin(), drawCmds[currentFrame][sceneIndex].end());
+			std::sort(_this->drawCmds[idx][sceneIndex].begin(), _this->drawCmds[idx][sceneIndex].end());
 
 		}
+	} // Profiler scope end
+
+		_this->m_drawCommandBufferIndex.store(idx, std::memory_order_release);
+		_this->m_drawCmdFinishSema.release();
+
 	}
+}
+
+INLINE MeshDrawCommand VulkanContext::subMeshEntity_to_drawCommand(SceneBase* scene, ArenaRegistry& reg, entt::entity entity) {
+	auto& subMeshComp = reg.get<MeshFilterComponent>(entity);
+	MeshData& subMesh = scene->sceneRender().getSubMeshes()[subMeshComp.meshDataIndex];
+	MeshDrawCommand cmd{};
+	cmd.instanceIndex = subMesh.instanceIndex;
+	cmd.materialIndex = subMesh.materialIndex;
+	cmd.priority = 0xffff; //TODO
+	cmd.sceneIndex = scene->sceneIndex();
+	cmd.submeshOffset = subMeshComp.meshDataIndex;
+	cmd.subMeshEntity = entity;
+
+	return cmd;
+}
+
+void VulkanContext::draw(const DrawContext& ctx) {
+
+	if (isPendingExit()) {
+		vkDeviceWaitIdle(m_vkDevice);
+		return;
+	}
+
+	auto& frame = frameSync[currentFrame];
+
+
+
+
+
+	// // Find the draw commands
+	// {
+	// 	PROFILE_SCOPE("DrawCommands");
+	//
+	// 	//submeshKeysWithMultipleInstances[currentFrame].clear();
+	// 	submeshDrawInstanceData[currentFrame].clear();
+	// 	//drawCmds[currentFrame].clear();
+	//
+	// 	for (auto& scene : Engine::getInstance()->getActiveScenes()) {
+	//
+	// 		auto sceneIndex = scene->sceneIndex();
+	//
+	// 		if (sceneIndex >= drawCmds[currentFrame].size()) {
+	// 			for (size_t i = drawCmds[currentFrame].size(); i < sceneIndex + 1; ++i)
+	// 				drawCmds[currentFrame].push_back({});
+	// 		}
+	// 		drawCmds[currentFrame][sceneIndex].clear();
+	//
+	// 		if (sceneIndex >= submeshKeysWithMultipleInstances[currentFrame].size()) {
+	// 			for (size_t i = submeshKeysWithMultipleInstances[currentFrame].size(); i < sceneIndex + 1; ++i)
+	// 				submeshKeysWithMultipleInstances[currentFrame].push_back({});
+	// 		}
+	// 		submeshKeysWithMultipleInstances[currentFrame][sceneIndex].clear();
+	//
+	// 		if (sceneIndex >= submeshDrawInstanceData[currentFrame].size()) {
+	// 			for (size_t i = submeshDrawInstanceData[currentFrame].size(); i < sceneIndex + 1; ++i)
+	// 				submeshDrawInstanceData[currentFrame].push_back({});
+	// 		}
+	// 		submeshDrawInstanceData[currentFrame][sceneIndex].clear();
+	//
+	// 		auto& reg = scene->registry();
+	// 		auto grp = reg.group<TransformComponent, BoundingVolumeComponent, EnabledTag>();
+	// 		for (auto& entity : scene->cullResults.visibleEntities) {
+	//
+	// 			auto newDrawCmd = subMeshEntity_to_drawCommand(scene, reg, entity);
+	// 			//const SceneInstancePair mapIndex{ sceneIndex, newDrawCmd.submeshOffset };
+	//
+	// 			auto it = submeshDrawInstanceData[currentFrame][sceneIndex].find(newDrawCmd.submeshOffset);
+	// 			if (it == submeshDrawInstanceData[currentFrame][sceneIndex].end()) {
+	// 				drawCmds[currentFrame][sceneIndex].push_back(newDrawCmd);
+	// 				auto keyPair = submeshDrawInstanceData[currentFrame][sceneIndex].insert({ newDrawCmd.submeshOffset, BoundedInstanceData(instanceDataArena[currentFrame]) });
+	//
+	// 				BoundedInstanceData& instanceData = keyPair.first->second;//submeshDrawInstanceData[currentFrame][sceneIndex][keyPair.second];
+	// 				instanceData.instances.reserve(8192);
+	//
+	// 				auto& transComp = grp.get<TransformComponent>(newDrawCmd.subMeshEntity);//scene->registry().get<TransformComponent>(newDrawCmd.subMeshEntity);
+	// 				InstanceData instData{};
+	// 				instData.matInstanceIndex = newDrawCmd.materialIndex;
+	// 				instData.matrixIndex = transComp.dataIndex;
+	// 				instanceData.instances.push_back(instData);
+	// 				//BoundingVolumeComponent& bVol = grp.get<BoundingVolumeComponent>(newDrawCmd.subMeshEntity);
+	// 				//instanceData.bounds.merge(Engine::getInstance()->
+	// 				//						  getScene(transComp.sceneIndex)->boundingSystem().cachedLocals()[bVol.coarseIndexLocal]);
+	//
+	// 			} else {
+	// 				BoundedInstanceData& instanceData = it->second;
+	// 				auto& transComp = grp.get<TransformComponent>(newDrawCmd.subMeshEntity);//auto& transComp = scene->registry().get<TransformComponent>(newDrawCmd.subMeshEntity);
+	// 				InstanceData instData{};
+	// 				instData.matInstanceIndex = newDrawCmd.materialIndex;
+	// 				instData.matrixIndex = transComp.dataIndex;
+	// 				instanceData.instances.push_back(instData);
+	// 				//BoundingVolumeComponent& bVol = grp.get<BoundingVolumeComponent>(newDrawCmd.subMeshEntity);
+	// 				//instanceData.bounds.merge(Engine::getInstance()->
+	// 				//						  getScene(transComp.sceneIndex)->boundingSystem().cachedLocals()[bVol.coarseIndexLocal]);
+	//
+	// 				submeshKeysWithMultipleInstances[currentFrame][sceneIndex].insert(newDrawCmd.submeshOffset);
+	// 			}
+	// 		}
+	//
+	//
+	//
+	// 		std::sort(drawCmds[currentFrame][sceneIndex].begin(), drawCmds[currentFrame][sceneIndex].end());
+	//
+	// 	}
+	// }
+
+	const auto drwCmdIdx = getDrawCommandBufferIndex();
+
+
 
 
 	// Check the draw commands and issue binds and draw calls
+	instanceDataArena[drwCmdIdx]->reset();
 	uint32_t drawCount = 0;
 	uint32_t pipelinesCount = 0;
 	uint32_t setCount = 0;
@@ -149,7 +242,7 @@ void VulkanContext::draw(const DrawContext& ctx) {
 	size_t totalInstanceDataBufSize = 0;
 	static size_t lastMatBufferSize[VULKAN_FRAMES_IN_FLIGHT] = { 0, 0 };
 	static size_t lastInstDataTempSize[VULKAN_FRAMES_IN_FLIGHT] = { 0, 0 };
-	ArenaVector<InstanceData> instDataTemp{ ArenaAllocator<InstanceData>{instanceDataArena[currentFrame]} };
+	ArenaVector<InstanceData> instDataTemp{ ArenaAllocator<InstanceData>{instanceDataArena[drwCmdIdx]} };
 	instDataTemp.reserve(8192);
 	VkBufferCopy instanceBufferCopy{};
 	static std::vector<VkBufferCopy> stagingRegions[VULKAN_FRAMES_IN_FLIGHT];
@@ -157,9 +250,9 @@ void VulkanContext::draw(const DrawContext& ctx) {
 	stagingRegions[currentFrame].clear();
 	{
 		PROFILE_SCOPE("Buffer CPU-Stage");
-		for (uint16_t sI = 0; sI < static_cast<uint16_t>(drawCmds[currentFrame].size()); ++sI) {
+		for (uint16_t sI = 0; sI < static_cast<uint16_t>(drawCmds[drwCmdIdx].size()); ++sI) {
 
-			if (drawCmds[currentFrame][sI].empty())
+			if (drawCmds[drwCmdIdx][sI].empty())
 				continue;
 			scene1 = Engine::getInstance()->getScene(sI);
 
@@ -169,9 +262,9 @@ void VulkanContext::draw(const DrawContext& ctx) {
 			totalMatBufSize += count;
 
 
-			for (auto& key : submeshKeysWithMultipleInstances[currentFrame][sI]) {
+			for (auto& key : submeshKeysWithMultipleInstances[drwCmdIdx][sI]) {
 
-				for (auto& instData : submeshDrawInstanceData[currentFrame][sI][key].instances) {
+				for (auto& instData : submeshDrawInstanceData[drwCmdIdx][sI][key].instances) {
 					instDataTemp.push_back(instData);
 				}
 			}
@@ -680,13 +773,13 @@ void VulkanContext::draw(const DrawContext& ctx) {
 
 			for (size_t i = 0; i < sceneIndices[currentFrame].size(); ++i) {			//for (auto& cmd : *cmdScene) {
 				size_t sceneIndex = sceneIndices[currentFrame][i];
-				auto& cmdList = drawCmds[currentFrame][sceneIndex];
+				auto& cmdList = drawCmds[drwCmdIdx][sceneIndex];
 				if (cmdList.empty())
 					continue;
 
 				auto grp = Engine::getInstance()->getActiveScenes()[sceneIndex]->registry().group<TransformComponent, BoundingVolumeComponent, EnabledTag>();
 				for (auto& cmd : cmdList) {
-					auto& instData = submeshDrawInstanceData[currentFrame][sceneIndex][cmd.submeshOffset];
+					auto& instData = submeshDrawInstanceData[drwCmdIdx][sceneIndex][cmd.submeshOffset];
 					auto instanceSize = instData.instances.size();
 					//if (instanceSize > 1) {
 					//	auto& aabb = instData.bounds;

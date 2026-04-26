@@ -28,6 +28,19 @@ public:
 		return *this;
 	}
 
+	const glm::vec<N, float>& asGlmVec() const {
+		if constexpr (N == 2)
+			return reinterpret_cast<const glm::vec2&>(*m_data);//glm::vec2{m_data[0], m_data[1]};
+		if constexpr (N == 3)
+			return reinterpret_cast<const glm::vec3&>(*m_data);//glm::vec3{m_data[0], m_data[1], m_data[2]};
+		if constexpr (N == 4)
+			return reinterpret_cast<const glm::vec4&>(*m_data);//glm::vec4{m_data[0], m_data[1], m_data[2], m_data[3]};
+
+		if constexpr (N < 2 || N > 4)
+			static_assert(false, "No valid GLM Vec conversion.");
+
+	}
+
 	T* data() { return m_data; }
 	T* data() const { return m_data; }
 

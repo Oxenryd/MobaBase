@@ -329,8 +329,6 @@ inline void Engine::_run() {
 		PROFILE_SCOPE("Frame");
 		PROFILE_FRAME_MARK(m_totalFrames);
 
-		glfwPollEvents();
-
 		const auto dt = _tickDt();
 		m_updateDeltaTime = dt;
 		m_fixedAccu += dt;
@@ -355,21 +353,22 @@ inline void Engine::_run() {
 		}
 
 		{
-			PROFILE_SCOPE("Input");
+			PROFILE_SCOPE("Input_Window");
+			glfwPollEvents();
 			m_inputMan->update(dt);
 		}
-
-
-		_updateEarly(dt);
-
-
-		_updateLate(dt);
-		
 
 		{
 			PROFILE_SCOPE("Timers");
 			m_baseTimers->update(dt);
 		}
+
+		_updateEarly(dt);
+
+		_updateLate(dt);
+		
+
+
 
 		if (m_vkCtx) {
 			VulkanContext::DrawContext drawCtx{};
@@ -504,7 +503,8 @@ inline void Engine::_updateLate(const double dt) {
 					bvhSystem().performFrustumCullingWithOcclusion(
 						m_scenes[index]->cullResults, mainCamera(), &m_scenes[index]->registry());
 			}
-			m_scenes[index]->bvhSystem().bvh().startRebuild(m_scenes[index]->registry());
+			m_scenes[index]->bvhSystem().bvh().startRebuild();
+			m_scenes[index]->bvhSystem().bvh().waitForBVH_AnyReady();
 		}
 	}
 	for (auto& index : removeIndices) {

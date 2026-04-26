@@ -140,6 +140,7 @@ bool LightIntersectsFrustum(GPULight light, ClusterFrustum frustum)
 }
 
 //[numthreads(CLUSTER_THREADS_X, CLUSTER_THREADS_Y, CLUSTER_THREADS_Z)]
+[shader("compute")]
 [numthreads(1, 1, 1)]
 void main(uint3 gid : SV_GroupID, uint3 tid : SV_GroupThreadID)
 {

@@ -42,6 +42,7 @@
 #include <array>
 #include <unordered_map>
 #include <queue>
+#include <thread>
 
 #include "DrawCommand.hpp"
 #include "WindowContext.h"
@@ -122,6 +123,12 @@ struct BoundedInstanceData
 		instances{ ArenaAllocator<InstanceData>{arena} } {}
 	ArenaVector<InstanceData> instances;
 	//AABB bounds;
+};
+
+struct FullscreenImage {
+	VkImage         image;
+	VkDeviceMemory  memory;
+	VkImageView     view;
 };
 
 struct SceneInstancePair
@@ -517,15 +524,37 @@ private:
 	uint32_t m_lastDrawcallCount = 0;
 	uint32_t m_lastPipelineSwitches = 0;
 	std::thread* m_renderThread = nullptr;
-	std::binary_semaphore* m_threadSemas[VULKAN_FRAMES_IN_FLIGHT] = { nullptr, nullptr };
-	FrameArena*  m_mapArenas[VULKAN_FRAMES_IN_FLIGHT];
-	std::vector<std::vector<MeshDrawCommand>> drawCmds[VULKAN_FRAMES_IN_FLIGHT];
 
+	//std::binary_semaphore* m_threadSemas[VULKAN_FRAMES_IN_FLIGHT] = { nullptr, nullptr };
+	//FrameArena*  m_mapArenas[VULKAN_FRAMES_IN_FLIGHT];
+
+	static constexpr size_t DRAW_COMMAND_BUFFER_SIZE = 2;
+
+
+	std::vector<std::vector<MeshDrawCommand>>
+		drawCmds[DRAW_COMMAND_BUFFER_SIZE];
 	std::vector<robin_hood::unordered_flat_set<uint32_t>>
-		submeshKeysWithMultipleInstances[VULKAN_FRAMES_IN_FLIGHT];
+		submeshKeysWithMultipleInstances[DRAW_COMMAND_BUFFER_SIZE];
 	std::vector<robin_hood::unordered_flat_map<uint32_t, BoundedInstanceData>>
-		submeshDrawInstanceData[VULKAN_FRAMES_IN_FLIGHT];
+		submeshDrawInstanceData[DRAW_COMMAND_BUFFER_SIZE];
+	Arena* instanceDataArena[DRAW_COMMAND_BUFFER_SIZE] = { nullptr };
+	alignas(64) std::binary_semaphore m_drawCmdStartSema{0};
+	alignas(64) std::binary_semaphore m_drawCmdFinishSema{1};
+	alignas(64) std::atomic<uint8_t> m_drawCommandBufferIndex{UINT8_INVALID};
+	alignas(64) std::atomic<bool> m_drawRunning{false};
+	std::thread* m_drawCmdThread;
 	
+
+	static void _drawCommandWorker(VulkanContext* _this);
+	INLINE size_t getDrawCommandBufferIndex() {
+
+		if (m_drawCmdFinishSema.try_acquire()) {
+			m_drawCmdStartSema.release();
+		}
+		while (m_drawCommandBufferIndex == UINT8_INVALID) {}
+
+		return m_drawCommandBufferIndex.load(std::memory_order_acquire);
+	}
 
 	struct QueueFamilyIndices
 	{
@@ -1003,7 +1032,7 @@ public:
 	std::vector<VkPipelineLayout> pipelineLayouts;
 
 	//BlendMode currentBlendMode = BlendMode::Opaque;
-	Arena* instanceDataArena[VULKAN_FRAMES_IN_FLIGHT] = { nullptr, nullptr };
+
 	uint32_t renderPassIndex = 0;
 	uint32_t pipelineId = 0;
 	bool isClean = true;
@@ -1018,6 +1047,11 @@ public:
 	std::vector<VkImageView> depthStencilViews;
 	std::vector<VkImageView> swapchainImageViews;
 	std::vector<VkDeviceMemory> depthStencilMemories;
+
+	std::vector<std::array<FullscreenImage, VULKAN_FRAMES_IN_FLIGHT>> postFxImages;
+	boost::unordered_flat_map<std::string, size_t> postFxIndexMap;
+	std::vector<size_t> enabledPostFxs;
+
 	//VkSurfaceFormatKHR surfaceFormat;
 	VkFormat swapchainFormat;
 	VkExtent2D swapchainExtent;
@@ -1120,12 +1154,19 @@ public:
 
 	~VulkanContext() {
 
-		for (size_t i = 0; i < VULKAN_FRAMES_IN_FLIGHT; ++i) {
+		m_drawRunning.store(false, std::memory_order_release);
+		m_drawCmdStartSema.release();
+		m_drawCmdThread->join();
+		delete m_drawCmdThread;
+		m_drawCmdThread = nullptr;
+
+
+		for (size_t i = 0; i < DRAW_COMMAND_BUFFER_SIZE; ++i) {
 			delete instanceDataArena[i];
 			instanceDataArena[i] = nullptr;
 
-			delete m_mapArenas[i];
-			m_mapArenas[i] = nullptr;
+			//delete m_mapArenas[i];
+			//m_mapArenas[i] = nullptr;
 
 			//delete drawCmds[i];
 			//drawCmds[i] = nullptr;
@@ -1146,13 +1187,17 @@ public:
 	{
 		pendingLightUpdates.reserve(256);
 		rendPasses.reserve(2048);
-		for (size_t i = 0; i < VULKAN_FRAMES_IN_FLIGHT; ++i) {
+		for (size_t i = 0; i < DRAW_COMMAND_BUFFER_SIZE; ++i) {
 			instanceDataArena[i] = new Arena{ 128_MB };
-			m_mapArenas[i] = new FrameArena{ 32_MB };
+			//m_mapArenas[i] = new FrameArena{ 32_MB };
 
 			//drawCmds[i] = new FrameArenaVector<MeshDrawCommand>{ FrameArenaAllocator<MeshDrawCommand>{m_mapArenas[i]} };
 		}
+
+		m_drawRunning.store(true, std::memory_order_release);
+		m_drawCmdThread = new std::thread{_drawCommandWorker, this};
 	}
+
 
 	// TODO TODO
 	INLINE VkResult _appendStageBuffer(const uint8_t fit, const size_t requestedSize ) const {
@@ -2428,6 +2473,7 @@ public:
 	VkResult createImageViews() {
 		LOGLINE(LogType::Info, LogMod::Vulkan, "Creating ImageViews... ");
 		VkResult vkResult;
+
 		// Get swapchain images
 		uint32_t imageCount = 0;
 		Vk_CHECK(vkResult, vkGetSwapchainImagesKHR(m_vkDevice, swapchain, &imageCount, nullptr));
@@ -2467,7 +2513,7 @@ public:
 			imageInfo.arrayLayers = 1;
 			imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
 			imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-			imageInfo.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+			imageInfo.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
 			imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
 			Vk_CHECK(vkResult, vkCreateImage(m_vkDevice, &imageInfo, nullptr, &depthStencilImages[i]));
@@ -2509,6 +2555,19 @@ public:
 
 
 		}
+
+
+		// Create Basic PostFXs
+
+		// Ambient Occlusion
+		auto bloomIdx = enabledPostFxs.size();
+		for (size_t i = 0; i < VULKAN_FRAMES_IN_FLIGHT; ++i) {
+			VkImageCreateInfo bloomInfo{};
+			bloomInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+			bloomInfo.imageType = VK_IMAGE_TYPE_2D;
+			bloomInfo.format = VK_FORMAT_B10G11R11_UFLOAT_PACK32;
+		}
+
 
 		LOG(LogType::Success, "Done.");
 		return VK_SUCCESS;

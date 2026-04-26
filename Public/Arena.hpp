@@ -10,7 +10,7 @@
 #include <vector>
 #include <semaphore>
 #include <format>
-#
+#include <atomic>
 #include "API.h"
 
 #ifndef GLOBAL_MACROS_H
@@ -360,7 +360,7 @@ public:
         m_heap = memProvider;
         //m_memory = memProvider ? reinterpret_cast<uint8_t*>(m_heap->allocate(size)) : new uint8_t[size];
         m_memory = memProvider 
-            ? static_cast<uint8_t*>(m_heap->allocate(size))
+            ? static_cast<uint8_t*>(m_heap->allocate(size, 64))
             : static_cast<uint8_t*>(operator new[](size, std::align_val_t{64}));
         m_arenaId = memProvider ? m_heap->registerArena() : UINT32_INVALID;
         LOGLINE(LogType::Success, LogMod::Memory, "Created Arena, Addr: " + std::to_string(reinterpret_cast<size_t>(m_memory)) +
@@ -409,6 +409,7 @@ public:
     }
 
     void* allocate(const size_t size, const size_t alignment = alignof(std::max_align_t)) {
+
         m_sem.acquire();
         const size_t current = reinterpret_cast<size_t>(m_memory) + m_offset;
         const size_t aligned = alignUp(current, alignment);
