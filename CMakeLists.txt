@@ -232,6 +232,13 @@ target_compile_options(MobaBase PRIVATE
 )
 
 # DEFINES ----------------------------------------------------------------------------
+
+if(MSVC)
+	target_compile_definitions(MobaBase PRIVATE
+			BUILD_WIN
+	)
+endif()
+
 target_compile_definitions(MobaBase PRIVATE
 	GLFW_INCLUDE_VULKAN
 	#BUILD_WIN

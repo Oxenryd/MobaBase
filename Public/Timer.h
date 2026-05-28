@@ -40,11 +40,11 @@ private:
 
 public:
 	Timer() = default;
-	~Timer() {}
+	~Timer() = default;
 	explicit operator uint32_t() const {
 		return m_timerIndex;
 	}
-	explicit operator std::size_t() const {
+	explicit operator size_t() const {
 		return m_timerIndex;
 	}
 

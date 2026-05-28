@@ -14,11 +14,11 @@
 #include "glm/gtc/type_ptr.hpp"
 
 
-#ifndef BUILD_WIN
-#if !defined(__x86_64__) || !defined(__SSE__)
-#error clangd is not parsing this as x86_64+SSE (compile command mismatch)
-#endif
-#endif
+# ifndef BUILD_WIN
+#   if !defined(__x86_64__) || !defined(__SSE__)
+#       error clangd is not parsing this as x86_64+SSE (compile command mismatch)
+#   endif
+# endif
 
 // NOLINTBEGIN(portability-simd-intrinsics)
 namespace MMath
