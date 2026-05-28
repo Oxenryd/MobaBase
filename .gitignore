@@ -4,4 +4,4 @@
 External/
 out/
 /.idea
-.idea/vcs.xml
+compile_commands.json
