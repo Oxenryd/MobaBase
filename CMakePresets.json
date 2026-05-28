@@ -1,5 +1,5 @@
 ﻿{
-    "version": 3,
+    "version": 6,
   "configurePresets": [
     {
       "name": "windows-base",
@@ -49,6 +49,7 @@
     },
     {
       "name": "linux-base",
+      "hidden": true,
       "displayName": "Linux Base",
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/out/build/${presetName}",
