@@ -29,6 +29,7 @@ ErrorCode AssetLoader::loadModel(
 											 aiProcess_Triangulate 
 											 | aiProcess_JoinIdenticalVertices
 											 | aiProcess_GenNormals
+											 | aiProcess_FlipUVs
 											 | aiProcess_CalcTangentSpace
 	);
 	if (!scene)
@@ -61,7 +62,7 @@ ErrorCode AssetLoader::loadModel(
 		for (size_t j = 0; j < aiMesh->mNumVertices; ++j) {
 			BaseVSIn vertex{};
 			vertex.pos = toVec3(aiMesh->mVertices[j]);
-			vertex.normal = aiMesh->HasNormals() ? toVec3(aiMesh->mNormals[j]) : glm::vec3{ 0, 0, 0 };
+			vertex.normal = aiMesh->HasNormals() ? toVec3(aiMesh->mNormals[j]) : glm::vec3{ 0.5f, 0.5f, 1.0f };
 			vertex.texCoord = aiMesh->HasTextureCoords(0) ? toVec2(aiMesh->mTextureCoords[0][j]) : glm::vec2{ 0,0 };
 			if (aiMesh->HasTangentsAndBitangents()) {
 				vertex.tangent = toVec3(aiMesh->mTangents[j]);

@@ -138,7 +138,7 @@ public:
 
 	void translate(const glm::vec3& direction);
 	void rotateByVector(const glm::vec3& deltaVec);
-	void rotate(const glm::vec3& deltaEuler);
+	void rotate(const glm::vec3& deltaRadians);
 	void rotate(const glm::quat& worldDelta);
 	void rotateLocal(const glm::quat& deltaRotLocal);
 	void rotateLocal(const glm::vec3& deltaRotLocal);

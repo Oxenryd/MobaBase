@@ -70,7 +70,11 @@ public:
 		size_t texelOffset = UINT32_INVALID;
 	};
 	
-
+	enum {
+		NormalTangentFlipX = 1 << 0,
+		NormalTangentFlipY = 1 << 1,
+		NormalTangentFlipZ = 1 << 2,
+	};
 	void* texelData();
 	[[nodiscard]] void* texelData() const;
 	[[nodiscard]] size_t texelCount() const { return width * height; }

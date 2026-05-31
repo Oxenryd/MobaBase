@@ -11,7 +11,7 @@
 
 float4 main(BasePSIn input) : SV_Target
 {
-    float2 fixedTexUV = float2(input.texCoord.x, 1.0 - input.texCoord.y);
+    float2 fixedTexUV = float2(input.texCoord.x, input.texCoord.y);
 
         
     uint matIndex = basePush.flags & INSTANCE_FLAG
@@ -25,7 +25,7 @@ float4 main(BasePSIn input) : SV_Target
     BaseMaterialInstance M = baseMatInstances[matIndex];
     
     // Ambient
-    float3 ambient = (camPos_amb.a * M.ambientIntensity) * M.ambient;
+    float3 ambient = Ambient * (M.ambientIntensity * M.ambient);
     
 	// Albedo
 	float4 albedoSample = M.textures.albedoId == UINT_INVALID
@@ -47,13 +47,19 @@ float4 main(BasePSIn input) : SV_Target
     : textures[M.textures.normalId].Sample(smp, fixedTexUV).rgb;
 
     // Convert from [0,1] to [-1,1] range
-    float3 tangentNormal = normalize(normalSample * 2.0 - 1.0);
+    float3 normalSampled_minusOne_one = normalize(normalSample * 2.0 - 1.0);
 
     // Build tangent-to-world matrix (assuming your tangent/binormal are world space)
     float3 T = input.tangent;
     float3 B = input.binormal;
     float3 N_world = input.normal;
     //N_world.x = -N_world.x;
+
+
+
+    T.x = (1 - (((M.textures.flags & NormalTangentFlipX) == NormalTangentFlipX) * 2)) * T.x;
+    T.y = (1 - (((M.textures.flags & NormalTangentFlipY) == NormalTangentFlipY) * 2)) * T.y;
+    T.z = (1 - (((M.textures.flags & NormalTangentFlipZ) == NormalTangentFlipZ) * 2)) * T.z;
 
     // If you need to handle flipped tangent space (common in some assets):
     //T = normalize(T - N_world * dot(T, N_world)); // Gram-Schmidt orthogonalization
@@ -62,12 +68,15 @@ float4 main(BasePSIn input) : SV_Target
     float3x3 TBN = float3x3(T, B, N_world);
 
     // Transform tangent-space normal to world space
-    float3 worldNormal = mul(tangentNormal, TBN);
+    float3 worldNormal = mul(normalSampled_minusOne_one, TBN);
 
     // Transform world normal to view space for lighting
     float3 N = normalize(mul((float3x3) worldToView, worldNormal));
     
-    
+
+    // DEBUG DEBUG
+    // float4 normalDebug = float4(0.5 + worldNormal.x * 0.5, 0.5 + worldNormal.y * 0.5, 0.5 + worldNormal.z * 0.5, 1.0);
+    // return normalDebug + RetainGlobals();
     
     float3 Pvs = mul(worldToView, float4(input.worldPos, 1)).xyz;
     float3 V = normalize(-Pvs);

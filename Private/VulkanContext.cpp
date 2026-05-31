@@ -857,7 +857,7 @@ void VulkanContext::draw(const DrawContext& ctx) {
 						push.flags = 0;
 						push.matInstanceIndex = cmd.instanceIndex;
 						auto& transComp = grp.get<TransformComponent>(cmd.subMeshEntity);//scene->registry().get<TransformComponent>(cmd.subMeshEntity);
-						push.modelToWorld = scene1->transformSystem().modelTransforms()[transComp.dataIndex];
+						push.modelToWorld = scene1->transformSystem().modelTransforms()[transComp.dataIndex].mtw;
 						vkCmdPushConstants(frame.cmdBuffer, pipelineLayouts[matBase->pipelineLayoutId], VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
 										   0, sizeof(BaseMatPush), &push);
 
@@ -1105,6 +1105,8 @@ void VulkanContext::preDraw(RenderManager* const renderMan) {
 
 	// Reset stuff
 	pendingLightUpdates.clear();
+
+	
 }
 
 void VulkanContext::postDraw() {

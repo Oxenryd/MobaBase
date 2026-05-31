@@ -100,8 +100,8 @@ class TransformSystem final : public SystemECS_ModelTransformsProvider
 					//this_->m_modelTransforms[t1.dataIndex] = MMath::matrix_multiply_avx2(
 					//	mtw, local_matrices[j]);
 
-					this_->m_modelTransforms[t1.dataIndex].modelToWorld = MMath::matrix_multiply_avx2(
-						this_->m_modelTransforms[pt.dataIndex].modelToWorld, local_matrices[j]);
+					this_->m_modelTransforms[t1.dataIndex].mtw = MMath::matrix_multiply_avx2(
+						this_->m_modelTransforms[pt.dataIndex].mtw, local_matrices[j]);
 
 
 				} else {
@@ -175,10 +175,10 @@ class TransformSystem final : public SystemECS_ModelTransformsProvider
 			const auto& pt = this_->m_groupPtr->get<TransformComponent>(p);
 			if (objectState_is_dirty(pt.state.value())) t.state.setByEnum(ObjectState::ParentMovedThisFrame);
 
-			this_->m_modelTransforms[t.dataIndex].modelToWorld = MMath::matrix_multiply_avx2(
-				this_->m_modelTransforms[pt.dataIndex].modelToWorld, local);
+			this_->m_modelTransforms[t.dataIndex].mtw = MMath::matrix_multiply_avx2(
+				this_->m_modelTransforms[pt.dataIndex].mtw, local);
 		} else {
-			this_->m_modelTransforms[t.dataIndex].modelToWorld = local;
+			this_->m_modelTransforms[t.dataIndex].mtw = local;
 		}
 
 		//// Always update bounds

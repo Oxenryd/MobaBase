@@ -1,0 +1,300 @@
+#include "BaseTypes.hlsl"
+
+#pragma ShaderType:Compute
+#pragma Name:RayTracer_Basic
+
+#define MAX_BOUNCES 16
+
+struct RayTracerConfig {
+    float4x4 invView;
+    float4x4 invProj;
+    
+    float3   camPos;
+    uint     frameIndex;     // for accumulation / RNG seed
+    
+    uint     maxBounces;     // tweak on the fly
+    uint     samplesPerPixel;
+    float    exposure;
+    uint     accumulate;     // bool: pause camera = accumulate samples
+    
+    uint     numLights;
+    uint     numTriangles;
+    uint     numMaterials;
+    float    _pad;
+};
+
+cbuffer Config : register(b0) { RayTracerConfig cfg; }
+
+// Binding 1
+struct Vertex {
+    float3 pos;
+    float3 normal;
+    float3 tangent;
+    float2 uv;
+};
+StructuredBuffer<Vertex> gVertices : register(t1);
+
+// Binding 2
+struct Triangle {
+    uint i0, i1, i2;
+    uint materialID;
+};
+StructuredBuffer<Triangle> gTriangles : register(t2);
+
+// Binding 3
+struct Material {
+    float3 albedo;
+    float  roughness;
+    float3 emissive;      // non-zero = this surface is a light
+    float  metallic;
+    float  ior;           // for refraction
+    uint   type;          // 0=diffuse, 1=metal, 2=dielectric
+    float2 _pad;
+};
+StructuredBuffer<Material> gMaterials : register(t3);
+
+// Binding 4
+struct Light {
+    float3 position;
+    uint   type;          // 0=point, 1=directional, 2=spot, 3=area
+    float3 color;
+    float  intensity;
+    float3 direction;     // directional/spot
+    float  radius;        // point/area falloff
+    float  innerAngle;    // spot
+    float  outerAngle;    // spot
+    float2 _pad;
+};
+StructuredBuffer<Light> gLights : register(t4);
+
+// Binding 5 — final output (blit this to swapchain)
+RWTexture2D<float4> gOutput       : register(u5);
+
+// Binding 6 — running HDR accumulation buffer
+RWTexture2D<float4> gAccumulation : register(u6);
+
+struct Ray  { float3 origin, dir; };
+struct Hit  { float t; float3 pos, normal; uint matID; bool valid; };
+
+// ---- RNG (PCG hash, good enough for per-frame noise) ----
+uint pcg(inout uint state) {
+    state = state * 747796405u + 2891336453u;
+    uint w = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
+    return (w >> 22u) ^ w;
+}
+float rand(inout uint rng) { return float(pcg(rng)) / 4294967296.0; }
+float2 rand2(inout uint rng) { return float2(rand(rng), rand(rng)); }
+
+// ---- Intersection ----
+Hit intersectTriangle(Ray ray, Triangle tri) {
+    Hit hit = (Hit)0;
+    float3 v0 = gVertices[tri.i0].pos;
+    float3 e1 = gVertices[tri.i1].pos - v0;
+    float3 e2 = gVertices[tri.i2].pos - v0;
+    float3 h  = cross(ray.dir, e2);
+    float  a  = dot(e1, h);
+    if (abs(a) < 1e-7) return hit;
+    float  f  = 1.0 / a;
+    float3 s  = ray.origin - v0;
+    float  u  = f * dot(s, h);
+    if (u < 0.0 || u > 1.0) return hit;
+    float3 q  = cross(s, e1);
+    float  v  = f * dot(ray.dir, q);
+    if (v < 0.0 || u + v > 1.0) return hit;
+    float  t  = f * dot(e2, q);
+    if (t < 1e-4) return hit;
+
+    float3 n0 = gVertices[tri.i0].normal;
+    float3 n1 = gVertices[tri.i1].normal;
+    float3 n2 = gVertices[tri.i2].normal;
+
+    hit.valid  = true;
+    hit.t      = t;
+    hit.pos    = ray.origin + t * ray.dir;
+    hit.normal = normalize(n0 * (1-u-v) + n1 * u + n2 * v); // interpolated
+    hit.matID  = tri.materialID;
+    return hit;
+}
+
+Hit sceneIntersect(Ray ray) {
+    Hit closest = (Hit)0;
+    closest.t = 1e30;
+    for (uint i = 0; i < cfg.numTriangles; i++) {
+        Hit h = intersectTriangle(ray, gTriangles[i]);
+        if (h.valid && h.t < closest.t) closest = h;
+    }
+    closest.valid = (closest.t < 1e30);
+    return closest;
+}
+
+// ---- Sampling helpers ----
+float3 cosineHemisphere(float2 xi, float3 normal) {
+    float phi      = 2.0 * 3.14159265 * xi.x;
+    float cosTheta = sqrt(xi.y);
+    float sinTheta = sqrt(1.0 - xi.y);
+    float3 t = normalize(abs(normal.x) > 0.9
+                   ? float3(0,1,0) : float3(1,0,0));
+    float3 tangent   = normalize(cross(t, normal));
+    float3 bitangent = cross(normal, tangent);
+    return normalize(tangent * sinTheta * cos(phi)
+                   + bitangent * sinTheta * sin(phi)
+                   + normal * cosTheta);
+}
+
+// ---- Light sampling ----
+float3 sampleLight(Light light, float3 hitPos, inout uint rng,
+                   out float3 toLight, out float dist) {
+    if (light.type == 0) { // point
+        float3 offset = float3(rand(rng)-0.5, rand(rng)-0.5, rand(rng)-0.5)
+                        * light.radius;
+        toLight = (light.position + offset) - hitPos;
+        dist    = length(toLight);
+        toLight = normalize(toLight);
+        float atten = 1.0 / (dist * dist);
+        return light.color * light.intensity * atten;
+
+    } else if (light.type == 1) { // directional
+        toLight = normalize(-light.direction);
+        dist    = 1e30;
+        return light.color * light.intensity;
+
+    } else if (light.type == 2) { // spot
+        toLight    = light.position - hitPos;
+        dist       = length(toLight);
+        toLight    = normalize(toLight);
+        float theta = dot(toLight, normalize(-light.direction));
+        float eps   = light.innerAngle - light.outerAngle;
+        float spot  = saturate((theta - light.outerAngle) / eps);
+        float atten = spot / (dist * dist);
+        return light.color * light.intensity * atten;
+
+    } else { // area (treat as disk for now)
+        float2 xi  = rand2(rng);
+        float  r   = light.radius * sqrt(xi.x);
+        float  phi = 2.0 * 3.14159265 * xi.y;
+        // build tangent frame from light direction
+        float3 up  = abs(light.direction.y) < 0.9 ? float3(0,1,0) : float3(1,0,0);
+        float3 rt  = normalize(cross(up, light.direction));
+        float3 up2 = cross(light.direction, rt);
+        float3 samplePos = light.position + rt * r * cos(phi) + up2 * r * sin(phi);
+        toLight = samplePos - hitPos;
+        dist    = length(toLight);
+        toLight = normalize(toLight);
+        float atten = 1.0 / (dist * dist);
+        return light.color * light.intensity * atten;
+    }
+}
+
+// ---- Sky ----
+float3 missColor(float3 dir) {
+    float t = 0.5 * (dir.y + 1.0);
+    return lerp(float3(1,1,1), float3(0.5, 0.7, 1.0), t);
+}
+
+// ---- Path trace one sample ----
+float3 tracePath(Ray ray, inout uint rng) {
+    float3 color  = 0;
+    float3 weight = 1;
+
+    for (uint bounce = 0; bounce <= cfg.maxBounces; bounce++) {
+        Hit hit = sceneIntersect(ray);
+
+        if (!hit.valid) {
+            color += weight * missColor(ray.dir);
+            break;
+        }
+
+        Material mat = gMaterials[hit.matID];
+
+        // Emissive surfaces act as lights
+        color += weight * mat.emissive;
+
+        // Direct light sampling (next event estimation)
+        for (uint li = 0; li < cfg.numLights; li++) {
+            float3 toLight; float dist;
+            float3 Li = sampleLight(gLights[li], hit.pos, rng, toLight, dist);
+            float  NdotL = saturate(dot(hit.normal, toLight));
+            if (NdotL > 0.0) {
+                Ray shadow;
+                shadow.origin = hit.pos + hit.normal * 1e-4;
+                shadow.dir    = toLight;
+                Hit sh = sceneIntersect(shadow);
+                if (!sh.valid || sh.t >= dist - 1e-3)
+                    color += weight * mat.albedo * Li * NdotL;
+            }
+        }
+
+        if (bounce == cfg.maxBounces) break;
+
+        // Scatter
+        if (mat.type == 0) { // diffuse
+            ray.dir    = cosineHemisphere(rand2(rng), hit.normal);
+            weight    *= mat.albedo;
+
+        } else if (mat.type == 1) { // metal
+            float3 reflected = reflect(ray.dir, hit.normal);
+            float3 fuzz      = float3(rand(rng)-0.5, rand(rng)-0.5, rand(rng)-0.5)
+                               * mat.roughness;
+            ray.dir  = normalize(reflected + fuzz);
+            weight  *= mat.albedo;
+
+        } else { // dielectric (glass)
+            float  eta  = dot(ray.dir, hit.normal) < 0.0
+                          ? (1.0 / mat.ior) : mat.ior;
+            float3 refr = refract(normalize(ray.dir), hit.normal, eta);
+            // Schlick fresnel
+            float  r0   = pow((1.0 - mat.ior) / (1.0 + mat.ior), 2);
+            float  fres = r0 + (1-r0) * pow(1.0 - abs(dot(ray.dir, hit.normal)), 5);
+            ray.dir     = (rand(rng) < fres) ? reflect(ray.dir, hit.normal) : refr;
+        }
+
+        ray.origin = hit.pos + ray.dir * 1e-4;
+
+        // Russian roulette after bounce 3 (unbiased termination)
+        if (bounce > 3) {
+            float p = max(weight.r, max(weight.g, weight.b));
+            if (rand(rng) > p) break;
+            weight /= p;
+        }
+    }
+
+    return color;
+}
+
+// ---- Entry point ----
+[shader("compute")]
+[numthreads(16, 16, 1)]
+void main(uint3 dtid : SV_DispatchThreadID) {
+    uint2 pix  = dtid.xy;
+    uint2 size = uint2(0, 0);
+    gOutput.GetDimensions(size.x, size.y);
+    if (any(pix >= size)) return;
+
+    uint rng = pix.x * 1973u + pix.y * 9277u + cfg.frameIndex * 26699u;
+
+    // Jittered UV for anti-aliasing across SPP
+    float2 jitter = float2(rand(rng), rand(rng));
+    float2 uv     = ((float2(pix) + jitter) / float2(size)) * 2.0 - 1.0;
+
+    // Reconstruct ray from inverse matrices
+    float4 target = mul(cfg.invProj, float4(uv.x, -uv.y, 1, 1));
+    float3 dir    = mul((float3x3)cfg.invView,
+                        normalize(target.xyz / target.w));
+    Ray ray;
+    ray.origin = cfg.camPos;
+    ray.dir    = dir;
+
+    float3 sample = tracePath(ray, rng);
+
+    // Accumulate
+    float3 prev  = cfg.accumulate ? gAccumulation[pix].rgb : 0;
+    float  count = cfg.accumulate ? gAccumulation[pix].a   : 0;
+    float3 accum = prev + sample;
+    gAccumulation[pix] = float4(accum, count + 1);
+
+    // Tone map for display
+    float3 hdr = accum / (count + 1);
+    float3 ldr = hdr / (hdr + 1.0); // Reinhard
+    ldr        = pow(ldr, 1.0/2.2);  // gamma
+    gOutput[pix] = float4(ldr, 1.0);
+}

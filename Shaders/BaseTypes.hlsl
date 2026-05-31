@@ -56,6 +56,12 @@ struct GPULight
     uint _reserved1;
     uint _reserved2;
     
+    float3 position() { return posVS_radius.xyz; }
+    float radius() { return posVS_radius.w; }
+    float3 direction() { return dirVS_spotInnerCos.xyz; }
+    float innerCos() { return dirVS_spotInnerCos.w; }
+    float3 color() { return color_intensity.xyz; }
+    float intensity() { return color_intensity.w; }
 };
 
 
@@ -93,8 +99,15 @@ struct TexturePack
     uint emissiveId;
     uint metallicId;
     uint aoId;
-    uint _pad0;
+    uint flags;
 };
+
+// Texture flags
+static const uint NormalTangentFlipX = 1 << 0;
+static const uint NormalTangentFlipY = 1 << 1;
+static const uint NormalTangentFlipZ = 1 << 2;
+
+
 
 struct BaseMaterialInstance
 {
@@ -142,6 +155,7 @@ struct PhongTerms
 struct BaseMatPush
 {
     float4x4    modelToWorld;
+    float4x4    invT;
     uint        flags;
     uint        matInstanceIndex;
     uint        boneOffset;
@@ -151,6 +165,7 @@ struct BaseMatPush
 struct ModelTransform
 {
     float4x4 modelToWorld;
+    float4x4 invT;
 };
 
 struct InstanceData
@@ -205,12 +220,10 @@ struct BaseVSIn
 struct BasePSIn
 {
     [[vk::location(0)]] float4 pos : SV_Position;
-    //[[vk::location(1)]] float3 localPos : TEXCOORD0;
     [[vk::location(1)]] float3 worldPos : TEXCOORD0;
     [[vk::location(2)]] float3 normal : NORMAL;
     [[vk::location(3)]] float3 tangent : TANGENT;
     [[vk::location(4)]] float3 binormal : BINORMAL;
-    //[[vk::location(7)]] float3 localNormal : TEXCOORD2;
     [[vk::location(5)]] float2 texCoord : TEX;
     [[vk::location(6)]] uint instanceID : TEXCOORD1;
 };
@@ -234,6 +247,7 @@ struct ClusterFrustum
 {
     float4 planes[6]; // Left, Right, Bottom, Top, Near, Far
 };
+
 
 // BINDINGS
 #ifdef USE_BASE_PUSH
@@ -269,6 +283,12 @@ cbuffer cameraData : register(b0, space0)
     float clusterLogBase; // Base for logarithmic depth slicing (typically 1.1-2.0)
     float2 padding; // Alignment padding
 };
+
+static const float3 CameraPos = camPos_amb.xyz;
+static const float Ambient = camPos_amb.a;
+
+
+// Bindings
 
 [[vk::binding(2, 0)]] StructuredBuffer<ModelTransform> modelMatrices : register(t0, space0);
 [[vk::binding(3, 0)]] StructuredBuffer<InstanceData> instanceData : register(t1, space0);

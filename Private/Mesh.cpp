@@ -39,6 +39,12 @@ MeshFilterComponent& Mesh::getMeshFilterComponent() {
 	//return Engine::getInstance()->getScene(trans.sceneIndex)->sceneRender().getMeshes()[meshComp.meshIndex];
 }
 
+MeshFilterComponent& Mesh::getMeshFilterComponent() const {
+	//const auto& [meshComp, trans] = m_reg->get<MeshComponent, TransformComponent>(m_entity);
+	return m_reg->get<MeshFilterComponent>(m_entity);
+	//return Engine::getInstance()->getScene(trans.sceneIndex)->sceneRender().getMeshes()[meshComp.meshIndex];
+}
+
 // std::span<MeshData> Mesh::getSubmeshes() {
 // 	const auto& [meshComp, trans] = m_reg->get<MeshFilterComponent, TransformComponent>(m_entity);
 // 	//auto& meshData = Engine::getInstance()->getScene(trans.sceneIndex)->sceneRender().getMeshes()[meshComp.meshIndex];

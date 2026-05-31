@@ -37,11 +37,11 @@ public:
         m_camIndex = sceneRender().addCamera();
         Engine::getInstance()->setMainCamera(m_sceneIndex, m_camIndex);
         auto cam = Engine::getInstance()->mainCamera();
-        cam->cameraData().ambient = 1.0f;
+        cam->cameraData().ambient = 0.8f;
         auto camTrans = cam->transform();
         camTrans.modifyPosition() = glm::vec3{0,3, 30};
         auto mainCam = Engine::getInstance()->mainCamera();
-        //auto l = lightSystem().createNewLight(static_cast<GameObject*>(nullptr));
+        auto l = lightSystem().createNewLight(static_cast<GameObject*>(nullptr));
 
 
         // Merry Go round
@@ -70,7 +70,13 @@ public:
         sceneRender().createMeshFromModel(path1, &meshes, &m_go1);
         float volume = 0.0f;
         entt::entity largestSubEntity = entt::null;
-        for (const auto& subMesh : meshes) {
+        for (const Mesh& subMesh : meshes) {
+
+            auto& filter = subMesh.getMeshFilterComponent();
+            auto& meshData = sceneRender().getSubMeshes()[filter.meshDataIndex];
+            BaseMaterialInstance* mat = Engine::getInstance()->getVulkanContext()
+                ->getBaseMaterialInstanceData(meshData.materialIndex);
+            mat->setTextureFlags(Texture2D::NormalTangentFlipY | Texture2D::NormalTangentFlipZ);
             BoundingVolume bVol{&registry(), subMesh};
             auto aabb = bVol.getCoarseAABB();
             if (aabb.volume() > volume) {
@@ -80,7 +86,6 @@ public:
         }
         if (largestSubEntity != entt::null)
             registry().get<BoundingVolumeComponent>(largestSubEntity).flags = static_cast<uint32_t>(BoundingVolumeFlags::Occluder);
-        
 
 
         InputManager::onKeyHold().subscribe( [this](const KeyCode code) -> void

@@ -1,0 +1,62 @@
+#include "BaseTypes.hlsl"
+
+#pragma ShaderType:Compute
+#pragma Name:RayTracer_Transforms
+
+struct RTVertex {
+    float3 pos;
+    float3 normal;
+    float3 tangent;
+    float3 binormal;
+    float2 uv;
+    float2 _pad;
+};
+
+// Raw input — mirrors your BaseVSIn layout in a buffer
+struct RawVertex {
+    float3 pos;
+    float3 normal;
+    float3 tangent;
+    float3 binormal;
+    float2 uv;
+};
+
+struct TransformPush {
+    float4x4 modelToWorld;  // used when not instanced (mirrors basePush.modelToWorld)
+    uint flags;             // mirrors basePush.flags
+    uint vertexOffset;      // where in rawVertices this draw's verts start
+    uint vertexCount;
+    uint instanceID;        // which instanceData entry to use when instanced
+};
+
+
+// Bindings
+[[vk::push_constant]] TransformPush tPush;
+[[vk::binding(0, 3)]] StructuredBuffer<RawVertex>  rawVertices   : register(t0, space3);
+[[vk::binding(1, 3)]] RWStructuredBuffer<RTVertex> worldVertices : register(u0, space3);
+
+
+[shader("compute")]
+[numthreads(64, 1, 1)]
+void main(uint3 dtid : SV_DispatchThreadID) {
+    uint localVid = dtid.x;
+    if (localVid >= tPush.vertexCount) return;
+
+    uint globalVid = tPush.vertexOffset + localVid;
+    RawVertex v    = rawVertices[globalVid];
+
+    // Exact same branch as your VS
+    uint isInstance    = tPush.flags & INSTANCE_FLAG;
+    float4x4 modelToWorld =
+          isInstance  * modelMatrices[instanceData[tPush.instanceID].matrixIndex].modelToWorld
+        + (1 - isInstance) * tPush.modelToWorld;
+
+    RTVertex output     = (RTVertex)0;
+    output.pos          = mul(modelToWorld, float4(v.pos,      1.0)).xyz;
+    output.normal       = normalize(mul((float3x3)modelToWorld, v.normal));
+    output.tangent      = normalize(mul((float3x3)modelToWorld, v.tangent));
+    output.binormal     = normalize(mul((float3x3)modelToWorld, v.binormal));
+    output.uv           = v.uv;
+
+    worldVertices[globalVid] = output;
+}

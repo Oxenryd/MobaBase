@@ -68,7 +68,7 @@ ErrorCode SceneRenderSystem::loadModel(
 				auto& tex = RenderManager::getInstance()->textures()[i];
 				tex.tryAllocate();
 			}
-			RenderManager::getInstance()->vkContext()->loadBaseMatData();
+			RenderManager::getInstance()->vkContext()->recreateBaseMatData();
 
 			//m_pathMeshMap.insert({filename, {mInfo, meshNames}});
 		}

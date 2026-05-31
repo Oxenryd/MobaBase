@@ -197,6 +197,7 @@ target_sources(MobaBase
 		"Private/BoundingSystem.cpp"
 		"Private/BVH.cpp"
 		"Private/Scene.cpp"
+		"Private/BaseMaterialInstance.cpp"
 )
 
 
@@ -218,7 +219,7 @@ target_link_libraries(MobaBase PRIVATE
 	glfw
 )
 
-target_include_directories(MobaBase PRIVATE 
+target_include_directories(MobaBase PRIVATE
     "Public/"
 	${boost_unordered_SOURCE_DIR}/include
 	${boost_sort_SOURCE_DIR}/include

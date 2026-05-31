@@ -121,21 +121,43 @@ struct BaseVSIn
 
 struct alignas (64) ModelTransform
 {
-	explicit ModelTransform(const glm::mat4x4& mat) :
-		modelToWorld{mat} {}
+	glm::mat4x4 mtw;
+	glm::mat4x4 invT;
 
-	ModelTransform& operator=(const glm::mat4x4& mat) {
-		modelToWorld = mat;
+	~ModelTransform() = default;
+	ModelTransform(const ModelTransform&& other) = delete;
+	ModelTransform& operator=(const ModelTransform&& other) = delete;
+
+	explicit ModelTransform(const glm::mat4x4& mat) :
+		mtw{mat}
+	{
+		invT = glm::transpose(glm::inverse(mtw));
+	}
+
+	ModelTransform(const ModelTransform& other) :
+		mtw{ other.mtw }, invT{other.invT} {}
+
+	ModelTransform& operator=(const ModelTransform& other) {
+		mtw = other.mtw;
+		invT = other.invT;
 		return *this;
 	}
 
-	glm::mat4x4 modelToWorld;
-
-	operator glm::mat4x4() const& {
-		return modelToWorld;
+	ModelTransform& operator=(const glm::mat4x4& mat) {
+		mtw = mat;
+		invT = glm::transpose(glm::inverse(mtw));
+		return *this;
 	}
-	glm::mat4x4 operator*(const glm::mat4x4& rhs) const { return modelToWorld * rhs; }
-	glm::mat4x4& operator*=(const glm::mat4x4& rhs) { return modelToWorld = modelToWorld * rhs; }
+
+	explicit operator glm::mat4x4() const& {
+		return mtw;
+	}
+	glm::mat4x4 operator*(const glm::mat4x4& rhs) const { return mtw * rhs; }
+	glm::mat4x4& operator*=(const glm::mat4x4& rhs) {
+		mtw = mtw * rhs;
+		invT = glm::transpose(glm::inverse(mtw));
+		return mtw;
+	}
 };
 
 struct Index32
@@ -261,6 +283,7 @@ enum class BaseMatPushFlags : uint32_t
 struct BaseMatPush
 {
 	glm::mat4x4 modelToWorld{ 1 };
+	glm::mat4x4 invT {1};
 	uint32_t flags{ 0 };
 	uint32_t matInstanceIndex{ UINT32_INVALID };
 	uint32_t boneOffset{ UINT32_INVALID };
@@ -363,7 +386,7 @@ struct alignas (16) TexturePack
 	uint32_t emissiveId = UINT32_INVALID;
 	uint32_t metallicId = UINT32_INVALID;
 	uint32_t aoId = UINT32_INVALID;
-	uint32_t _pad0 = UINT32_INVALID;
+	uint32_t flags = 0;
 };
 
 struct alignas (16) BaseMaterialInstance
@@ -393,6 +416,8 @@ struct alignas (16) BaseMaterialInstance
 	float		transmission{ 0 };
 	float		emissiveStrength{ 0.15f };
 	float		clearcoatStrength{ 0 };
+
+	void setTextureFlags(uint32_t flags);
 };
 
 #endif

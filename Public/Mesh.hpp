@@ -107,6 +107,7 @@ public:
 	}
 	Transform getTransform();
 	MeshFilterComponent& getMeshFilterComponent();
+	MeshFilterComponent& getMeshFilterComponent() const;
 	glm::vec3 getAvgCenter();
 	std::span<BaseVSIn> getVertices();
 	//std::span<MeshData> getSubmeshes();

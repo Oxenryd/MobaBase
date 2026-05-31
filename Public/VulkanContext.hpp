@@ -1098,7 +1098,7 @@ public:
 	VkBuffer camDataBuffer[VULKAN_FRAMES_IN_FLIGHT] = { nullptr, nullptr };
 	VkDeviceMemory camDataMemory[VULKAN_FRAMES_IN_FLIGHT] = { nullptr, nullptr };
 
-	std::vector<ModelTransform> moddelTransforms;
+	std::vector<ModelTransform> modelTransforms;
 	VkBuffer matBuf_modelTransforms[VULKAN_FRAMES_IN_FLIGHT] = { nullptr, nullptr };
 	VkDeviceMemory matDevMem_modelTransforms[VULKAN_FRAMES_IN_FLIGHT] = { nullptr, nullptr };
 	size_t modelTransforms_lastBufferSize[VULKAN_FRAMES_IN_FLIGHT] = { 0, 0 };
@@ -1131,6 +1131,20 @@ public:
 	VkPipeline lightCluster_pipeline;
 	std::array<std::vector<VkDescriptorSet>, VULKAN_FRAMES_IN_FLIGHT> lightCluster_descSets;
 	bool lightCluster_pipelineCreated = false;
+
+
+	struct MatUpdatePendingState {
+		static constexpr uint8_t Nothing = 0;
+		static constexpr uint8_t Refresh = 1;
+		static constexpr uint8_t Realloc = 2;
+	};
+	// enum class MatUpdatePendingState : uint8_t {
+	// 	Nothing = 0,
+	// 	Refresh = 1,
+	// 	Realloc = 2
+	// };
+
+	uint8_t pendingMaterialUpdate = MatUpdatePendingState::Nothing;
 
 	uint32_t registerBaseMaterialInstance(const BaseMaterialInstance* const matInstance) {
 		const auto index = matData_baseMatInstances.size();
@@ -1292,7 +1306,7 @@ public:
 		std::memcpy(&this->indices[indexStartId], incs, indexCount * sizeof(uint32_t));
 	}
 
-	INLINE VkResult loadBaseMatData() {
+	INLINE VkResult recreateBaseMatData() {
 
 		VkResult vkResult{};
 
@@ -1317,16 +1331,14 @@ public:
 			Vk_CHECK(vkResult, vkAllocateMemory(m_vkDevice, &allocInfo, nullptr, &matDevMem_baseMatInstances[i]));
 			Vk_CHECK(vkResult, vkBindBufferMemory(m_vkDevice, matBuf_baseMatInstances[i], matDevMem_baseMatInstances[i], 0));
 
-			void* data;
-			vkMapMemory(m_vkDevice, matDevMem_baseMatInstances[i], 0, bufferSize, 0, &data);
-			memcpy(data, this->matData_baseMatInstances.data(), bufferSize);
-			vkUnmapMemory(m_vkDevice, matDevMem_baseMatInstances[i]);
+			//void* data;
+			//vkMapMemory(m_vkDevice, matDevMem_baseMatInstances[i], 0, bufferSize, 0, &data);
+			//memcpy(data, this->matData_baseMatInstances.data(), bufferSize);
+			//vkUnmapMemory(m_vkDevice, matDevMem_baseMatInstances[i]);
 
 
 			// Update descriptor sets
 			const VkDescriptorSet set = bindingToDescriptorSet[{MAT_BASE_MAT_INSTANCES_BIND, MAT_BASE_MAT_INSTANCES_SET, 0}][i];
-			// Only update the buffers that changed
-			std::vector<VkWriteDescriptorSet> descriptorWrites;
 
 			// Say only your instance data changed this frame
 			VkDescriptorBufferInfo instanceDataBufferInfo{};
@@ -1348,8 +1360,27 @@ public:
 
 		}
 
+		return refreshBaseMatData();
+	}
+
+	INLINE VkResult refreshBaseMatData() const {
+		VkResult vkResult{};
+
+		const VkDeviceSize bufferSize = sizeof(BaseMaterialInstance) * this->matData_baseMatInstances.size();
+
+		for (size_t i = 0; i < VULKAN_FRAMES_IN_FLIGHT; ++i) {
+			void* data;
+			vkResult = vkMapMemory(m_vkDevice, matDevMem_baseMatInstances[i], 0, bufferSize, 0, &data);
+			if (vkResult != VK_SUCCESS)
+				return vkResult;
+
+			memcpy(data, this->matData_baseMatInstances.data(), bufferSize);
+			vkUnmapMemory(m_vkDevice, matDevMem_baseMatInstances[i]);
+		}
+
 		return VK_SUCCESS;
 	}
+
 
 	INLINE VkResult updateLightsData() {
 		VkResult vkResult{};

@@ -62,7 +62,7 @@ const glm::quat& Transform::rotation() const {
 
 const glm::mat4x4& Transform::localToWorld() const {
 	auto& comp = m_reg->get<TransformComponent>(m_entity);
-	return Engine::getInstance()->getScene(comp.sceneIndex)->transformSystem().modelTransforms().at(comp.dataIndex);
+	return Engine::getInstance()->getScene(comp.sceneIndex)->transformSystem().modelTransforms().at(comp.dataIndex).mtw;
 }
 
 const glm::mat4x4 Transform::worldToLocal() const {
@@ -116,14 +116,14 @@ void Transform::rotate(const glm::quat& deltaWorld) {
 	glm::quat dq = glm::normalize(deltaWorld);
 	rotation = glm::normalize(dq * rotation);          // pre-multiply = world space
 }
-void Transform::rotate(const glm::vec3& deltaEuler) {
+void Transform::rotate(const glm::vec3& deltaRadians) {
 	auto& comp = _markDirty(ROTATION);
 	auto& rotation = Engine::getInstance()->getScene(comp.sceneIndex)
 		->transformSystem().rotations()[comp.dataIndex];
 
-	glm::quat qx = glm::angleAxis(deltaEuler.x, DIR_RIGHT);
-	glm::quat qy = glm::angleAxis(deltaEuler.y, DIR_UP);
-	glm::quat qz = glm::angleAxis(deltaEuler.z, DIR_FORWARD);
+	glm::quat qx = glm::angleAxis(deltaRadians.x, DIR_RIGHT);
+	glm::quat qy = glm::angleAxis(deltaRadians.y, DIR_UP);
+	glm::quat qz = glm::angleAxis(deltaRadians.z, DIR_FORWARD);
 
 	// Choose a clear order; here X then Y then Z in WORLD frame:
 	glm::quat dq = qz * qy * qx;
@@ -355,7 +355,7 @@ void Transform::clearChildren() {
 
 const glm::mat4x4& Transform::localToWorld(ArenaRegistry* registry, entt::entity entity) {
 	auto& comp = registry->get<TransformComponent>(entity);
-	return Engine::getInstance()->getScene(comp.sceneIndex)->transformSystem().modelTransforms().at(comp.dataIndex);
+	return Engine::getInstance()->getScene(comp.sceneIndex)->transformSystem().modelTransforms().at(comp.dataIndex).mtw;
 }
 
 glm::vec3& Transform::position(ArenaRegistry* registry, entt::entity entity) {

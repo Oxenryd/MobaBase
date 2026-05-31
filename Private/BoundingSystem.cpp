@@ -25,7 +25,7 @@ void BoundingSystem::run() {
 							aabbs()[bv.coarseIndexWorld] =
 								localAABB.transformed_noPerspective(
 									Engine::getInstance()->getScene(tr.sceneIndex)->
-									transformSystem().modelTransforms()[tr.dataIndex]
+									transformSystem().modelTransforms()[tr.dataIndex].mtw
 								);
 
 						}

@@ -18,6 +18,8 @@ BasePSIn main(BaseVSIn input)
     uint isInstance = (uint)(basePush.flags & INSTANCE_FLAG);
     float4x4 modelToWorld = isInstance * modelMatrices[instanceData[input.instanceID].matrixIndex].modelToWorld +
         (1 - isInstance) * basePush.modelToWorld;
+    float4x4 invT = isInstance * modelMatrices[instanceData[input.instanceID].matrixIndex].invT +
+         (1 - isInstance) * basePush.invT;
     
     BasePSIn output = (BasePSIn) 0;
         
@@ -33,12 +35,15 @@ BasePSIn main(BaseVSIn input)
 	
     output.pos = mul(MVP, float4(input.pos, 1));
     output.worldPos = mul(modelToWorld, float4(input.pos, 1.0)).xyz;
-    output.normal = normalize(mul(modelToWorld, float4(input.normal, 0)).xyz);
-    output.tangent = normalize(mul(modelToWorld, float4(input.tangent, 0)).xyz);
-    output.binormal = normalize(mul(modelToWorld, float4(input.binormal, 0)).xyz);
+    output.normal = normalize(mul(invT, float4(input.normal, 0)).xyz);
+    output.tangent = normalize(mul(invT, float4(input.tangent, 0)).xyz);
+    output.binormal = normalize(mul(invT, float4(input.binormal, 0)).xyz);
     //output.localNormal = input.normal;
     output.texCoord = input.texCoord;
     output.instanceID = input.instanceID;
 		
+    // flip the tangents
+    //output.tangent.g = -output.tangent.g;
+
     return output;
 }
