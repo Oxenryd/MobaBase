@@ -51,7 +51,7 @@
       "name": "linux-base",
       "hidden": true,
       "displayName": "Linux Base",
-      "generator": "Ninja",
+      "generator": "Unix Makefiles",
       "binaryDir": "${sourceDir}/out/build/${presetName}",
       "installDir": "${sourceDir}/out/install/${presetName}",
       "condition": {

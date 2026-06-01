@@ -26,9 +26,14 @@ if(MSVC)
 	#set(CMAKE_STATIC_LINKER_FLAGS_RELEASE "${CMAKE_STATIC_LINKER_FLAGS_RELEASE} /LTCG")
 	#set(CMAKE_SHARED_LINKER_FLAGS_RELEASE "${CMAKE_SHARED_LINKER_FLAGS_RELEASE} /LTCG")
 else()
-	add_compile_options(-march=native)
-	add_compile_options(-Wno-template-body)
+	add_compile_options(
+			-march=native
+			-Wno-error=unused-but-set-variable
+			-Wno-error=uninitialized
+			-Wno-template-body
+	)
 endif()
+
 
 # FETCHES -----------------------------------------------------------------------------
 include(FetchContent)
@@ -99,7 +104,8 @@ include(FetchContent)
 FetchContent_Declare(
   assimp
   GIT_REPOSITORY https://github.com/assimp/assimp.git
-  GIT_TAG v6.0.2
+  GIT_TAG master #v6.0.2
+		SYSTEM
 )
 # set(ASSIMP_BUILD_EXPORT OFF CACHE BOOL "Disable Assimp export support")
 
