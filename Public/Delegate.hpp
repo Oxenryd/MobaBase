@@ -16,7 +16,7 @@ class Delegate
 private:
     using InvokeFn = void(*)(void* storage, Args...);
     using DestroyFn = void(*)(void* storage);
-    using CopyFn = void(*)(void* dest, void* src);
+    using CopyFn = void(*)(void* dest, const void* src);
 
     void* m_storage = nullptr;
     InvokeFn m_invoke = nullptr;

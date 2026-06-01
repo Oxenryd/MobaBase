@@ -90,5 +90,19 @@
         "CMAKE_BUILD_TYPE": "RelWithDebInfo"
       }
     }
+  ],
+  "buildPresets": [
+    {
+      "name": "Linux-x64-debug-build",
+      "configurePreset": "Linux-x64-debug",
+      "displayName": "Linux Debug Build",
+      "configuration": "Debug",
+      "jobs": 0,
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      }
+    }
   ]
 }

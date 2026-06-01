@@ -2,7 +2,6 @@
 #define MWORK_HPP
 
 #include <atomic>
-#include <barrier>
 #include <cstddef>
 #include <cstdint>
 #include <thread>

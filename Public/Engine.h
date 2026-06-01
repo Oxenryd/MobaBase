@@ -1,6 +1,8 @@
 #ifndef ENGINE_H
 #define ENGINE_H
 
+#include "ArenaAllocator.hpp"
+#include "Delegate.hpp"
 #ifdef BUILD_WIN
 	#ifndef _INC_WINAPIFAMILY
 		#define WIN32_LEAN_AND_MEAN
@@ -20,7 +22,6 @@
 
 #include "Concepts.h"
 #include "GlobalMacros.h"
-#include "MJob.hpp"
 #include "ErrorCodes.hpp"
 
 //#include "ArenaAllocator.hpp"
