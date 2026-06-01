@@ -1,6 +1,7 @@
 .idea
 .idea/
 .vs/
+.vscode/
 External/
 out/
 /.idea
