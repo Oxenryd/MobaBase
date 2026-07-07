@@ -12,9 +12,6 @@
 #endif
 
 
-//#include "Format_fixes.hpp"
-//#include "VulkanContext.hpp"
-
 #include <cstdint>
 #include <algorithm>
 #include <set>
@@ -23,24 +20,6 @@
 #include "Concepts.h"
 #include "GlobalMacros.h"
 #include "ErrorCodes.hpp"
-
-//#include "ArenaAllocator.hpp"
-//#include "GlobalSystem.hpp"
-//#include "TimerSystem.h"
-
-
-//#include "WindowContext.h"
-//#include "InputManager.hpp"
-//#include "Debug.hpp"
-//#include "Delegate.hpp"
-
-
-//#include "RenderManager.h"
-//#include "Scene.h"
-
-//#include "MRandom.hpp"
-//#include "MWork.hpp"
-
 
 // Forwards
 enum class SceneTransitionMode : uint8_t;
@@ -113,7 +92,7 @@ class Engine
 	FrameArena* m_jobsArena;
 
 	// Context
-	std::unique_ptr<WindowContext> m_wnd;
+	std::unique_ptr<WindowContext> m_wnd{nullptr};
 
 	// Base Systems
 	TimerSystem* m_baseTimers;
@@ -148,7 +127,7 @@ class Engine
 	ErrorCode m_currentEC;
 	size_t m_totalFrames = 0;
 	double m_totalTime = 0.0;
-	std::chrono::steady_clock::time_point m_lastUpdateTime;
+	std::chrono::steady_clock::time_point m_lastUpdateTime{ std::chrono::steady_clock::now() };
 	CamIndex m_mainCamIndex{ UINT16_INVALID, UINT32_INVALID };
 
 	INLINE double _tickDt();

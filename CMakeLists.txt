@@ -1,6 +1,9 @@
 ﻿cmake_minimum_required (VERSION 3.51)
 
 project ("MobaBase")
+include(Commands.cmake)
+
+configure_clangd("${CMAKE_SOURCE_DIR}/.clangd")
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_CXX_STANDARD 23)
@@ -173,37 +176,36 @@ message(STATUS "Available targets: ${all_targets}")
 
 # SOURCES -----------------------------------------------------------------------------
 add_executable (MobaBase
-		Public/API.h
-		Public/Format_fixes.hpp)
+		src/Utility/API.h
+		src/Utility/Format_fixes.hpp)
+
+get_sources_from_path(FILE_SRCS "${CMAKE_CURRENT_SOURCE_DIR}/src/File" RECURSE)
+get_sources_from_path(MEMORY_SRCS "${CMAKE_CURRENT_SOURCE_DIR}/src/Memory" RECURSE)
+get_sources_from_path(RENDERING_SRCS "${CMAKE_CURRENT_SOURCE_DIR}/src/Rendering" RECURSE)
+get_sources_from_path(SYSTEMS_SRCS "${CMAKE_CURRENT_SOURCE_DIR}/src/Systems" RECURSE)
+get_sources_from_path(TYPES_SRCS "${CMAKE_CURRENT_SOURCE_DIR}/src/Types" RECURSE)
+get_sources_from_path(UTILITY_SRCS "${CMAKE_CURRENT_SOURCE_DIR}/src/Utility" RECURSE)
 
 target_sources(MobaBase
 	PRIVATE
-		"main.cpp"
-		"Private/Engine.cpp"
-		"Private/Timer.cpp"
-		"Private/TimerSystem.cpp"
-		"Private/RenderManager.cpp"
-		"Private/FileSys.cpp"
-		"Private/Shader.cpp"
-		"Private/Material.cpp"
-		"Private/MaterialParams.cpp"
-		"Private/SystemECS.cpp" 
-		"Private/GameObjectSystem.cpp"
-		"Private/Transform.cpp"
-		"Private/AssetLoader.cpp"
-		"Private/VulkanContext.cpp"
-		"Private/SceneRenderSystem.cpp"
-		"Private/GlobalComponents.cpp"
-		"Private/Camera.cpp"
-		"Private/Timing.cpp"
-		"Private/Texture.cpp"
-		"Private/Mesh.cpp"
-		"Private/Light.cpp"
-		"Private/BoundingVolume.cpp"
-		"Private/BoundingSystem.cpp"
-		"Private/BVH.cpp"
-		"Private/Scene.cpp"
+		"src/main.cpp"
+		"src/Engine.h"
+		"src/Engine.cpp"
+		${FILE_SRCS}
+		${MEMORY_SRCS}
+		${RENDERING_SRCS}
+		${SYSTEMS_SRCS}
+		${TYPES_SRCS}
+		${UTILITY_SRCS}
 )
+
+add_include_from_path(MobaBase "${CMAKE_CURRENT_SOURCE_DIR}/src" PUBLIC)
+add_include_from_path(MobaBase "${CMAKE_CURRENT_SOURCE_DIR}/src/File" PUBLIC)
+add_include_from_path(MobaBase "${CMAKE_CURRENT_SOURCE_DIR}/src/Memory" PUBLIC)
+add_include_from_path(MobaBase "${CMAKE_CURRENT_SOURCE_DIR}/src/Rendering" PUBLIC)
+add_include_from_path(MobaBase "${CMAKE_CURRENT_SOURCE_DIR}/src/Systems" PUBLIC)
+add_include_from_path(MobaBase "${CMAKE_CURRENT_SOURCE_DIR}/src/Types" PUBLIC)
+add_include_from_path(MobaBase "${CMAKE_CURRENT_SOURCE_DIR}/src/Utility" PUBLIC)
 
 
 
@@ -247,7 +249,7 @@ endif()
 
 target_compile_definitions(MobaBase PRIVATE
 	GLFW_INCLUDE_VULKAN
-	#BUILD_WIN
+	# BUILD_WIN
 	BUILD_DLL
 	BUILD_GLFW
 	# X11

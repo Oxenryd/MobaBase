@@ -2,6 +2,7 @@
 .idea/
 .vs/
 .vscode/
+.cache
 External/
 out/
 /.idea

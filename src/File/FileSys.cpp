@@ -1,8 +1,10 @@
 #include "FileSys.h"
 
-#include <unistd.h>
+
 #ifdef BUILD_WIN
 	#include <windows.h>
+#else
+    #include <unistd.h>
 #endif
 
 

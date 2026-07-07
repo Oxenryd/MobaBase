@@ -5,7 +5,6 @@
 #include <immintrin.h>
 
 #include "GameObject.hpp"
-#include "RenderTarget.hpp"
 #include "Bits.hpp"
 #include "HlslTypes.h"
 #include "BasicTypes.hpp"

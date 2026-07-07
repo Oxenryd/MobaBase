@@ -1,6 +1,7 @@
 #ifndef VULKANCONTEXT_HPP
 #define VULKANCONTEXT_HPP
 
+#include <vulkan/vulkan_core.h>
 #ifdef MSVC
 #pragma warning(push)
 #pragma warning(disable : 28251)
@@ -41,7 +42,6 @@
 #include <vector>
 #include <array>
 #include <unordered_map>
-#include <queue>
 #include <thread>
 
 #include "DrawCommand.hpp"
@@ -52,7 +52,6 @@
 
 #include "Material.hpp"
 #include "RenderManager.h"
-#include "RenderTarget.hpp"
 #include "Light.hpp"
 
 #define Vk_FAILED(ec) ((ec) != VK_SUCCESS)
@@ -1355,7 +1354,8 @@ public:
 		VkResult vkResult{};
 
 		for (size_t i = 0; i < VULKAN_FRAMES_IN_FLIGHT; ++i) {
-			const VkDeviceSize bufferSize = sizeof(LightComponent) * this->lightsData.size();
+			auto minSize = this->lightsData.size() == 0 ? 1 : this->lightsData.size();
+			const VkDeviceSize bufferSize = sizeof(LightComponent) * minSize;
 			VkBufferCreateInfo createInfo{};
 			createInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
 			createInfo.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
@@ -1511,7 +1511,8 @@ public:
 		Vk_CHECK(vk, createSamplerPresets());
 		Vk_CHECK(vk, createDescriptorPool());
 		Vk_CHECK(vk, setupVertexBuffer());
-		Vk_CHECK(vk, createGlobalBuffers());
+		Vk_CHECK(vk, createGlobalBuffers());		
+
 		//Vk_CHECK(vk, createLightClusterPipeline());
 
 		isClean = false;
@@ -1690,7 +1691,6 @@ public:
 			write1.descriptorCount = 1;
 			write1.pNext = nullptr;
 			write1.pBufferInfo = &buffInfo1;
-
 
 
 			VkDescriptorBufferInfo buffInfo2{};
@@ -1963,6 +1963,7 @@ public:
 		caps.maxUAB_UniformBuffers = indexingProps.maxDescriptorSetUpdateAfterBindUniformBuffers;
 		caps.maxUAB_StorageBuffers = indexingProps.maxDescriptorSetUpdateAfterBindStorageBuffers;
 		caps.maxUAB_SamplerBuffers = indexingProps.maxDescriptorSetUpdateAfterBindSamplers;
+
 
 		// You should also check features to know if UPDATE_AFTER_BIND is actually supported:
 		VkPhysicalDeviceDescriptorIndexingFeatures indexingFeatures{};
@@ -2317,7 +2318,7 @@ public:
 		VkPhysicalDeviceExtendedDynamicState2FeaturesEXT ext2{};
 		ext2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_2_FEATURES_EXT;
 		ext2.extendedDynamicState2 = VK_TRUE;
-		ext2.extendedDynamicState2LogicOp = VK_TRUE;
+		//ext2.extendedDynamicState2LogicOp = VK_TRUE;
 		//ext2.extendedDynamicState2PatchControlPoints = VK_TRUE;
 
 		// --- Build ENABLE chain (separate structs from the query) ---
@@ -2344,6 +2345,12 @@ public:
 		enable.features.vertexPipelineStoresAndAtomics = VK_TRUE;
 		enable.features.fragmentStoresAndAtomics = VK_TRUE;
 
+		// Robustness features
+		VkPhysicalDeviceRobustness2FeaturesEXT robustnessFeatures{};
+		robustnessFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_FEATURES_EXT;
+		robustnessFeatures.nullDescriptor = VK_TRUE;
+		robustnessFeatures.pNext = &enable;
+
 		// --- Extensions: swapchain is enough on 1.2+; DO NOT enable VK_EXT_descriptor_indexing here. ---
 		std::vector<const char*> exts;
 		exts.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
@@ -2354,7 +2361,8 @@ public:
 		devCI.pQueueCreateInfos = &queueCI;
 		devCI.enabledExtensionCount = static_cast<uint32_t>(exts.size());
 		devCI.ppEnabledExtensionNames = exts.data();
-		devCI.pNext = &enable;
+		devCI.pNext = &robustnessFeatures;
+
 
 		Vk_CHECK(vkResult, vkCreateDevice(m_phyDevice, &devCI, nullptr, &m_vkDevice));
 		vkGetDeviceQueue(m_vkDevice, m_graphicsQueueFamilyIndex, 0, &m_graphicsQueue);
@@ -2507,7 +2515,7 @@ public:
 			VkImageCreateInfo imageInfo{};
 			imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
 			imageInfo.imageType = VK_IMAGE_TYPE_2D;
-			imageInfo.format = VK_FORMAT_D24_UNORM_S8_UINT;
+			imageInfo.format = VK_FORMAT_D32_SFLOAT_S8_UINT;// VK_FORMAT_D32_SFLOAT; //VK_FORMAT_D24_UNORM_S8_UINT;
 			imageInfo.extent = { swapchainExtent.width, swapchainExtent.height, 1 };
 			imageInfo.mipLevels = 1;
 			imageInfo.arrayLayers = 1;
@@ -2560,13 +2568,13 @@ public:
 		// Create Basic PostFXs
 
 		// Ambient Occlusion
-		auto bloomIdx = enabledPostFxs.size();
-		for (size_t i = 0; i < VULKAN_FRAMES_IN_FLIGHT; ++i) {
-			VkImageCreateInfo bloomInfo{};
-			bloomInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-			bloomInfo.imageType = VK_IMAGE_TYPE_2D;
-			bloomInfo.format = VK_FORMAT_B10G11R11_UFLOAT_PACK32;
-		}
+		// auto bloomIdx = enabledPostFxs.size();
+		// for (size_t i = 0; i < VULKAN_FRAMES_IN_FLIGHT; ++i) {
+		// 	VkImageCreateInfo bloomInfo{};
+		// 	bloomInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+		// 	bloomInfo.imageType = VK_IMAGE_TYPE_2D;
+		// 	bloomInfo.format = VK_FORMAT_B10G11R11_UFLOAT_PACK32;
+		// }
 
 
 		LOG(LogType::Success, "Done.");
@@ -2607,7 +2615,7 @@ public:
 		refs.push_back(colorAttachmentRef);
 
 		VkAttachmentDescription depthAttachment{};
-		depthAttachment.format = VK_FORMAT_D24_UNORM_S8_UINT;//VK_FORMAT_D32_SFLOAT; VK_FORMAT_D24_UNORM_S8_UINT
+		depthAttachment.format = VK_FORMAT_D32_SFLOAT_S8_UINT;//VK_FORMAT_D32_SFLOAT; VK_FORMAT_D24_UNORM_S8_UINT
 		depthAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
 		depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
 		depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
