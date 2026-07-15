@@ -38,16 +38,16 @@ endif()
 include(FetchContent)
 
 # GLM
-FetchContent_Declare(
-    glm
-    GIT_REPOSITORY https://github.com/g-truc/glm.git
-    GIT_TAG 1.0.3
-)
+# FetchContent_Declare(
+#     glm
+#     GIT_REPOSITORY https://github.com/g-truc/glm.git
+#     GIT_TAG 1.0.3
+# )
 
-set(GLM_FORCE_INTRINSICS        ON CACHE BOOL "" FORCE)
-#set(GLM_FORCE_ALIGNED_GENTYPES  ON CACHE BOOL "" FORCE)
+# set(GLM_FORCE_INTRINSICS        ON CACHE BOOL "" FORCE)
+# set(GLM_FORCE_ALIGNED_GENTYPES  ON CACHE BOOL "" FORCE)
 
-FetchContent_MakeAvailable(glm)
+# FetchContent_MakeAvailable(glm)
 
 
 #EnTT
@@ -83,7 +83,7 @@ FetchContent_MakeAvailable(boost_unordered)
 FetchContent_Declare(
   spirv-reflect
   GIT_REPOSITORY https://github.com/KhronosGroup/SPIRV-Reflect.git
-  GIT_TAG        main  # or use a specific commit or tag
+  GIT_TAG        main
 )
 set(SPIRV_REFLECT_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(SPIRV_REFLECT_TOOLS OFF CACHE BOOL "" FORCE)
@@ -94,7 +94,7 @@ FetchContent_MakeAvailable(spirv-reflect)
 FetchContent_Declare(
   json
   GIT_REPOSITORY https://github.com/nlohmann/json.git
-  GIT_TAG v3.11.3 # Use latest stable or pin to your desired version
+  GIT_TAG master
 )
 FetchContent_MakeAvailable(json)
 
@@ -103,7 +103,7 @@ include(FetchContent)
 FetchContent_Declare(
   assimp
   GIT_REPOSITORY https://github.com/assimp/assimp.git
-  GIT_TAG master #v6.0.2
+  GIT_TAG master
 		SYSTEM
 )
 # set(ASSIMP_BUILD_EXPORT OFF CACHE BOOL "Disable Assimp export support")
@@ -116,7 +116,6 @@ set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE) # global fallback
 FetchContent_MakeAvailable(assimp)
 if (TARGET assimp)
 	if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-		# Disable the specific boundary checks that GCC 15 is tripping on
 		target_compile_options(assimp PRIVATE -Wno-array-bounds -Wno-error=array-bounds)
 
 		# Newer GCCs also hate some of Assimp's string handling
@@ -181,6 +180,7 @@ get_sources_from_path(RENDERING_SRCS "${CMAKE_CURRENT_SOURCE_DIR}/src/Rendering"
 get_sources_from_path(SYSTEMS_SRCS "${CMAKE_CURRENT_SOURCE_DIR}/src/Systems" RECURSE)
 get_sources_from_path(TYPES_SRCS "${CMAKE_CURRENT_SOURCE_DIR}/src/Types" RECURSE)
 get_sources_from_path(UTILITY_SRCS "${CMAKE_CURRENT_SOURCE_DIR}/src/Utility" RECURSE)
+get_sources_from_path(UTILITY_SRCS "${CMAKE_CURRENT_SOURCE_DIR}/src/Math" RECURSE)
 
 target_sources(MobaBase
 	PRIVATE
@@ -202,7 +202,7 @@ add_include_from_path(MobaBase "${CMAKE_CURRENT_SOURCE_DIR}/src/Rendering" PUBLI
 add_include_from_path(MobaBase "${CMAKE_CURRENT_SOURCE_DIR}/src/Systems" PUBLIC)
 add_include_from_path(MobaBase "${CMAKE_CURRENT_SOURCE_DIR}/src/Types" PUBLIC)
 add_include_from_path(MobaBase "${CMAKE_CURRENT_SOURCE_DIR}/src/Utility" PUBLIC)
-
+add_include_from_path(MobaBase "${CMAKE_CURRENT_SOURCE_DIR}/src/Math" PUBLIC)
 
 
 
@@ -213,7 +213,7 @@ target_link_libraries(imgui PUBLIC Vulkan::Vulkan)
 target_link_libraries(imgui PUBLIC glfw)
 
 target_link_libraries(MobaBase PRIVATE
-    glm::glm
+    #glm::glm
 	Vulkan::Vulkan
 	EnTT::EnTT
 	spirv-reflect-static
@@ -245,13 +245,13 @@ endif()
 
 target_compile_definitions(MobaBase PRIVATE
 	GLFW_INCLUDE_VULKAN
-	BUILD_WIN
+	# BUILD_WIN
 	BUILD_DLL
 	BUILD_GLFW
-	# X11
-	# WAYLAND
-	GLM_FORCE_SSE2
-	GLM_ENABLE_EXPERIMENTAL
+	X11
+	WAYLAND
+	# GLM_FORCE_SSE2
+	# GLM_ENABLE_EXPERIMENTAL
 	DEBUGGING
 	# $<$<CONFIG:Debug>:LOGGING>
 	LOGGING
@@ -349,6 +349,9 @@ target_compile_definitions(MobaBase PRIVATE
 	WORK_QUEUE_CAP=1024
 	PROFILE_PATH=\"${CMAKE_SOURCE_DIR}/trace.json\"
 	INPUT_RESO_SCALE_FACTOR=0.0001f
+
+	# Math
+	MMATH_PREFER_ALMOST_EQUALS_FP_EQUALITY
 
 	# Directories
 	SOURCE_DIR=\"${CMAKE_SOURCE_DIR}/\"

@@ -4,18 +4,35 @@
 #include <concepts>
 #include <type_traits>
 
-#include <glm/glm.hpp>
+#include "Globals.hpp"
 
-class SceneBase;
+
+template<typename T>
+struct type_tag {
+    using type = T;
+};
+template<typename T>
+concept FloatingPointConcept = std::is_floating_point_v<T> && sizeof(T) % 4 == 0;
+
+
+namespace MMath // FORWARD
+{
+    template<FloatingPointConcept ValT, size_t N>
+        requires (N >= Consts::MIN_VEC_SIZE  && N <= Consts::MAX_VEC_SIZE)       
+    struct MVec;
+}
+
+
+class SceneBase; // FORWARD
 
 template<typename T>
 concept SceneConcept = requires(T t, const size_t size, const uint16_t index, void* arg) {
     { std::is_base_of_v<SceneBase, T> };
-    //{ T::create() } -> std::same_as<SceneBase*>;
     { T::create(size, index, arg) } -> std::same_as<SceneBase*>;
 };
 
-class GameObject;
+class GameObject; // FORWARD
+
 template<typename T>
 concept GO_Derived = requires
 {
@@ -30,11 +47,9 @@ concept IsRenderSysCompatible = requires(T t)
 };
 
 template<typename T, size_t N>
-concept IsGlmVecCompatible = requires
-{
-    { std::is_convertible_v<glm::vec<N, float>, T> };
-};
-
+concept IsVecCompatible = 
+    std::is_convertible_v<MMath::MVec<float, N>, T> ||
+    std::is_convertible_v<MMath::MVec<double, N>, T>;
 
 
 namespace ConceptChecks
@@ -47,8 +62,8 @@ namespace ConceptChecks
             { T::create(s, i, a) } -> std::same_as<SceneBase*>;
         })
             return true;
-
-        return false;
+        else
+            return false;
     }
 }
 

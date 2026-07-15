@@ -3,9 +3,9 @@
 
 #include <cstdint>
 #include <cstring>
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
-#include <glm/gtx/quaternion.hpp>
+// #include <glm/glm.hpp>
+// #include <glm/gtc/matrix_transform.hpp>
+// #include <glm/gtx/quaternion.hpp>
 #include <array>
 #include <span>
 
@@ -13,7 +13,9 @@
 #include "GlobalMacros.h"
 #include "Concepts.h"
 
-template <typename T, int N>
+using namespace Consts;
+
+template <FloatingPointConcept T, size_t N>
 struct FloatArray
 {
 private:
@@ -22,23 +24,16 @@ private:
 public:
 	T& operator[](int index) { return m_data[index]; }
 
-	template<IsGlmVecCompatible<N> V>
+	template<IsVecCompatible<N> V>
 	FloatArray& operator=(const V& vec) {
 		std::memcpy(m_data, &vec, sizeof(T) * N);
 		return *this;
 	}
-
-	const glm::vec<N, float>& asGlmVec() const {
-		if constexpr (N == 2)
-			return reinterpret_cast<const glm::vec2&>(*m_data);//glm::vec2{m_data[0], m_data[1]};
-		if constexpr (N == 3)
-			return reinterpret_cast<const glm::vec3&>(*m_data);//glm::vec3{m_data[0], m_data[1], m_data[2]};
-		if constexpr (N == 4)
-			return reinterpret_cast<const glm::vec4&>(*m_data);//glm::vec4{m_data[0], m_data[1], m_data[2], m_data[3]};
-
-		if constexpr (N < 2 || N > 4)
-			static_assert(false, "No valid GLM Vec conversion.");
-
+	
+	template<FloatingPointConcept T, size_t N>
+		requires (N >= MIN_VEC_SIZE && N <= MAX_VEC_SIZE)
+	const MMath::MVec<T, N>& asVec() const {
+		return reinterpret_cast<const MMath::MVec<T, N>&>(*m_data)
 	}
 
 	T* data() { return m_data; }
@@ -49,8 +44,10 @@ public:
 	explicit operator std::span<T>() { return std::span<T>{m_data, N}; }
 };
 
-typedef FloatArray<float, 3> FArray3;
-typedef FloatArray<float, 4> FArray4;
+using FArray3 = FloatArray<float, 3>;
+using FArray4 = FloatArray<float, 4>;
+using FArray3d = FloatArray<double, 3>;
+using FArray4d = FloatArray<double, 4>;
 
 struct ShapeRendAABB
 {
